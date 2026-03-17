@@ -1,0 +1,80 @@
+[package]
+name = "oversync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A lightweight data sync engine: poll, delta, sink."
+repository = "https://github.com/overrealdb/oversync"
+keywords = ["data-sync", "delta", "surrealdb", "etl"]
+categories = ["database", "asynchronous"]
+
+[workspace]
+resolver = "2"
+members = [
+	"crates/oversync-core",
+	"crates/oversync-connectors",
+	"crates/oversync-delta",
+	"crates/oversync-links",
+	"crates/oversync-sinks",
+	"crates/oversync-api",
+	"crates/oversync-migrate",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+oversync-core = { path = "crates/oversync-core" }
+oversync-connectors = { path = "crates/oversync-connectors" }
+oversync-delta = { path = "crates/oversync-delta" }
+oversync-links = { path = "crates/oversync-links" }
+oversync-sinks = { path = "crates/oversync-sinks" }
+oversync-api = { path = "crates/oversync-api" }
+oversync-migrate = { path = "crates/oversync-migrate" }
+
+surrealdb = { version = "3", features = ["kv-mem", "protocol-http"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+async-trait = "0.1"
+clap = { version = "4", features = ["derive", "env"] }
+sha2 = "0.10"
+hex = "0.4"
+
+[[bin]]
+name = "oversync"
+path = "bin/oversync.rs"
+
+[dependencies]
+oversync-core = { workspace = true }
+oversync-migrate = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+surrealdb = { workspace = true }
+
+[dev-dependencies]
+oversync-core = { workspace = true }
+oversync-migrate = { workspace = true }
+surrealdb = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+tokio = { workspace = true }
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+lto = "thin"
+strip = true
+codegen-units = 1

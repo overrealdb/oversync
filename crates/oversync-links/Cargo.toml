@@ -1,0 +1,9 @@
+[package]
+name = "oversync-links"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Link resolver with WASM plugin support for oversync."
+
+[dependencies]
+oversync-core = { workspace = true }

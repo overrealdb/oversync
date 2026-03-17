@@ -1,0 +1,9 @@
+[package]
+name = "oversync-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Admin HTTP API for oversync."
+
+[dependencies]
+oversync-core = { workspace = true }

@@ -1,0 +1,10 @@
+[package]
+name = "oversync-sinks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sink implementations for oversync."
+
+[dependencies]
+oversync-core = { workspace = true }
+async-trait = { workspace = true }
