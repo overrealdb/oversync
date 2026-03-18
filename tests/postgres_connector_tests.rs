@@ -16,13 +16,14 @@ async fn test_connection_succeeds() {
 async fn fetch_all_returns_rows() {
 	let pg = TestPostgres::new().await;
 
-	pg.run_sql(
-		"CREATE TABLE items (id TEXT PRIMARY KEY, name TEXT, value INT)",
-	)
-	.await;
-	pg.run_sql("INSERT INTO items VALUES ('a', 'alpha', 1)").await;
-	pg.run_sql("INSERT INTO items VALUES ('b', 'beta', 2)").await;
-	pg.run_sql("INSERT INTO items VALUES ('c', 'gamma', 3)").await;
+	pg.run_sql("CREATE TABLE items (id TEXT PRIMARY KEY, name TEXT, value INT)")
+		.await;
+	pg.run_sql("INSERT INTO items VALUES ('a', 'alpha', 1)")
+		.await;
+	pg.run_sql("INSERT INTO items VALUES ('b', 'beta', 2)")
+		.await;
+	pg.run_sql("INSERT INTO items VALUES ('c', 'gamma', 3)")
+		.await;
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
@@ -72,10 +73,7 @@ async fn fetch_all_empty_table() {
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
-		.fetch_all(
-			&format!("SELECT id FROM {}.empty_tbl", pg.schema),
-			"id",
-		)
+		.fetch_all(&format!("SELECT id FROM {}.empty_tbl", pg.schema), "id")
 		.await
 		.unwrap();
 
@@ -112,10 +110,7 @@ async fn fetch_all_with_int_key() {
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
-		.fetch_all(
-			&format!("SELECT oid, pages FROM {}.nums", pg.schema),
-			"oid",
-		)
+		.fetch_all(&format!("SELECT oid, pages FROM {}.nums", pg.schema), "oid")
 		.await
 		.unwrap();
 
@@ -155,10 +150,7 @@ async fn fetch_all_boolean_column() {
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
-		.fetch_all(
-			&format!("SELECT id, active FROM {}.flags", pg.schema),
-			"id",
-		)
+		.fetch_all(&format!("SELECT id, active FROM {}.flags", pg.schema), "id")
 		.await
 		.unwrap();
 
@@ -175,15 +167,11 @@ async fn fetch_all_float_column() {
 
 	pg.run_sql("CREATE TABLE measures (id TEXT PRIMARY KEY, val FLOAT8)")
 		.await;
-	pg.run_sql("INSERT INTO measures VALUES ('m1', 3.14)")
-		.await;
+	pg.run_sql("INSERT INTO measures VALUES ('m1', 3.14)").await;
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
-		.fetch_all(
-			&format!("SELECT id, val FROM {}.measures", pg.schema),
-			"id",
-		)
+		.fetch_all(&format!("SELECT id, val FROM {}.measures", pg.schema), "id")
 		.await
 		.unwrap();
 
@@ -203,10 +191,7 @@ async fn fetch_all_jsonb_column() {
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
-		.fetch_all(
-			&format!("SELECT id, meta FROM {}.docs", pg.schema),
-			"id",
-		)
+		.fetch_all(&format!("SELECT id, meta FROM {}.docs", pg.schema), "id")
 		.await
 		.unwrap();
 
@@ -237,10 +222,7 @@ async fn fetch_all_large_dataset() {
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
-		.fetch_all(
-			&format!("SELECT id, v FROM {}.big", pg.schema),
-			"id",
-		)
+		.fetch_all(&format!("SELECT id, v FROM {}.big", pg.schema), "id")
 		.await
 		.unwrap();
 
@@ -258,11 +240,17 @@ async fn fetch_all_hash_stability() {
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let r1 = conn
-		.fetch_all(&format!("SELECT id, name, val FROM {}.stable", pg.schema), "id")
+		.fetch_all(
+			&format!("SELECT id, name, val FROM {}.stable", pg.schema),
+			"id",
+		)
 		.await
 		.unwrap();
 	let r2 = conn
-		.fetch_all(&format!("SELECT id, name, val FROM {}.stable", pg.schema), "id")
+		.fetch_all(
+			&format!("SELECT id, name, val FROM {}.stable", pg.schema),
+			"id",
+		)
 		.await
 		.unwrap();
 
@@ -291,9 +279,7 @@ async fn fetch_into_streams_all_rows() {
 	let sql = format!("SELECT id, v FROM {}.stream10", pg.schema);
 	let (tx, mut rx) = mpsc::channel::<Vec<oversync_core::model::RawRow>>(2);
 
-	let handle = tokio::spawn(async move {
-		conn.fetch_into(&sql, "id", 3, tx).await.unwrap()
-	});
+	let handle = tokio::spawn(async move { conn.fetch_into(&sql, "id", 3, tx).await.unwrap() });
 
 	let mut batches = Vec::new();
 	while let Some(batch) = rx.recv().await {
@@ -324,9 +310,7 @@ async fn fetch_into_single_batch() {
 	let sql = format!("SELECT id, v FROM {}.stream2", pg.schema);
 	let (tx, mut rx) = mpsc::channel::<Vec<oversync_core::model::RawRow>>(2);
 
-	let handle = tokio::spawn(async move {
-		conn.fetch_into(&sql, "id", 100, tx).await.unwrap()
-	});
+	let handle = tokio::spawn(async move { conn.fetch_into(&sql, "id", 100, tx).await.unwrap() });
 
 	let mut batches = Vec::new();
 	while let Some(batch) = rx.recv().await {
@@ -350,9 +334,7 @@ async fn fetch_into_empty_table() {
 	let sql = format!("SELECT id FROM {}.stream_empty", pg.schema);
 	let (tx, mut rx) = mpsc::channel::<Vec<oversync_core::model::RawRow>>(2);
 
-	let handle = tokio::spawn(async move {
-		conn.fetch_into(&sql, "id", 10, tx).await.unwrap()
-	});
+	let handle = tokio::spawn(async move { conn.fetch_into(&sql, "id", 10, tx).await.unwrap() });
 
 	let mut batches = Vec::new();
 	while let Some(batch) = rx.recv().await {
@@ -371,21 +353,24 @@ async fn fetch_into_matches_fetch_all() {
 	pg.run_sql("CREATE TABLE stream_cmp (id TEXT PRIMARY KEY, name TEXT, val INT)")
 		.await;
 	for i in 0..7 {
-		pg.run_sql(&format!("INSERT INTO stream_cmp VALUES ('k{i}', 'name{i}', {i})"))
-			.await;
+		pg.run_sql(&format!(
+			"INSERT INTO stream_cmp VALUES ('k{i}', 'name{i}', {i})"
+		))
+		.await;
 	}
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
-	let sql = format!("SELECT id, name, val FROM {}.stream_cmp ORDER BY id", pg.schema);
+	let sql = format!(
+		"SELECT id, name, val FROM {}.stream_cmp ORDER BY id",
+		pg.schema
+	);
 
 	let all_rows = conn.fetch_all(&sql, "id").await.unwrap();
 
 	let (tx, mut rx) = mpsc::channel::<Vec<oversync_core::model::RawRow>>(2);
 	let sql2 = sql.clone();
 	let conn2 = PostgresConnector::from_pool("test", pg.pool.clone());
-	let handle = tokio::spawn(async move {
-		conn2.fetch_into(&sql2, "id", 3, tx).await.unwrap()
-	});
+	let handle = tokio::spawn(async move { conn2.fetch_into(&sql2, "id", 3, tx).await.unwrap() });
 
 	let mut streamed_rows = Vec::new();
 	while let Some(batch) = rx.recv().await {
@@ -426,9 +411,7 @@ async fn fetch_into_large_streaming() {
 	let sql = format!("SELECT id, v FROM {}.stream1k", pg.schema);
 	let (tx, mut rx) = mpsc::channel::<Vec<oversync_core::model::RawRow>>(2);
 
-	let handle = tokio::spawn(async move {
-		conn.fetch_into(&sql, "id", 100, tx).await.unwrap()
-	});
+	let handle = tokio::spawn(async move { conn.fetch_into(&sql, "id", 100, tx).await.unwrap() });
 
 	let mut batches = Vec::new();
 	while let Some(batch) = rx.recv().await {

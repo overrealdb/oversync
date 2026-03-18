@@ -1,6 +1,6 @@
+use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
-use surrealdb::Surreal;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, ImageExt};
 use testcontainers_modules::surrealdb::SurrealDb;
@@ -51,8 +51,7 @@ pub struct TestSurrealContainer {
 impl TestSurrealContainer {
 	pub async fn new() -> Self {
 		let t = Self::new_raw().await;
-		let mut manifest =
-			overshift::Manifest::load("surql/").expect("manifest load failed");
+		let mut manifest = overshift::Manifest::load("surql/").expect("manifest load failed");
 		manifest.meta.ns = t.ns.clone();
 		manifest.meta.db = t.db.clone();
 		let plan = overshift::plan(&t.client, &manifest)

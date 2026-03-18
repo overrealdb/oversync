@@ -9,11 +9,16 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use oversync::config::SyncConfig;
-use oversync::scheduler::Scheduler;
+use oversync::{OversyncEngine, PluginRegistry};
+use oversync_connectors::PostgresSourceFactory;
 use oversync_delta::DeltaEngine;
+use oversync_sinks::StdoutSinkFactory;
 
 #[derive(Parser)]
-#[command(name = "oversync", about = "Lightweight data sync engine: poll, delta, sink")]
+#[command(
+	name = "oversync",
+	about = "Lightweight data sync engine: poll, delta, sink"
+)]
 struct Cli {
 	#[arg(short, long, env = "OVERSYNC_CONFIG", default_value = "oversync.toml")]
 	config: PathBuf,
@@ -37,6 +42,13 @@ async fn apply_schema(db: &Surreal<Any>, ns: &str, db_name: &str) -> anyhow::Res
 		"schema applied"
 	);
 	Ok(())
+}
+
+fn default_registry() -> PluginRegistry {
+	let mut registry = PluginRegistry::new();
+	registry.register_source(Box::new(PostgresSourceFactory));
+	registry.register_sink(Box::new(StdoutSinkFactory));
+	registry
 }
 
 #[tokio::main]
@@ -67,8 +79,8 @@ async fn main() -> anyhow::Result<()> {
 			)
 			.build();
 
-		let otel_layer = tracing_opentelemetry::layer()
-			.with_tracer(tracer_provider.tracer("oversync"));
+		let otel_layer =
+			tracing_opentelemetry::layer().with_tracer(tracer_provider.tracer("oversync"));
 
 		registry.with(otel_layer).init();
 		tracing::info!(endpoint = %endpoint, "OpenTelemetry export enabled");
@@ -79,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
 	let config = SyncConfig::from_file(&cli.config)?;
 	tracing::info!(
 		sources = config.sources.len(),
+		sinks = config.sinks.len(),
 		"loaded config from {}",
 		cli.config.display()
 	);
@@ -92,8 +105,7 @@ async fn main() -> anyhow::Result<()> {
 
 	apply_schema(&db, &config.surrealdb.namespace, &config.surrealdb.database).await?;
 
-	// Snapshot client: embedded kv-mem (fast) or same DB (simple)
-	let engine = if let Some(ref snap_cfg) = config.surrealdb.snapshot {
+	let delta_engine = if let Some(ref snap_cfg) = config.surrealdb.snapshot {
 		let snap_db = surrealdb::engine::any::connect(&snap_cfg.url).await?;
 		snap_db
 			.signin(surrealdb::opt::auth::Root {
@@ -102,7 +114,10 @@ async fn main() -> anyhow::Result<()> {
 			})
 			.await?;
 		apply_schema(&snap_db, &snap_cfg.namespace, &snap_cfg.database).await?;
-		tracing::info!(url = %snap_cfg.url, "snapshot DB connected (separate)");
+		tracing::info!(
+			url = %snap_cfg.url,
+			"snapshot DB connected (separate)"
+		);
 		DeltaEngine::new(db, snap_db)
 	} else {
 		let snap_db = surrealdb::engine::any::connect("mem://").await?;
@@ -110,15 +125,17 @@ async fn main() -> anyhow::Result<()> {
 		tracing::info!("snapshot DB: embedded kv-mem");
 		DeltaEngine::new(db, snap_db)
 	};
-	let scheduler = Scheduler::new(engine, config);
 
-	let shutdown_handle = scheduler.shutdown_tx_clone();
+	let plugin_registry = default_registry();
+	let app = OversyncEngine::new(delta_engine, config, plugin_registry);
+
+	let shutdown_tx = app.shutdown_handle();
 	tokio::spawn(async move {
 		tokio::signal::ctrl_c().await.ok();
 		tracing::info!("received ctrl-c, shutting down");
-		let _ = shutdown_handle.send(true);
+		let _ = shutdown_tx.send(true);
 	});
 
-	scheduler.run().await?;
+	app.run().await?;
 	Ok(())
 }

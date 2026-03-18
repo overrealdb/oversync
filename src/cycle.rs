@@ -2,7 +2,7 @@ use oversync_core::error::OversyncError;
 use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, compute_diff};
 use oversync_core::traits::{Sink, SourceConnector};
 use oversync_delta::{DeltaEngine, check_fail_safe};
-use tracing::{error, info, warn, Instrument};
+use tracing::{Instrument, error, info, warn};
 
 use crate::config::DiffMode;
 
@@ -140,11 +140,9 @@ impl<'a> CycleRunner<'a> {
 				.chain(diff.deleted.iter())
 				.collect();
 
-			let delivered = async {
-				self.deliver_paged(config, cycle_id, &all_events).await
-			}
-			.instrument(tracing::info_span!("deliver", source = %config.source_id))
-			.await?;
+			let delivered = async { self.deliver_paged(config, cycle_id, &all_events).await }
+				.instrument(tracing::info_span!("deliver", source = %config.source_id))
+				.await?;
 
 			if !delivered {
 				return Err(OversyncError::Sink(
@@ -281,8 +279,7 @@ impl<'a> CycleRunner<'a> {
 		config: &CycleConfig,
 		cycle_id: i64,
 	) -> Result<usize, OversyncError> {
-		let (tx, mut rx) =
-			tokio::sync::mpsc::channel::<Vec<oversync_core::model::RawRow>>(4);
+		let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<oversync_core::model::RawRow>>(4);
 
 		let engine = &self.engine;
 		let source_id = config.source_id.clone();
@@ -294,10 +291,8 @@ impl<'a> CycleRunner<'a> {
 		let fetch_span = tracing::info_span!("fetch", source = %config.source_id);
 		let upsert_span = tracing::info_span!("upsert", source = %config.source_id);
 
-		let producer = async {
-			connector.fetch_into(&sql, &key_col, 500, tx).await
-		}
-		.instrument(fetch_span);
+		let producer =
+			async { connector.fetch_into(&sql, &key_col, 500, tx).await }.instrument(fetch_span);
 
 		let consumer = async {
 			let mut total: usize = 0;
@@ -337,12 +332,7 @@ impl<'a> CycleRunner<'a> {
 
 			// Save to outbox before delivery (crash-safe)
 			self.engine
-				.save_pending_events(
-					&config.source_id,
-					&config.query_id,
-					page_id,
-					&envelopes,
-				)
+				.save_pending_events(&config.source_id, &config.query_id, page_id, &envelopes)
 				.await?;
 
 			// Deliver to all sinks

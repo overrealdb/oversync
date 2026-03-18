@@ -4,5 +4,8 @@
 *.swp
 *.swo
 .DS_Store
+.claude/
+lcov.info
 surql/generated/current.surql
 oversync.infra-test.toml
+history.txt

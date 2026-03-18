@@ -6,8 +6,8 @@
 mod common;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_core::error::OversyncError;
@@ -47,7 +47,12 @@ impl VerifySink {
 	}
 
 	fn count_by_op(&self, op: OpType) -> usize {
-		self.events.lock().unwrap().iter().filter(|e| e.meta.op == op).count()
+		self.events
+			.lock()
+			.unwrap()
+			.iter()
+			.filter(|e| e.meta.op == op)
+			.count()
 	}
 
 	fn clear(&self) {
@@ -80,12 +85,20 @@ impl Sink for VerifySink {
 	}
 }
 
-async fn count_snapshot(surreal: &common::surreal::TestSurrealContainer, source: &str, query: &str) -> usize {
-	let mut res = surreal.client.query(
-		"SELECT count() AS c FROM snapshot WHERE source_id = $src AND query_id = $qid GROUP ALL"
-	).bind(("src", source.to_string()))
-	.bind(("qid", query.to_string()))
-	.await.unwrap();
+async fn count_snapshot(
+	surreal: &common::surreal::TestSurrealContainer,
+	source: &str,
+	query: &str,
+) -> usize {
+	let mut res = surreal
+		.client
+		.query(
+			"SELECT count() AS c FROM snapshot WHERE source_id = $src AND query_id = $qid GROUP ALL",
+		)
+		.bind(("src", source.to_string()))
+		.bind(("qid", query.to_string()))
+		.await
+		.unwrap();
 	let rows: Vec<serde_json::Value> = res.take(0).unwrap();
 	rows.first().and_then(|r| r["c"].as_u64()).unwrap_or(0) as usize
 }
@@ -124,8 +137,7 @@ async fn stress_two_tables_join_full_lifecycle() {
 	let s = &pg.schema;
 
 	let engine = DeltaEngine::single(surreal.client.clone());
-	let connector =
-		oversync_connectors::PostgresConnector::from_pool("stress-pg", pg.pool.clone());
+	let connector = oversync_connectors::PostgresConnector::from_pool("stress-pg", pg.pool.clone());
 
 	let sink_on = Arc::new(AtomicBool::new(true));
 	let sink = Arc::new(VerifySink::new(sink_on.clone()));
@@ -211,11 +223,24 @@ async fn stress_two_tables_join_full_lifecycle() {
 	assert!(diff1.deleted.is_empty());
 
 	// Verify JSONB data made it through
-	let sample = diff1.created.iter().find(|e| e.row_key == "p0000001").unwrap();
-	assert!(sample.row_data.get("metadata").is_some(), "JSONB metadata present");
-	assert!(sample.row_data.get("category_name").is_some(), "JOIN column present");
+	let sample = diff1
+		.created
+		.iter()
+		.find(|e| e.row_key == "p0000001")
+		.unwrap();
+	assert!(
+		sample.row_data.get("metadata").is_some(),
+		"JSONB metadata present"
+	);
+	assert!(
+		sample.row_data.get("category_name").is_some(),
+		"JOIN column present"
+	);
 
-	eprintln!("phase 1: OK — {n} created in {:.1}s", t0.elapsed().as_secs_f64());
+	eprintln!(
+		"phase 1: OK — {n} created in {:.1}s",
+		t0.elapsed().as_secs_f64()
+	);
 
 	// ── Phase 2: Mutations across both tables ───────────────
 	let update_count = n / 10;
@@ -264,8 +289,17 @@ async fn stress_two_tables_join_full_lifecycle() {
 
 	// Debug: check snapshot state
 	let snap_count = count_snapshot(&surreal, "stress", "product_catalog").await;
-	eprintln!("  snapshot has {} rows (expected ~{})", snap_count, n - delete_count + insert_count);
-	eprintln!("  diff: created={}, updated={}, deleted={}", diff2.created.len(), diff2.updated.len(), diff2.deleted.len());
+	eprintln!(
+		"  snapshot has {} rows (expected ~{})",
+		snap_count,
+		n - delete_count + insert_count
+	);
+	eprintln!(
+		"  diff: created={}, updated={}, deleted={}",
+		diff2.created.len(),
+		diff2.updated.len(),
+		diff2.deleted.len()
+	);
 
 	// Debug: check prev_hash on a sample of "new" rows
 	let sample_new_id = format!("p{:07}", n + 1); // first new row
@@ -287,7 +321,10 @@ async fn stress_two_tables_join_full_lifecycle() {
 		"SELECT row_key FROM snapshot WHERE source_id = 'stress' AND query_id = 'product_catalog' AND cycle_id = 2 AND prev_hash IS NONE LIMIT 10"
 	).await.unwrap();
 	let direct_rows: Vec<serde_json::Value> = direct.take(0).unwrap();
-	eprintln!("  direct find_created (limit 10): {} rows", direct_rows.len());
+	eprintln!(
+		"  direct find_created (limit 10): {} rows",
+		direct_rows.len()
+	);
 
 	// Test with bound params like paginated_query uses
 	let mut bound = surreal.client.query(
@@ -299,7 +336,10 @@ async fn stress_two_tables_join_full_lifecycle() {
 	.bind(("offset", 0i64))
 	.await.unwrap();
 	let bound_rows: Vec<serde_json::Value> = bound.take(0).unwrap();
-	eprintln!("  bound find_created (page_size=5000, offset=0): {} rows", bound_rows.len());
+	eprintln!(
+		"  bound find_created (page_size=5000, offset=0): {} rows",
+		bound_rows.len()
+	);
 
 	assert_eq!(diff2.created.len(), insert_count, "new products");
 	assert_eq!(diff2.deleted.len(), delete_count, "deleted products");
@@ -327,7 +367,10 @@ async fn stress_two_tables_join_full_lifecycle() {
 	let t3 = std::time::Instant::now();
 	let diff3 = runner.run(&config).await.unwrap();
 	assert!(diff3.is_empty(), "no changes = empty diff");
-	eprintln!("phase 3: OK — {:.1}s (this is the baseline full-scan cost)", t3.elapsed().as_secs_f64());
+	eprintln!(
+		"phase 3: OK — {:.1}s (this is the baseline full-scan cost)",
+		t3.elapsed().as_secs_f64()
+	);
 
 	// ── Phase 3b: Micro-change (1 row out of N) ────────────
 	eprintln!("phase 3b: micro-change (1 row updated)...");
@@ -357,7 +400,10 @@ async fn stress_two_tables_join_full_lifecycle() {
 	let result4 = runner.run(&config).await;
 	assert!(result4.is_err(), "cycle should fail with sink down");
 
-	let pending = engine.read_pending_events("stress", "product_catalog").await.unwrap();
+	let pending = engine
+		.read_pending_events("stress", "product_catalog")
+		.await
+		.unwrap();
 	assert!(!pending.is_empty(), "events in outbox");
 	let pending_count: usize = pending.iter().map(|(_, e)| e.len()).sum();
 	assert_eq!(pending_count, 500, "500 updated events pending");
@@ -369,7 +415,10 @@ async fn stress_two_tables_join_full_lifecycle() {
 
 	let diff5 = runner.run(&config).await.unwrap();
 
-	let pending_after = engine.read_pending_events("stress", "product_catalog").await.unwrap();
+	let pending_after = engine
+		.read_pending_events("stress", "product_catalog")
+		.await
+		.unwrap();
 	assert!(pending_after.is_empty(), "outbox drained");
 	eprintln!(
 		"phase 5: OK — outbox drained, diff: {} c / {} u / {} d",
@@ -442,5 +491,8 @@ async fn stress_two_tables_join_full_lifecycle() {
 		n
 	);
 
-	eprintln!("=== STRESS TEST PASSED: {n} rows, {} cycles ===", logs.len());
+	eprintln!(
+		"=== STRESS TEST PASSED: {n} rows, {} cycles ===",
+		logs.len()
+	);
 }

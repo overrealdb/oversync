@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
-use testcontainers::runners::AsyncRunner;
 use testcontainers::ImageExt;
+use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use tokio::sync::OnceCell;
 

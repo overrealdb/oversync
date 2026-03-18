@@ -49,7 +49,10 @@ async fn schema_is_idempotent() {
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.expect("plan");
 	let result = plan.apply(&t.client).await.expect("apply");
-	assert_eq!(result.applied_migrations, 0, "second run should apply zero migrations");
+	assert_eq!(
+		result.applied_migrations, 0,
+		"second run should apply zero migrations"
+	);
 }
 
 #[tokio::test]
@@ -147,9 +150,7 @@ async fn link_rule_table_exists() {
 async fn resolved_link_table_exists() {
 	let t = TestSurrealContainer::new().await;
 	t.client
-		.query(
-			"CREATE resolved_link SET source_key = 'a', target_key = 'b', rule_name = 'test'",
-		)
+		.query("CREATE resolved_link SET source_key = 'a', target_key = 'b', rule_name = 'test'")
 		.await
 		.expect("resolved_link table should exist");
 }

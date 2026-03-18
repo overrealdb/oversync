@@ -13,11 +13,15 @@
 
 pub mod config;
 pub mod cycle;
+pub mod engine;
+pub mod registry;
 pub mod scheduler;
 
 pub use config::SyncConfig;
 pub use cycle::{CycleConfig, CycleRunner};
+pub use engine::OversyncEngine;
 pub use oversync_core::*;
+pub use registry::PluginRegistry;
 pub use scheduler::Scheduler;
 
 mod surql_functions {

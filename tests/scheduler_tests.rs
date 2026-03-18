@@ -1,11 +1,21 @@
 mod common;
 
 use oversync::config::{QueryDef, SourceDef, SurrealDbDef, SyncConfig};
+use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
+use oversync_connectors::PostgresSourceFactory;
 use oversync_delta::DeltaEngine;
+use oversync_sinks::StdoutSinkFactory;
 
 use common::postgres::TestPostgres;
 use common::surreal::TestSurrealContainer;
+
+fn test_registry() -> PluginRegistry {
+	let mut r = PluginRegistry::new();
+	r.register_source(Box::new(PostgresSourceFactory));
+	r.register_sink(Box::new(StdoutSinkFactory));
+	r
+}
 
 fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 	SyncConfig {
@@ -32,6 +42,7 @@ fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 				key_column: "id".into(),
 			}],
 		}],
+		sinks: vec![],
 	}
 }
 
@@ -52,7 +63,7 @@ async fn scheduler_runs_first_cycle_immediately() {
 
 	let config = make_config(&pg, 3600);
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 
 	// Run scheduler in background, shut down after short delay
 	let shutdown = scheduler.shutdown_tx_clone();
@@ -90,7 +101,7 @@ async fn scheduler_runs_multiple_cycles() {
 
 	let config = make_config(&pg, 1);
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 	let shutdown = scheduler.shutdown_tx_clone();
 
 	let handle = tokio::spawn(async move {
@@ -140,9 +151,10 @@ async fn scheduler_handles_connector_error() {
 				key_column: "id".into(),
 			}],
 		}],
+		sinks: vec![],
 	};
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 	let shutdown = scheduler.shutdown_tx_clone();
 
 	let handle = tokio::spawn(async move {
@@ -170,9 +182,10 @@ async fn scheduler_no_sources_exits_immediately() {
 			snapshot: None,
 		},
 		sources: vec![],
+		sinks: vec![],
 	};
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 	// Should return immediately with no sources
 	scheduler.run().await.unwrap();
 }
@@ -215,9 +228,10 @@ async fn scheduler_detects_data_changes() {
 				key_column: "id".into(),
 			}],
 		}],
+		sinks: vec![],
 	};
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 	let shutdown = scheduler.shutdown_tx_clone();
 
 	let handle = tokio::spawn(async move {
@@ -245,7 +259,11 @@ async fn scheduler_detects_data_changes() {
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
-	assert!(logs.len() >= 2, "expected >=2 cycle_log entries, got {}", logs.len());
+	assert!(
+		logs.len() >= 2,
+		"expected >=2 cycle_log entries, got {}",
+		logs.len()
+	);
 
 	let has_changes = logs.iter().any(|log| {
 		let created = log["rows_created"].as_i64().unwrap_or(0);
@@ -253,7 +271,10 @@ async fn scheduler_detects_data_changes() {
 		let deleted = log["rows_deleted"].as_i64().unwrap_or(0);
 		created > 0 || updated > 0 || deleted > 0
 	});
-	assert!(has_changes, "expected at least one cycle with data changes, logs: {logs:?}");
+	assert!(
+		has_changes,
+		"expected at least one cycle with data changes, logs: {logs:?}"
+	);
 }
 
 #[tokio::test]
@@ -303,9 +324,10 @@ async fn scheduler_multiple_queries() {
 				},
 			],
 		}],
+		sinks: vec![],
 	};
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 	let shutdown = scheduler.shutdown_tx_clone();
 
 	let handle = tokio::spawn(async move {
@@ -322,7 +344,10 @@ async fn scheduler_multiple_queries() {
 		.await
 		.unwrap();
 	let items_logs: Vec<serde_json::Value> = res.take(0).unwrap();
-	assert!(!items_logs.is_empty(), "expected cycle_log entries for query_id 'items'");
+	assert!(
+		!items_logs.is_empty(),
+		"expected cycle_log entries for query_id 'items'"
+	);
 
 	let mut res = surreal
 		.client
@@ -330,7 +355,10 @@ async fn scheduler_multiple_queries() {
 		.await
 		.unwrap();
 	let users_logs: Vec<serde_json::Value> = res.take(0).unwrap();
-	assert!(!users_logs.is_empty(), "expected cycle_log entries for query_id 'users'");
+	assert!(
+		!users_logs.is_empty(),
+		"expected cycle_log entries for query_id 'users'"
+	);
 }
 
 #[tokio::test]
@@ -367,7 +395,7 @@ async fn scheduler_multiple_sources() {
 				fail_safe_threshold: 50.0,
 				max_retries: 1,
 				retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
+				diff_mode: oversync::config::DiffMode::default(),
 				queries: vec![QueryDef {
 					id: "items".into(),
 					sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
@@ -382,7 +410,7 @@ async fn scheduler_multiple_sources() {
 				fail_safe_threshold: 50.0,
 				max_retries: 1,
 				retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
+				diff_mode: oversync::config::DiffMode::default(),
 				queries: vec![QueryDef {
 					id: "users".into(),
 					sql: format!("SELECT id, email FROM {}.users", pg.schema),
@@ -390,9 +418,10 @@ async fn scheduler_multiple_sources() {
 				}],
 			},
 		],
+		sinks: vec![],
 	};
 
-	let scheduler = Scheduler::new(engine, config);
+	let scheduler = Scheduler::new(engine, config, test_registry());
 	let shutdown = scheduler.shutdown_tx_clone();
 
 	let handle = tokio::spawn(async move {
@@ -409,7 +438,10 @@ async fn scheduler_multiple_sources() {
 		.await
 		.unwrap();
 	let alpha_logs: Vec<serde_json::Value> = res.take(0).unwrap();
-	assert!(!alpha_logs.is_empty(), "expected cycle_log entries for source_id 'source-alpha'");
+	assert!(
+		!alpha_logs.is_empty(),
+		"expected cycle_log entries for source_id 'source-alpha'"
+	);
 
 	let mut res = surreal
 		.client
@@ -417,5 +449,8 @@ async fn scheduler_multiple_sources() {
 		.await
 		.unwrap();
 	let beta_logs: Vec<serde_json::Value> = res.take(0).unwrap();
-	assert!(!beta_logs.is_empty(), "expected cycle_log entries for source_id 'source-beta'");
+	assert!(
+		!beta_logs.is_empty(),
+		"expected cycle_log entries for source_id 'source-beta'"
+	);
 }

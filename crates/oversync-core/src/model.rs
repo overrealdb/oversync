@@ -304,8 +304,14 @@ mod tests {
 	fn diff_all_created_when_no_previous() {
 		let prev = HashMap::new();
 		let rows = vec![
-			RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-			RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+			RawRow {
+				row_key: "a".into(),
+				row_data: serde_json::json!({"v": 1}),
+			},
+			RawRow {
+				row_key: "b".into(),
+				row_data: serde_json::json!({"v": 2}),
+			},
 		];
 		let r = compute_diff(&prev, &rows, "src", "q", 1);
 		assert_eq!(r.created.len(), 2);
@@ -332,7 +338,10 @@ mod tests {
 		let data_v1 = serde_json::json!({"name": "alice"});
 		let data_v2 = serde_json::json!({"name": "alice_updated"});
 		let prev = HashMap::from([("a".into(), hash_row_data(&data_v1))]);
-		let rows = vec![RawRow { row_key: "a".into(), row_data: data_v2 }];
+		let rows = vec![RawRow {
+			row_key: "a".into(),
+			row_data: data_v2,
+		}];
 		let r = compute_diff(&prev, &rows, "src", "q", 2);
 		assert!(r.created.is_empty());
 		assert_eq!(r.updated.len(), 1);
@@ -344,7 +353,10 @@ mod tests {
 	fn diff_no_change_when_hash_matches() {
 		let data = serde_json::json!({"name": "alice"});
 		let prev = HashMap::from([("a".into(), hash_row_data(&data))]);
-		let rows = vec![RawRow { row_key: "a".into(), row_data: data }];
+		let rows = vec![RawRow {
+			row_key: "a".into(),
+			row_data: data,
+		}];
 		let r = compute_diff(&prev, &rows, "src", "q", 2);
 		assert!(r.is_empty());
 	}
@@ -360,9 +372,18 @@ mod tests {
 			("c".into(), hash_row_data(&serde_json::json!({"v": 99}))),
 		]);
 		let rows = vec![
-			RawRow { row_key: "a".into(), row_data: data_a },
-			RawRow { row_key: "b".into(), row_data: data_b2 },
-			RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
+			RawRow {
+				row_key: "a".into(),
+				row_data: data_a,
+			},
+			RawRow {
+				row_key: "b".into(),
+				row_data: data_b2,
+			},
+			RawRow {
+				row_key: "d".into(),
+				row_data: serde_json::json!({"v": 4}),
+			},
 		];
 		let r = compute_diff(&prev, &rows, "src", "q", 3);
 		assert_eq!(r.created.len(), 1);
@@ -375,7 +396,10 @@ mod tests {
 
 	#[test]
 	fn diff_preserves_source_and_query_ids() {
-		let rows = vec![RawRow { row_key: "x".into(), row_data: serde_json::json!({}) }];
+		let rows = vec![RawRow {
+			row_key: "x".into(),
+			row_data: serde_json::json!({}),
+		}];
 		let r = compute_diff(&HashMap::new(), &rows, "my-src", "my-q", 7);
 		assert_eq!(r.created[0].source_id, "my-src");
 		assert_eq!(r.created[0].query_id, "my-q");

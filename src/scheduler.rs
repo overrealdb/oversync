@@ -4,28 +4,29 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
-use oversync_connectors::PostgresConnector;
 use oversync_core::error::OversyncError;
-use oversync_core::traits::Sink;
+use oversync_core::traits::{Sink, SourceConnector};
 use oversync_delta::DeltaEngine;
-use oversync_sinks::StdoutSink;
 
 use crate::config::{QueryDef, SourceDef, SyncConfig};
 use crate::cycle::{CycleConfig, CycleRunner};
+use crate::registry::PluginRegistry;
 
 pub struct Scheduler {
 	engine: Arc<DeltaEngine>,
 	config: SyncConfig,
+	registry: Arc<PluginRegistry>,
 	shutdown_tx: watch::Sender<bool>,
 	shutdown_rx: watch::Receiver<bool>,
 }
 
 impl Scheduler {
-	pub fn new(engine: DeltaEngine, config: SyncConfig) -> Self {
+	pub fn new(engine: DeltaEngine, config: SyncConfig, registry: PluginRegistry) -> Self {
 		let (shutdown_tx, shutdown_rx) = watch::channel(false);
 		Self {
 			engine: Arc::new(engine),
 			config,
+			registry: Arc::new(registry),
 			shutdown_tx,
 			shutdown_rx,
 		}
@@ -40,17 +41,22 @@ impl Scheduler {
 	}
 
 	pub async fn run(&self) -> Result<(), OversyncError> {
+		// Create sinks from config (shared across all sources)
+		let sinks = self.create_sinks().await?;
+		let sinks = Arc::new(sinks);
 		let mut handles = Vec::new();
 
 		for source in &self.config.sources {
 			for query in &source.queries {
 				let engine = self.engine.clone();
+				let registry = self.registry.clone();
 				let source = source.clone();
 				let query = query.clone();
+				let sinks = sinks.clone();
 				let mut shutdown = self.shutdown_rx.clone();
 
 				let handle = tokio::spawn(async move {
-					run_source_query(engine, source, query, &mut shutdown).await;
+					run_source_query(engine, registry, source, query, sinks, &mut shutdown).await;
 				});
 
 				handles.push(handle);
@@ -66,23 +72,52 @@ impl Scheduler {
 		info!("scheduler stopped");
 		Ok(())
 	}
+
+	async fn create_sinks(&self) -> Result<Vec<Box<dyn Sink>>, OversyncError> {
+		let mut sinks: Vec<Box<dyn Sink>> = Vec::new();
+		for sink_def in &self.config.sinks {
+			let sink = self
+				.registry
+				.create_sink(&sink_def.sink_type, &sink_def.name, &sink_def.config)
+				.await?;
+			sinks.push(sink);
+		}
+		// Default to stdout if no sinks configured
+		if sinks.is_empty() {
+			sinks.push(
+				self.registry
+					.create_sink("stdout", "default", &serde_json::json!({}))
+					.await?,
+			);
+		}
+		Ok(sinks)
+	}
 }
 
 async fn run_source_query(
 	engine: Arc<DeltaEngine>,
+	registry: Arc<PluginRegistry>,
 	source: SourceDef,
 	query: QueryDef,
+	sinks: Arc<Vec<Box<dyn Sink>>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let connector = match create_connector(&source).await {
+	let connector_config = source.connector_config();
+	let connector = match registry
+		.create_source(&source.connector, &source.name, &connector_config)
+		.await
+	{
 		Ok(c) => c,
 		Err(e) => {
-			error!(source = %source.name, error = %e, "failed to create connector, task exiting");
+			error!(
+				source = %source.name,
+				error = %e,
+				"failed to create connector, task exiting"
+			);
 			return;
 		}
 	};
 
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(StdoutSink::new(false))];
 	let interval = Duration::from_secs(source.interval_secs);
 
 	info!(
@@ -93,16 +128,21 @@ async fn run_source_query(
 		"polling task started"
 	);
 
-	// Run first cycle immediately (with retry)
-	run_with_retry(&engine, &connector, &sinks, &source, &query).await;
+	run_with_retry(&engine, connector.as_ref(), &sinks, &source, &query).await;
 
 	let mut ticker = tokio::time::interval(interval);
-	ticker.tick().await; // skip first immediate tick
+	ticker.tick().await;
 
 	loop {
 		tokio::select! {
 			_ = ticker.tick() => {
-				run_with_retry(&engine, &connector, &sinks, &source, &query).await;
+				run_with_retry(
+					&engine,
+					connector.as_ref(),
+					&sinks,
+					&source,
+					&query,
+				).await;
 			}
 			_ = shutdown.changed() => {
 				info!(source = %source.name, query = %query.id, "shutting down");
@@ -114,7 +154,7 @@ async fn run_source_query(
 
 async fn run_with_retry(
 	engine: &DeltaEngine,
-	connector: &PostgresConnector,
+	connector: &dyn SourceConnector,
 	sinks: &[Box<dyn Sink>],
 	source: &SourceDef,
 	query: &QueryDef,
@@ -147,9 +187,8 @@ async fn run_with_retry(
 			}
 			Err(e) => {
 				if attempt < source.max_retries {
-					let delay = Duration::from_secs(
-						source.retry_base_delay_secs * 2u64.pow(attempt),
-					);
+					let delay =
+						Duration::from_secs(source.retry_base_delay_secs * 2u64.pow(attempt));
 					warn!(
 						source = %source.name,
 						query = %query.id,
@@ -171,14 +210,5 @@ async fn run_with_retry(
 				}
 			}
 		}
-	}
-}
-
-async fn create_connector(source: &SourceDef) -> Result<PostgresConnector, OversyncError> {
-	match source.connector.as_str() {
-		"postgres" => PostgresConnector::new(&source.name, &source.dsn).await,
-		other => Err(OversyncError::Config(format!(
-			"unknown connector: {other}"
-		))),
 	}
 }

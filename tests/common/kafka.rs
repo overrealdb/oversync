@@ -1,6 +1,6 @@
-use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
-use testcontainers_modules::kafka::apache::{Kafka, KAFKA_PORT};
+use testcontainers::runners::AsyncRunner;
+use testcontainers_modules::kafka::apache::{KAFKA_PORT, Kafka};
 use tokio::sync::OnceCell;
 
 struct SharedKafkaContainer {

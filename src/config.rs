@@ -8,6 +8,8 @@ pub struct SyncConfig {
 	pub surrealdb: SurrealDbDef,
 	#[serde(default)]
 	pub sources: Vec<SourceDef>,
+	#[serde(default)]
+	pub sinks: Vec<SinkDef>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,10 +40,18 @@ pub struct SnapshotDbDef {
 	pub database: String,
 }
 
-fn default_user() -> String { "root".into() }
-fn default_pass() -> String { "root".into() }
-fn default_ns() -> String { "oversync".into() }
-fn default_db() -> String { "sync".into() }
+fn default_user() -> String {
+	"root".into()
+}
+fn default_pass() -> String {
+	"root".into()
+}
+fn default_ns() -> String {
+	"oversync".into()
+}
+fn default_db() -> String {
+	"sync".into()
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SourceDef {
@@ -62,6 +72,22 @@ pub struct SourceDef {
 	pub queries: Vec<QueryDef>,
 }
 
+impl SourceDef {
+	/// Build connector config JSON from source definition fields.
+	pub fn connector_config(&self) -> serde_json::Value {
+		serde_json::json!({ "dsn": self.dsn })
+	}
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SinkDef {
+	pub name: String,
+	#[serde(rename = "type")]
+	pub sink_type: String,
+	#[serde(default)]
+	pub config: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffMode {
@@ -72,10 +98,18 @@ pub enum DiffMode {
 	Memory,
 }
 
-fn default_interval() -> u64 { 300 }
-fn default_threshold() -> f64 { 30.0 }
-fn default_max_retries() -> u32 { 3 }
-fn default_retry_delay() -> u64 { 5 }
+fn default_interval() -> u64 {
+	300
+}
+fn default_threshold() -> f64 {
+	30.0
+}
+fn default_max_retries() -> u32 {
+	3
+}
+fn default_retry_delay() -> u64 {
+	5
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueryDef {
@@ -92,8 +126,7 @@ impl SyncConfig {
 	}
 
 	pub fn from_str(toml_str: &str) -> Result<Self, OversyncError> {
-		toml::from_str(toml_str)
-			.map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
+		toml::from_str(toml_str).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
 }
 

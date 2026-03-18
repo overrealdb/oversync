@@ -40,9 +40,7 @@ impl Sink for KafkaSink {
 		let payload = serde_json::to_string(envelope)
 			.map_err(|e| OversyncError::Sink(format!("serialize: {e}")))?;
 
-		let record = FutureRecord::to(&self.topic)
-			.key(key)
-			.payload(&payload);
+		let record = FutureRecord::to(&self.topic).key(key).payload(&payload);
 
 		self.producer
 			.send(record, Duration::from_secs(5))

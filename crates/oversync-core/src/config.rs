@@ -2,7 +2,10 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
-#[command(name = "oversync", about = "Lightweight data sync engine: poll, delta, sink")]
+#[command(
+	name = "oversync",
+	about = "Lightweight data sync engine: poll, delta, sink"
+)]
 pub struct OversyncConfig {
 	#[arg(long, env = "OVERSYNC_BIND", default_value = "0.0.0.0:4200")]
 	pub bind: String,
@@ -16,7 +19,11 @@ pub struct OversyncConfig {
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 pub struct SurrealDbConfig {
-	#[arg(long, env = "OVERSYNC_SURREALDB_URL", default_value = "http://127.0.0.1:8000")]
+	#[arg(
+		long,
+		env = "OVERSYNC_SURREALDB_URL",
+		default_value = "http://127.0.0.1:8000"
+	)]
 	pub url: String,
 
 	#[arg(long, env = "OVERSYNC_SURREALDB_USER", default_value = "root")]

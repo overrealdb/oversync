@@ -57,7 +57,10 @@ async fn upsert_batch_inserts_rows() {
 
 	let keys = engine.read_snapshot_keys("src", "q").await.unwrap();
 	assert_eq!(keys.len(), 2);
-	assert_eq!(keys["a"], hash_row_data(&serde_json::json!({"name": "alice"})));
+	assert_eq!(
+		keys["a"],
+		hash_row_data(&serde_json::json!({"name": "alice"}))
+	);
 }
 
 #[tokio::test]
@@ -170,11 +173,26 @@ async fn full_cycle_detects_update_and_delete() {
 
 	// Cycle 1: insert a, b, c, e, f (5 rows so 1 deletion = 20% < 30%)
 	let rows_c1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
-		RawRow { row_key: "c".into(), row_data: serde_json::json!({"v": 3}) },
-		RawRow { row_key: "e".into(), row_data: serde_json::json!({"v": 5}) },
-		RawRow { row_key: "f".into(), row_data: serde_json::json!({"v": 6}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
+		RawRow {
+			row_key: "c".into(),
+			row_data: serde_json::json!({"v": 3}),
+		},
+		RawRow {
+			row_key: "e".into(),
+			row_data: serde_json::json!({"v": 5}),
+		},
+		RawRow {
+			row_key: "f".into(),
+			row_data: serde_json::json!({"v": 6}),
+		},
 	];
 	engine.log_cycle_start("src", "q", 1).await.unwrap();
 	engine.upsert_batch("src", "q", 1, &rows_c1).await.unwrap();
@@ -188,11 +206,26 @@ async fn full_cycle_detects_update_and_delete() {
 	assert_eq!(previous.len(), 5);
 
 	let rows_c2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 999}) },
-		RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
-		RawRow { row_key: "e".into(), row_data: serde_json::json!({"v": 5}) },
-		RawRow { row_key: "f".into(), row_data: serde_json::json!({"v": 6}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 999}),
+		},
+		RawRow {
+			row_key: "d".into(),
+			row_data: serde_json::json!({"v": 4}),
+		},
+		RawRow {
+			row_key: "e".into(),
+			row_data: serde_json::json!({"v": 5}),
+		},
+		RawRow {
+			row_key: "f".into(),
+			row_data: serde_json::json!({"v": 6}),
+		},
 	];
 
 	let diff = compute_diff(&previous, &rows_c2, "src", "q", 2);
@@ -332,8 +365,14 @@ async fn db_delta_first_cycle_all_created() {
 	let engine = DeltaEngine::single(t.client.clone());
 
 	let rows = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &rows).await.unwrap();
 
@@ -350,26 +389,45 @@ async fn db_delta_detects_update() {
 
 	// Cycle 1
 	let rows_c1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &rows_c1).await.unwrap();
 
 	// Cycle 2: 'b' updated
 	let rows_c2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 999}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 999}),
+		},
 	];
 	engine.upsert_batch("src", "q", 2, &rows_c2).await.unwrap();
 
 	let diff = engine.compute_delta_from_db("src", "q", 2).await.unwrap();
 
 	// Debug: check prev_hash via raw query
-	let mut res = t.client.query(
-		"SELECT row_key, row_hash, prev_hash, cycle_id FROM snapshot WHERE source_id = 'src'"
-	).await.unwrap();
+	let mut res = t
+		.client
+		.query(
+			"SELECT row_key, row_hash, prev_hash, cycle_id FROM snapshot WHERE source_id = 'src'",
+		)
+		.await
+		.unwrap();
 	let raw: Vec<serde_json::Value> = res.take(0).unwrap();
-	eprintln!("snapshot state: {}", serde_json::to_string_pretty(&raw).unwrap());
+	eprintln!(
+		"snapshot state: {}",
+		serde_json::to_string_pretty(&raw).unwrap()
+	);
 
 	assert_eq!(diff.updated.len(), 1, "expected 1 updated");
 	assert_eq!(diff.updated[0].row_key, "b");
@@ -382,15 +440,22 @@ async fn db_delta_detects_delete() {
 
 	// Cycle 1: insert a, b
 	let rows_c1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &rows_c1).await.unwrap();
 
 	// Cycle 2: only insert a (b is gone)
-	let rows_c2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-	];
+	let rows_c2 = vec![RawRow {
+		row_key: "a".into(),
+		row_data: serde_json::json!({"v": 1}),
+	}];
 	engine.upsert_batch("src", "q", 2, &rows_c2).await.unwrap();
 
 	let diff = engine.compute_delta_from_db("src", "q", 2).await.unwrap();
@@ -406,30 +471,75 @@ async fn db_delta_mixed_operations() {
 
 	// Cycle 1: insert a, b, c, d, e
 	let rows_c1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
-		RawRow { row_key: "c".into(), row_data: serde_json::json!({"v": 3}) },
-		RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
-		RawRow { row_key: "e".into(), row_data: serde_json::json!({"v": 5}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
+		RawRow {
+			row_key: "c".into(),
+			row_data: serde_json::json!({"v": 3}),
+		},
+		RawRow {
+			row_key: "d".into(),
+			row_data: serde_json::json!({"v": 4}),
+		},
+		RawRow {
+			row_key: "e".into(),
+			row_data: serde_json::json!({"v": 5}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &rows_c1).await.unwrap();
 
 	// Cycle 2: a unchanged, b updated, c gone, d unchanged, f new
 	let rows_c2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 999}) },
-		RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
-		RawRow { row_key: "e".into(), row_data: serde_json::json!({"v": 5}) },
-		RawRow { row_key: "f".into(), row_data: serde_json::json!({"v": 6}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 999}),
+		},
+		RawRow {
+			row_key: "d".into(),
+			row_data: serde_json::json!({"v": 4}),
+		},
+		RawRow {
+			row_key: "e".into(),
+			row_data: serde_json::json!({"v": 5}),
+		},
+		RawRow {
+			row_key: "f".into(),
+			row_data: serde_json::json!({"v": 6}),
+		},
 	];
 	engine.upsert_batch("src", "q", 2, &rows_c2).await.unwrap();
 
 	let diff = engine.compute_delta_from_db("src", "q", 2).await.unwrap();
-	assert_eq!(diff.created.len(), 1, "expected 1 created: {:?}", diff.created);
+	assert_eq!(
+		diff.created.len(),
+		1,
+		"expected 1 created: {:?}",
+		diff.created
+	);
 	assert_eq!(diff.created[0].row_key, "f");
-	assert_eq!(diff.updated.len(), 1, "expected 1 updated: {:?}", diff.updated);
+	assert_eq!(
+		diff.updated.len(),
+		1,
+		"expected 1 updated: {:?}",
+		diff.updated
+	);
 	assert_eq!(diff.updated[0].row_key, "b");
-	assert_eq!(diff.deleted.len(), 1, "expected 1 deleted: {:?}", diff.deleted);
+	assert_eq!(
+		diff.deleted.len(),
+		1,
+		"expected 1 deleted: {:?}",
+		diff.deleted
+	);
 	assert_eq!(diff.deleted[0].row_key, "c");
 }
 
@@ -440,15 +550,27 @@ async fn db_delta_no_changes() {
 
 	// Cycle 1: insert a, b
 	let rows_c1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &rows_c1).await.unwrap();
 
 	// Cycle 2: same a, b
 	let rows_c2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
 	];
 	engine.upsert_batch("src", "q", 2, &rows_c2).await.unwrap();
 
@@ -483,9 +605,10 @@ async fn upsert_batch_single_row() {
 	let t = TestSurrealContainer::new().await;
 	let engine = DeltaEngine::single(t.client.clone());
 
-	let rows = vec![
-		RawRow { row_key: "only".into(), row_data: serde_json::json!({"v": 42}) },
-	];
+	let rows = vec![RawRow {
+		row_key: "only".into(),
+		row_data: serde_json::json!({"v": 42}),
+	}];
 	let count = engine.upsert_batch("src", "q", 1, &rows).await.unwrap();
 	assert_eq!(count, 1);
 
@@ -603,7 +726,10 @@ async fn commit_cycle_inserts_and_cleans_stale() {
 		})
 		.collect();
 	engine.commit_cycle("src", "q", 1, &rows_c1).await.unwrap();
-	assert_eq!(engine.read_snapshot_keys("src", "q").await.unwrap().len(), 5);
+	assert_eq!(
+		engine.read_snapshot_keys("src", "q").await.unwrap().len(),
+		5
+	);
 
 	// Cycle 2: only 3 rows (r0, r1, r2). r3, r4 should be deleted.
 	let rows_c2: Vec<RawRow> = (0..3)
@@ -636,7 +762,10 @@ async fn commit_cycle_large_dataset_chunked() {
 		})
 		.collect();
 	engine.commit_cycle("src", "q", 1, &rows).await.unwrap();
-	assert_eq!(engine.read_snapshot_keys("src", "q").await.unwrap().len(), 700);
+	assert_eq!(
+		engine.read_snapshot_keys("src", "q").await.unwrap().len(),
+		700
+	);
 
 	// Cycle 2: shrink to 600
 	let rows_c2: Vec<RawRow> = (0..600)
@@ -646,7 +775,10 @@ async fn commit_cycle_large_dataset_chunked() {
 		})
 		.collect();
 	engine.commit_cycle("src", "q", 2, &rows_c2).await.unwrap();
-	assert_eq!(engine.read_snapshot_keys("src", "q").await.unwrap().len(), 600);
+	assert_eq!(
+		engine.read_snapshot_keys("src", "q").await.unwrap().len(),
+		600
+	);
 }
 
 // ── upsert_batch_raw + prep_prev_hash tests ─────────────────
@@ -657,16 +789,21 @@ async fn upsert_batch_raw_without_prep_does_not_set_prev_hash() {
 	let engine = DeltaEngine::single(t.client.clone());
 
 	// Cycle 1
-	let rows = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-	];
+	let rows = vec![RawRow {
+		row_key: "a".into(),
+		row_data: serde_json::json!({"v": 1}),
+	}];
 	engine.upsert_batch_raw("src", "q", 1, &rows).await.unwrap();
 
 	// Cycle 2 with raw (no prep) — prev_hash stays NONE
-	let rows2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 2}) },
-	];
-	engine.upsert_batch_raw("src", "q", 2, &rows2).await.unwrap();
+	let rows2 = vec![RawRow {
+		row_key: "a".into(),
+		row_data: serde_json::json!({"v": 2}),
+	}];
+	engine
+		.upsert_batch_raw("src", "q", 2, &rows2)
+		.await
+		.unwrap();
 
 	// compute_delta sees "a" as CREATED (prev_hash is NONE), not UPDATED
 	let diff = engine.compute_delta_from_db("src", "q", 2).await.unwrap();
@@ -681,8 +818,14 @@ async fn prep_then_raw_correctly_tracks_updates() {
 
 	// Cycle 1
 	let rows = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &rows).await.unwrap();
 
@@ -690,11 +833,23 @@ async fn prep_then_raw_correctly_tracks_updates() {
 	engine.prep_prev_hash("src", "q").await.unwrap();
 
 	let rows2 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 999}) },
-		RawRow { row_key: "c".into(), row_data: serde_json::json!({"v": 3}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 999}),
+		},
+		RawRow {
+			row_key: "c".into(),
+			row_data: serde_json::json!({"v": 3}),
+		},
 	];
-	engine.upsert_batch_raw("src", "q", 2, &rows2).await.unwrap();
+	engine
+		.upsert_batch_raw("src", "q", 2, &rows2)
+		.await
+		.unwrap();
 
 	let diff = engine.compute_delta_from_db("src", "q", 2).await.unwrap();
 	assert_eq!(diff.created.len(), 1, "c is new");
@@ -709,9 +864,10 @@ async fn prep_prev_hash_idempotent() {
 	let t = TestSurrealContainer::new().await;
 	let engine = DeltaEngine::single(t.client.clone());
 
-	let rows = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-	];
+	let rows = vec![RawRow {
+		row_key: "a".into(),
+		row_data: serde_json::json!({"v": 1}),
+	}];
 	engine.upsert_batch("src", "q", 1, &rows).await.unwrap();
 
 	// Call prep twice — should be safe
@@ -732,9 +888,18 @@ async fn streaming_multi_batch_upsert_with_delta() {
 
 	// Cycle 1: 3 rows
 	let c1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
-		RawRow { row_key: "c".into(), row_data: serde_json::json!({"v": 3}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
+		RawRow {
+			row_key: "c".into(),
+			row_data: serde_json::json!({"v": 3}),
+		},
 	];
 	engine.upsert_batch("src", "q", 1, &c1).await.unwrap();
 
@@ -743,18 +908,35 @@ async fn streaming_multi_batch_upsert_with_delta() {
 
 	// Batch 1: a unchanged
 	engine
-		.upsert_batch_raw("src", "q", 2, &[
-			RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		])
+		.upsert_batch_raw(
+			"src",
+			"q",
+			2,
+			&[RawRow {
+				row_key: "a".into(),
+				row_data: serde_json::json!({"v": 1}),
+			}],
+		)
 		.await
 		.unwrap();
 
 	// Batch 2: b updated, d new
 	engine
-		.upsert_batch_raw("src", "q", 2, &[
-			RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 999}) },
-			RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
-		])
+		.upsert_batch_raw(
+			"src",
+			"q",
+			2,
+			&[
+				RawRow {
+					row_key: "b".into(),
+					row_data: serde_json::json!({"v": 999}),
+				},
+				RawRow {
+					row_key: "d".into(),
+					row_data: serde_json::json!({"v": 4}),
+				},
+			],
+		)
 		.await
 		.unwrap();
 

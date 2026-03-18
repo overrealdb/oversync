@@ -42,11 +42,7 @@ impl SourceConnector for PostgresConnector {
 		&self.source_name
 	}
 
-	async fn fetch_all(
-		&self,
-		sql: &str,
-		key_column: &str,
-	) -> Result<Vec<RawRow>, OversyncError> {
+	async fn fetch_all(&self, sql: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
 		let rows = sqlx::query(sql)
 			.fetch_all(&self.pool)
 			.await
@@ -55,9 +51,9 @@ impl SourceConnector for PostgresConnector {
 		let mut result = Vec::with_capacity(rows.len());
 
 		for row in &rows {
-			let key: String = row.try_get(key_column).map_err(|e| {
-				OversyncError::Connector(format!("key column '{key_column}': {e}"))
-			})?;
+			let key: String = row
+				.try_get(key_column)
+				.map_err(|e| OversyncError::Connector(format!("key column '{key_column}': {e}")))?;
 
 			let columns = row.columns();
 			let mut data = serde_json::Map::with_capacity(columns.len());
@@ -66,7 +62,9 @@ impl SourceConnector for PostgresConnector {
 				let name = col.name();
 				let raw = row.try_get_raw(name).ok();
 				let val = match raw {
-					Some(ref r) if !r.is_null() => decode_pg_value(row, name, col.type_info().name()),
+					Some(ref r) if !r.is_null() => {
+						decode_pg_value(row, name, col.type_info().name())
+					}
 					_ => serde_json::Value::Null,
 				};
 				data.insert(name.to_string(), val);
@@ -98,9 +96,9 @@ impl SourceConnector for PostgresConnector {
 			.await
 			.map_err(|e| OversyncError::Connector(format!("fetch_into stream: {e}")))?
 		{
-			let key: String = row.try_get(key_column).map_err(|e| {
-				OversyncError::Connector(format!("key column '{key_column}': {e}"))
-			})?;
+			let key: String = row
+				.try_get(key_column)
+				.map_err(|e| OversyncError::Connector(format!("key column '{key_column}': {e}")))?;
 
 			let columns = row.columns();
 			let mut data = serde_json::Map::with_capacity(columns.len());
@@ -123,9 +121,12 @@ impl SourceConnector for PostgresConnector {
 			total += 1;
 
 			if batch.len() >= batch_size {
-				tx.send(std::mem::replace(&mut batch, Vec::with_capacity(batch_size)))
-					.await
-					.map_err(|_| OversyncError::Internal("channel closed".into()))?;
+				tx.send(std::mem::replace(
+					&mut batch,
+					Vec::with_capacity(batch_size),
+				))
+				.await
+				.map_err(|_| OversyncError::Internal("channel closed".into()))?;
 			}
 		}
 

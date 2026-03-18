@@ -2,9 +2,9 @@ mod common;
 
 use std::time::Duration;
 
-use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::config::ClientConfig;
 use rdkafka::Message;
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio_stream::StreamExt;
 
 use oversync_core::model::{EventEnvelope, EventMeta, OpType};
@@ -52,14 +52,11 @@ async fn kafka_sink_produces_single_event() {
 
 	// Consume and verify
 	let consumer = make_consumer(&kf.broker, topic).await;
-	let msg = tokio::time::timeout(
-		Duration::from_secs(10),
-		consumer.stream().next(),
-	)
-	.await
-	.expect("timeout waiting for message")
-	.expect("stream ended")
-	.expect("consume error");
+	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
+		.await
+		.expect("timeout waiting for message")
+		.expect("stream ended")
+		.expect("consume error");
 
 	let payload = msg.payload().expect("no payload");
 	let received: EventEnvelope = serde_json::from_slice(payload).unwrap();

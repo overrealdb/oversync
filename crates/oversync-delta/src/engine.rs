@@ -5,7 +5,9 @@ use surrealdb::engine::any::Any;
 use tracing::{debug, info};
 
 use oversync_core::error::OversyncError;
-use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, OpType, RawRow, hash_row_data};
+use oversync_core::model::{
+	CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, OpType, RawRow, hash_row_data,
+};
 
 const READ_SNAPSHOT_KEYS_SQL: &str =
 	include_str!("../../../surql/queries/delta/read_snapshot_keys.surql");
@@ -13,8 +15,7 @@ const READ_SNAPSHOT_KEYS_PAGED_SQL: &str =
 	include_str!("../../../surql/queries/delta/read_snapshot_keys_paged.surql");
 const BATCH_UPSERT_SQL: &str = include_str!("../../../surql/queries/delta/batch_upsert.surql");
 const DELETE_STALE_SQL: &str = include_str!("../../../surql/queries/delta/delete_stale.surql");
-const PREP_PREV_HASH_SQL: &str =
-	include_str!("../../../surql/queries/delta/prep_prev_hash.surql");
+const PREP_PREV_HASH_SQL: &str = include_str!("../../../surql/queries/delta/prep_prev_hash.surql");
 const FIND_CREATED_SQL: &str = include_str!("../../../surql/queries/delta/find_created.surql");
 const FIND_UPDATED_SQL: &str = include_str!("../../../surql/queries/delta/find_updated.surql");
 const FIND_DELETED_SQL: &str = include_str!("../../../surql/queries/delta/find_deleted.surql");
@@ -24,7 +25,8 @@ const DELETE_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/dele
 
 const BATCH_SIZE: usize = 500;
 const NEXT_CYCLE_ID_SQL: &str = include_str!("../../../surql/queries/delta/next_cycle_id.surql");
-const LOG_CYCLE_START_SQL: &str = include_str!("../../../surql/queries/delta/log_cycle_start.surql");
+const LOG_CYCLE_START_SQL: &str =
+	include_str!("../../../surql/queries/delta/log_cycle_start.surql");
 const LOG_CYCLE_FINISH_SQL: &str =
 	include_str!("../../../surql/queries/delta/log_cycle_finish.surql");
 
@@ -35,11 +37,17 @@ pub struct DeltaEngine {
 
 impl DeltaEngine {
 	pub fn new(state_client: Surreal<Any>, snapshot_client: Surreal<Any>) -> Self {
-		Self { state_client, snapshot_client }
+		Self {
+			state_client,
+			snapshot_client,
+		}
 	}
 
 	pub fn single(client: Surreal<Any>) -> Self {
-		Self { state_client: client.clone(), snapshot_client: client }
+		Self {
+			state_client: client.clone(),
+			snapshot_client: client,
+		}
 	}
 
 	pub async fn next_cycle_id(
@@ -114,9 +122,7 @@ impl DeltaEngine {
 		let mut offset: usize = 0;
 
 		loop {
-			let sql = format!(
-				"{READ_SNAPSHOT_KEYS_PAGED_SQL}\nLIMIT {PAGE} START {offset}"
-			);
+			let sql = format!("{READ_SNAPSHOT_KEYS_PAGED_SQL}\nLIMIT {PAGE} START {offset}");
 			let mut resp = self
 				.snapshot_client
 				.query(&sql)
@@ -131,8 +137,14 @@ impl DeltaEngine {
 
 			let count = rows.len();
 			for row in &rows {
-				let key = row.get("row_key").and_then(|v| v.as_str()).unwrap_or_default();
-				let hash = row.get("row_hash").and_then(|v| v.as_str()).unwrap_or_default();
+				let key = row
+					.get("row_key")
+					.and_then(|v| v.as_str())
+					.unwrap_or_default();
+				let hash = row
+					.get("row_hash")
+					.and_then(|v| v.as_str())
+					.unwrap_or_default();
 				map.insert(key.to_string(), hash.to_string());
 			}
 
@@ -393,7 +405,11 @@ impl DeltaEngine {
 			all.extend(rows.iter().map(&map_fn));
 
 			if all.len() % 10000 == 0 || count < PAGE_SIZE {
-				info!(fetched = all.len(), page_rows = count, "delta query progress");
+				info!(
+					fetched = all.len(),
+					page_rows = count,
+					"delta query progress"
+				);
 			}
 
 			if count < PAGE_SIZE {
@@ -450,8 +466,7 @@ impl DeltaEngine {
 				.get("events_json")
 				.and_then(|v| v.as_str())
 				.unwrap_or("[]");
-			let events: Vec<EventEnvelope> =
-				serde_json::from_str(json_str).unwrap_or_default();
+			let events: Vec<EventEnvelope> = serde_json::from_str(json_str).unwrap_or_default();
 			result.push((cycle_id, events));
 		}
 

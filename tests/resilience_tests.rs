@@ -1,7 +1,7 @@
 mod common;
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_core::error::OversyncError;
@@ -33,11 +33,7 @@ impl SourceConnector for FailingConnector {
 		"failing-connector"
 	}
 
-	async fn fetch_all(
-		&self,
-		_sql: &str,
-		_key_column: &str,
-	) -> Result<Vec<RawRow>, OversyncError> {
+	async fn fetch_all(&self, _sql: &str, _key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
 		let remaining = self.fail_count.load(Ordering::SeqCst);
 		if remaining > 0 {
 			self.fail_count.fetch_sub(1, Ordering::SeqCst);
@@ -157,7 +153,12 @@ async fn source_down_cycle_fails_gracefully() {
 
 	let result = runner.run(&cycle_config()).await;
 	assert!(result.is_err());
-	assert!(result.unwrap_err().to_string().contains("simulated source failure"));
+	assert!(
+		result
+			.unwrap_err()
+			.to_string()
+			.contains("simulated source failure")
+	);
 }
 
 #[tokio::test]
@@ -246,7 +247,10 @@ async fn sink_recovers_pending_events_delivered() {
 
 	// Pending should be cleared
 	let pending = engine.read_pending_events("test", "q").await.unwrap();
-	assert!(pending.is_empty(), "outbox should be cleared after delivery");
+	assert!(
+		pending.is_empty(),
+		"outbox should be cleared after delivery"
+	);
 
 	drop(counting);
 }
@@ -424,11 +428,26 @@ async fn recovery_after_extended_downtime_with_changes() {
 
 	// Cycle 1: rows a, b, c
 	let rows1 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
-		RawRow { row_key: "c".into(), row_data: serde_json::json!({"v": 3}) },
-		RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
-		RawRow { row_key: "e".into(), row_data: serde_json::json!({"v": 5}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 2}),
+		},
+		RawRow {
+			row_key: "c".into(),
+			row_data: serde_json::json!({"v": 3}),
+		},
+		RawRow {
+			row_key: "d".into(),
+			row_data: serde_json::json!({"v": 4}),
+		},
+		RawRow {
+			row_key: "e".into(),
+			row_data: serde_json::json!({"v": 5}),
+		},
 	];
 	let conn1 = FailingConnector::new(0, rows1);
 	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
@@ -444,11 +463,26 @@ async fn recovery_after_extended_downtime_with_changes() {
 
 	// Cycle 5: source back with changes (b updated, c gone, f new)
 	let rows5 = vec![
-		RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-		RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 999}) },
-		RawRow { row_key: "d".into(), row_data: serde_json::json!({"v": 4}) },
-		RawRow { row_key: "e".into(), row_data: serde_json::json!({"v": 5}) },
-		RawRow { row_key: "f".into(), row_data: serde_json::json!({"v": 6}) },
+		RawRow {
+			row_key: "a".into(),
+			row_data: serde_json::json!({"v": 1}),
+		},
+		RawRow {
+			row_key: "b".into(),
+			row_data: serde_json::json!({"v": 999}),
+		},
+		RawRow {
+			row_key: "d".into(),
+			row_data: serde_json::json!({"v": 4}),
+		},
+		RawRow {
+			row_key: "e".into(),
+			row_data: serde_json::json!({"v": 5}),
+		},
+		RawRow {
+			row_key: "f".into(),
+			row_data: serde_json::json!({"v": 6}),
+		},
 	];
 	let conn5 = FailingConnector::new(0, rows5);
 	let runner5 = CycleRunner::new(&engine, &conn5, &sinks);

@@ -1,0 +1,12 @@
+target/
+.git/
+.github/
+.claude/
+.env
+.env.local
+*.swp
+*.swo
+.DS_Store
+lcov.info
+history.txt
+oversync.infra-test.toml

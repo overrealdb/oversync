@@ -1,0 +1,96 @@
+[config]
+default_to_workspace = false
+
+# ─── Development ───
+
+[tasks.check]
+description = "Quick check (no tests)"
+command = "cargo"
+args = ["check", "--workspace"]
+
+[tasks.test]
+description = "Run unit tests"
+command = "cargo"
+args = ["test", "--workspace"]
+
+[tasks.test-docker]
+description = "Run tests with Docker SurrealDB validation"
+command = "cargo"
+args = ["test", "--workspace", "--features", "validate-docker"]
+
+[tasks.test-all]
+description = "Run all test modes"
+dependencies = ["test", "test-docker"]
+
+# ─── Quality ───
+
+[tasks.clippy]
+description = "Run clippy linter"
+command = "cargo"
+args = ["clippy", "--workspace", "--", "-D", "warnings"]
+
+[tasks.fmt]
+description = "Format code"
+command = "cargo"
+args = ["fmt", "--all"]
+
+[tasks.fmt-check]
+description = "Check formatting"
+command = "cargo"
+args = ["fmt", "--all", "--check"]
+
+[tasks.deny]
+description = "License and supply chain check"
+command = "cargo"
+args = ["deny", "check", "advisories", "licenses", "sources"]
+
+[tasks.lint]
+description = "All quality checks: clippy + fmt + deny"
+dependencies = ["clippy", "fmt-check", "deny"]
+
+# ─── Coverage ───
+
+[tasks.coverage]
+description = "Generate code coverage report"
+command = "cargo"
+args = ["llvm-cov", "--workspace", "--lcov", "--output-path", "lcov.info"]
+
+[tasks.coverage-html]
+description = "Generate HTML coverage report"
+command = "cargo"
+args = ["llvm-cov", "--workspace", "--html"]
+
+# ─── CI (what GitHub Actions runs) ───
+
+[tasks.ci]
+description = "Full CI pipeline: check + test + clippy + fmt + coverage"
+dependencies = ["check", "test", "clippy", "fmt-check", "coverage"]
+env = { "RUSTFLAGS" = "-D warnings" }
+
+[tasks.ci-full]
+description = "Full CI with Docker validation + security"
+dependencies = ["ci", "test-docker", "deny"]
+
+# ─── CLI ───
+
+[tasks.cli]
+description = "Build CLI tool"
+command = "cargo"
+args = ["build", "--features", "cli"]
+
+[tasks.cli-release]
+description = "Build CLI tool (release)"
+command = "cargo"
+args = ["build", "--release", "--features", "cli"]
+
+# ─── Publish ───
+
+[tasks.publish-dry]
+description = "Dry-run publish to crates.io"
+command = "cargo"
+args = ["publish", "--dry-run"]
+
+[tasks.publish]
+description = "Publish to crates.io"
+command = "cargo"
+args = ["publish"]
