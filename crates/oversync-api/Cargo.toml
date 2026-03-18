@@ -3,7 +3,18 @@ name = "oversync-api"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Admin HTTP API for oversync."
+description = "Type-safe HTTP API for managing oversync sources, sinks, and sync status."
 
 [dependencies]
 oversync-core = { workspace = true }
+axum = { workspace = true }
+utoipa = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tower = "0.5"
+http-body-util = "0.1"

@@ -43,6 +43,9 @@ overshift = "0.1"
 surql-parser = { version = "0.1", features = ["build"] }
 surql-macros = "0.1"
 
+axum = "0.8"
+utoipa = { version = "5", features = ["axum_extras", "chrono"] }
+
 surrealdb = { version = "3", features = ["kv-mem", "protocol-http"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
@@ -81,6 +84,8 @@ cli = [
 	"dep:opentelemetry-otlp",
 	"dep:tracing-opentelemetry",
 	"dep:overshift",
+	"dep:oversync-api",
+	"dep:axum",
 ]
 validate-docker = []
 
@@ -102,6 +107,8 @@ serde_json = { workspace = true }
 
 # CLI-only deps (behind "cli" feature)
 overshift = { workspace = true, optional = true }
+oversync-api = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }

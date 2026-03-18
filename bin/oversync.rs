@@ -24,6 +24,9 @@ struct Cli {
 	#[arg(short, long, env = "OVERSYNC_CONFIG", default_value = "oversync.toml")]
 	config: PathBuf,
 
+	#[arg(long, env = "OVERSYNC_BIND", default_value = "0.0.0.0:4200")]
+	bind: String,
+
 	#[arg(long, env = "OVERSYNC_LOG_LEVEL", default_value = "info")]
 	log_level: String,
 
@@ -127,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
 		DeltaEngine::new(db, snap_db)
 	};
 
+	let api_state = build_api_state(&config);
 	let scheduler = Scheduler::new(delta_engine, config, default_registry());
 
 	let shutdown_tx = scheduler.shutdown_tx_clone();
@@ -136,6 +140,56 @@ async fn main() -> anyhow::Result<()> {
 		let _ = shutdown_tx.send(true);
 	});
 
+	// Start API server in background
+	let bind = cli.bind.clone();
+	tokio::spawn(async move {
+		let app = oversync_api::router(api_state);
+		let listener = tokio::net::TcpListener::bind(&bind).await.unwrap();
+		tracing::info!(bind = %bind, "API server started");
+		axum::serve(listener, app).await.unwrap();
+	});
+
 	scheduler.run().await?;
 	Ok(())
+}
+
+fn build_api_state(
+	config: &SyncConfig,
+) -> std::sync::Arc<oversync_api::state::ApiState> {
+	use oversync_api::state::*;
+
+	let sources = config
+		.sources
+		.iter()
+		.map(|s| SourceConfig {
+			name: s.name.clone(),
+			connector: s.connector.clone(),
+			interval_secs: s.interval_secs,
+			queries: s
+				.queries
+				.iter()
+				.map(|q| QueryConfig {
+					id: q.id.clone(),
+					key_column: q.key_column.clone(),
+				})
+				.collect(),
+		})
+		.collect();
+
+	let sinks = config
+		.sinks
+		.iter()
+		.map(|s| SinkConfig {
+			name: s.name.clone(),
+			sink_type: s.sink_type.clone(),
+		})
+		.collect();
+
+	std::sync::Arc::new(ApiState {
+		sources,
+		sinks,
+		cycle_status: std::sync::Arc::new(tokio::sync::RwLock::new(
+			std::collections::HashMap::new(),
+		)),
+	})
 }
