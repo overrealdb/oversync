@@ -72,13 +72,6 @@ pub struct SourceDef {
 	pub queries: Vec<QueryDef>,
 }
 
-impl SourceDef {
-	/// Build connector config JSON from source definition fields.
-	pub fn connector_config(&self) -> serde_json::Value {
-		serde_json::json!({ "dsn": self.dsn })
-	}
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct SinkDef {
 	pub name: String,

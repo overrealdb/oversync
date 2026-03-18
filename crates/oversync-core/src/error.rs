@@ -15,9 +15,6 @@ pub enum OversyncError {
 	#[error("migration: {0}")]
 	Migration(String),
 
-	#[error("transform: {0}")]
-	Transform(String),
-
 	#[error("plugin: {0}")]
 	Plugin(String),
 
@@ -46,7 +43,6 @@ mod tests {
 			(OversyncError::Sink("full".into()), "sink: full"),
 			(OversyncError::Config("bad".into()), "config: bad"),
 			(OversyncError::Migration("v1".into()), "migration: v1"),
-			(OversyncError::Transform("bad".into()), "transform: bad"),
 			(OversyncError::Plugin("missing".into()), "plugin: missing"),
 			(OversyncError::Internal("oops".into()), "internal: oops"),
 		];

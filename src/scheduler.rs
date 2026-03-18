@@ -102,7 +102,7 @@ async fn run_source_query(
 	sinks: Arc<Vec<Box<dyn Sink>>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let connector_config = source.connector_config();
+	let connector_config = serde_json::json!({ "dsn": source.dsn });
 	let connector = match registry
 		.create_source(&source.connector, &source.name, &connector_config)
 		.await

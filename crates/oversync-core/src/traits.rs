@@ -50,26 +50,6 @@ pub trait Sink: Send + Sync {
 	async fn test_connection(&self) -> Result<(), OversyncError>;
 }
 
-#[async_trait]
-pub trait Transform: Send + Sync {
-	fn name(&self) -> &str;
-
-	/// Transform raw rows before delta detection.
-	/// Default: pass-through.
-	async fn transform_rows(&self, rows: Vec<RawRow>) -> Result<Vec<RawRow>, OversyncError> {
-		Ok(rows)
-	}
-
-	/// Transform events after delta detection, before sink delivery.
-	/// Default: pass-through.
-	async fn transform_events(
-		&self,
-		events: Vec<EventEnvelope>,
-	) -> Result<Vec<EventEnvelope>, OversyncError> {
-		Ok(events)
-	}
-}
-
 /// Factory for creating SourceConnectors from config.
 #[async_trait]
 pub trait SourceFactory: Send + Sync {
@@ -92,13 +72,4 @@ pub trait SinkFactory: Send + Sync {
 		name: &str,
 		config: &serde_json::Value,
 	) -> Result<Box<dyn Sink>, OversyncError>;
-}
-
-/// Factory for creating Transforms from config.
-#[async_trait]
-pub trait TransformFactory: Send + Sync {
-	fn transform_type(&self) -> &str;
-
-	async fn create(&self, config: &serde_json::Value)
-	-> Result<Box<dyn Transform>, OversyncError>;
 }

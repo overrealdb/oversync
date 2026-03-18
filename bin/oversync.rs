@@ -9,7 +9,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use oversync::config::SyncConfig;
-use oversync::{OversyncEngine, PluginRegistry};
+use oversync::registry::PluginRegistry;
+use oversync::scheduler::Scheduler;
 use oversync_connectors::PostgresSourceFactory;
 use oversync_delta::DeltaEngine;
 use oversync_sinks::StdoutSinkFactory;
@@ -126,16 +127,15 @@ async fn main() -> anyhow::Result<()> {
 		DeltaEngine::new(db, snap_db)
 	};
 
-	let plugin_registry = default_registry();
-	let app = OversyncEngine::new(delta_engine, config, plugin_registry);
+	let scheduler = Scheduler::new(delta_engine, config, default_registry());
 
-	let shutdown_tx = app.shutdown_handle();
+	let shutdown_tx = scheduler.shutdown_tx_clone();
 	tokio::spawn(async move {
 		tokio::signal::ctrl_c().await.ok();
 		tracing::info!("received ctrl-c, shutting down");
 		let _ = shutdown_tx.send(true);
 	});
 
-	app.run().await?;
+	scheduler.run().await?;
 	Ok(())
 }

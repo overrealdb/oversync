@@ -1,5 +1,5 @@
 use oversync_core::error::OversyncError;
-use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, compute_diff};
+use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope};
 use oversync_core::traits::{Sink, SourceConnector};
 use oversync_delta::{DeltaEngine, check_fail_safe};
 use tracing::{Instrument, error, info, warn};

@@ -30,7 +30,7 @@ oversync = "0.1"
 ```
 
 ```rust,no_run
-use oversync::{OversyncEngine, SyncConfig};
+use oversync::{Scheduler, SyncConfig, PluginRegistry};
 ```
 
 ### As a standalone binary
