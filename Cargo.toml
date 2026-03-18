@@ -17,7 +17,6 @@ members = [
 	"crates/oversync-links",
 	"crates/oversync-sinks",
 	"crates/oversync-api",
-	"crates/oversync-migrate",
 ]
 
 [workspace.package]
@@ -32,7 +31,10 @@ oversync-delta = { path = "crates/oversync-delta" }
 oversync-links = { path = "crates/oversync-links" }
 oversync-sinks = { path = "crates/oversync-sinks" }
 oversync-api = { path = "crates/oversync-api" }
-oversync-migrate = { path = "crates/oversync-migrate" }
+
+overshift = "0.1"
+surql-parser = { version = "0.1", features = ["build"] }
+surql-macros = "0.1"
 
 surrealdb = { version = "3", features = ["kv-mem", "protocol-http"] }
 tokio = { version = "1", features = ["full"] }
@@ -41,13 +43,22 @@ serde_json = "1"
 thiserror = "2"
 anyhow = "1"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+opentelemetry = "0.28"
+opentelemetry_sdk = { version = "0.28", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic"] }
+tracing-opentelemetry = "0.29"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1"
 clap = { version = "4", features = ["derive", "env"] }
+toml = "0.8"
 sha2 = "0.10"
 hex = "0.4"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "json"] }
+rdkafka = { version = "0.37", features = ["cmake-build"] }
+testcontainers = "0.27"
+testcontainers-modules = { version = "0.15", features = ["surrealdb", "postgres", "kafka"] }
 
 [[bin]]
 name = "oversync"
@@ -55,21 +66,47 @@ path = "bin/oversync.rs"
 
 [dependencies]
 oversync-core = { workspace = true }
-oversync-migrate = { workspace = true }
+oversync-connectors = { workspace = true }
+oversync-delta = { workspace = true }
+oversync-sinks = { workspace = true }
+overshift = { workspace = true }
+surql-macros = { workspace = true }
+chrono = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+tracing-opentelemetry = { workspace = true }
 clap = { workspace = true }
 surrealdb = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 oversync-core = { workspace = true }
-oversync-migrate = { workspace = true }
+oversync-connectors = { workspace = true }
+oversync-delta = { workspace = true }
+oversync-sinks = { workspace = true }
+overshift = { workspace = true }
+surql-macros = { workspace = true }
 surrealdb = { workspace = true }
+sqlx = { workspace = true }
 serde_json = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
 uuid = { workspace = true }
 tokio = { workspace = true }
+rdkafka = { workspace = true }
+tokio-stream = "0.1"
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+
+[build-dependencies]
+surql-parser = { workspace = true }
 
 [profile.dev.package."*"]
 debug = false

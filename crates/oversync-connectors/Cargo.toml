@@ -8,3 +8,8 @@ description = "Source connector implementations for oversync."
 [dependencies]
 oversync-core = { workspace = true }
 async-trait = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+futures = "0.3"
+serde_json = { workspace = true }
+tracing = { workspace = true }

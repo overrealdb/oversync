@@ -1,6 +1,8 @@
 //! Sink implementations for oversync.
-//!
-//! Concrete implementations of [`Sink`] for Kafka, HTTP, SurrealDB,
-//! PostgreSQL, stdout, and file arrive in Phase 2.
 
+pub mod kafka;
+pub mod stdout;
+
+pub use kafka::KafkaSink;
 pub use oversync_core::traits::Sink;
+pub use stdout::StdoutSink;

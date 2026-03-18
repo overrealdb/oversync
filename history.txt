@@ -1,0 +1,4 @@
+#V2
+SELECT count() AS total FROM snapshot GROUP ALL;
+SELECT count() AS total, cycle_id FROM snapshot GROUP BY cycle_id;
+SELECT * FROM cycle_log ORDER BY cycle_id;

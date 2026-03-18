@@ -1,6 +1,8 @@
 //! Source connector implementations for oversync.
 //!
-//! Concrete implementations of [`SourceConnector`] for PostgreSQL, REST APIs,
-//! and other data sources arrive in Phase 1.
+//! Each connector implements [`SourceConnector`] to fetch rows from an external source.
+
+pub mod postgres;
 
 pub use oversync_core::traits::SourceConnector;
+pub use postgres::PostgresConnector;

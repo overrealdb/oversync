@@ -1,0 +1,38 @@
+[surrealdb]
+url = "http://localhost:8000"
+username = "root"
+password = "changeme"    # OVERSYNC_SURREALDB_PASS
+namespace = "oversync"
+database = "sync"
+
+[[sources]]
+name = "product_a"
+connector = "postgres"
+dsn = "postgres://readonly@localhost:5432/metadata"
+interval_secs = 300       # 5 minutes
+fail_safe_threshold = 30.0
+
+[[sources.queries]]
+id = "tables"
+sql = """
+SELECT
+  oid::text AS oid,
+  relname AS table_name,
+  relkind::text AS kind
+FROM pg_class
+WHERE relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+"""
+key_column = "oid"
+
+[[sources.queries]]
+id = "columns"
+sql = """
+SELECT
+  (attrelid::text || '.' || attnum::text) AS id,
+  attrelid::text AS table_oid,
+  attname AS column_name,
+  format_type(atttypid, atttypmod) AS data_type
+FROM pg_attribute
+WHERE attnum > 0 AND NOT attisdropped
+"""
+key_column = "id"

@@ -1,0 +1,562 @@
+use std::collections::HashMap;
+
+use surrealdb::Surreal;
+use surrealdb::engine::any::Any;
+use tracing::{debug, info};
+
+use oversync_core::error::OversyncError;
+use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, OpType, RawRow, hash_row_data};
+
+const READ_SNAPSHOT_KEYS_SQL: &str =
+	include_str!("../../../surql/queries/delta/read_snapshot_keys.surql");
+const READ_SNAPSHOT_KEYS_PAGED_SQL: &str =
+	include_str!("../../../surql/queries/delta/read_snapshot_keys_paged.surql");
+const BATCH_UPSERT_SQL: &str = include_str!("../../../surql/queries/delta/batch_upsert.surql");
+const DELETE_STALE_SQL: &str = include_str!("../../../surql/queries/delta/delete_stale.surql");
+const PREP_PREV_HASH_SQL: &str =
+	include_str!("../../../surql/queries/delta/prep_prev_hash.surql");
+const FIND_CREATED_SQL: &str = include_str!("../../../surql/queries/delta/find_created.surql");
+const FIND_UPDATED_SQL: &str = include_str!("../../../surql/queries/delta/find_updated.surql");
+const FIND_DELETED_SQL: &str = include_str!("../../../surql/queries/delta/find_deleted.surql");
+const SAVE_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/save_pending.surql");
+const READ_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/read_pending.surql");
+const DELETE_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/delete_pending.surql");
+
+const BATCH_SIZE: usize = 500;
+const NEXT_CYCLE_ID_SQL: &str = include_str!("../../../surql/queries/delta/next_cycle_id.surql");
+const LOG_CYCLE_START_SQL: &str = include_str!("../../../surql/queries/delta/log_cycle_start.surql");
+const LOG_CYCLE_FINISH_SQL: &str =
+	include_str!("../../../surql/queries/delta/log_cycle_finish.surql");
+
+pub struct DeltaEngine {
+	state_client: Surreal<Any>,
+	snapshot_client: Surreal<Any>,
+}
+
+impl DeltaEngine {
+	pub fn new(state_client: Surreal<Any>, snapshot_client: Surreal<Any>) -> Self {
+		Self { state_client, snapshot_client }
+	}
+
+	pub fn single(client: Surreal<Any>) -> Self {
+		Self { state_client: client.clone(), snapshot_client: client }
+	}
+
+	pub async fn next_cycle_id(
+		&self,
+		source_id: &str,
+		query_id: &str,
+	) -> Result<i64, OversyncError> {
+		let mut response = self
+			.state_client
+			.query(NEXT_CYCLE_ID_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("next_cycle_id: {e}")))?;
+
+		let rows: Vec<serde_json::Value> = response
+			.take(0)
+			.map_err(|e| OversyncError::SurrealDb(format!("next_cycle_id take: {e}")))?;
+
+		let max_id = rows
+			.first()
+			.and_then(|r| r.get("cycle_id"))
+			.and_then(|v| v.as_i64())
+			.unwrap_or(0);
+
+		Ok(max_id + 1)
+	}
+
+	pub async fn read_snapshot_keys(
+		&self,
+		source_id: &str,
+		query_id: &str,
+	) -> Result<HashMap<String, String>, OversyncError> {
+		let mut response = self
+			.snapshot_client
+			.query(READ_SNAPSHOT_KEYS_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("read_snapshot_keys: {e}")))?;
+
+		let rows: Vec<serde_json::Value> = response
+			.take(0)
+			.map_err(|e| OversyncError::SurrealDb(format!("read_snapshot_keys take: {e}")))?;
+
+		let mut map = HashMap::with_capacity(rows.len());
+		for row in &rows {
+			let key = row
+				.get("row_key")
+				.and_then(|v| v.as_str())
+				.unwrap_or_default();
+			let hash = row
+				.get("row_hash")
+				.and_then(|v| v.as_str())
+				.unwrap_or_default();
+			map.insert(key.to_string(), hash.to_string());
+		}
+
+		debug!(count = map.len(), "read snapshot keys");
+		Ok(map)
+	}
+
+	/// Read all snapshot keys paginated (avoids flatbuffers overflow on large datasets).
+	/// Returns HashMap<row_key, row_hash> for in-memory diff.
+	pub async fn read_snapshot_keys_paged(
+		&self,
+		source_id: &str,
+		query_id: &str,
+	) -> Result<HashMap<String, String>, OversyncError> {
+		const PAGE: usize = 50000;
+		let mut map = HashMap::new();
+		let mut offset: usize = 0;
+
+		loop {
+			let sql = format!(
+				"{READ_SNAPSHOT_KEYS_PAGED_SQL}\nLIMIT {PAGE} START {offset}"
+			);
+			let mut resp = self
+				.snapshot_client
+				.query(&sql)
+				.bind(("source_id", source_id.to_string()))
+				.bind(("query_id", query_id.to_string()))
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("read_keys_paged: {e}")))?;
+
+			let rows: Vec<serde_json::Value> = resp
+				.take(0)
+				.map_err(|e| OversyncError::SurrealDb(format!("read_keys_paged take: {e}")))?;
+
+			let count = rows.len();
+			for row in &rows {
+				let key = row.get("row_key").and_then(|v| v.as_str()).unwrap_or_default();
+				let hash = row.get("row_hash").and_then(|v| v.as_str()).unwrap_or_default();
+				map.insert(key.to_string(), hash.to_string());
+			}
+
+			if count < PAGE {
+				break;
+			}
+			offset += PAGE;
+			info!(loaded = map.len(), "reading snapshot keys");
+		}
+
+		debug!(total = map.len(), "snapshot keys loaded");
+		Ok(map)
+	}
+
+	/// Snapshot prev_hash before upserting. Sets prev_hash = row_hash
+	/// on all existing rows so we can detect created vs updated after upsert.
+	pub async fn prep_prev_hash(
+		&self,
+		source_id: &str,
+		query_id: &str,
+	) -> Result<(), OversyncError> {
+		self.snapshot_client
+			.query(PREP_PREV_HASH_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("prep_prev_hash: {e}")))?;
+		debug!("prepped prev_hash");
+		Ok(())
+	}
+
+	pub async fn upsert_batch(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+		rows: &[RawRow],
+	) -> Result<usize, OversyncError> {
+		self.prep_prev_hash(source_id, query_id).await?;
+		self.upsert_batch_raw(source_id, query_id, cycle_id, rows)
+			.await
+	}
+
+	/// Upsert without calling prep_prev_hash (caller is responsible).
+	pub async fn upsert_batch_raw(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+		rows: &[RawRow],
+	) -> Result<usize, OversyncError> {
+		let mut total = 0;
+
+		for chunk in rows.chunks(BATCH_SIZE) {
+			let batch: Vec<serde_json::Value> = chunk
+				.iter()
+				.map(|row| {
+					serde_json::json!({
+						"source_id": source_id,
+						"query_id": query_id,
+						"row_key": row.row_key,
+						"row_data": row.row_data,
+						"row_hash": hash_row_data(&row.row_data),
+						"cycle_id": cycle_id,
+					})
+				})
+				.collect();
+
+			let response = self
+				.snapshot_client
+				.query(BATCH_UPSERT_SQL)
+				.bind(("rows", batch))
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("batch upsert: {e}")))?;
+
+			if let Err(e) = response.check() {
+				return Err(OversyncError::SurrealDb(format!("batch upsert check: {e}")));
+			}
+
+			total += chunk.len();
+			if total % 5000 == 0 || total == rows.len() {
+				info!(total, remaining = rows.len() - total, "upsert progress");
+			}
+		}
+		Ok(total)
+	}
+
+	pub async fn delete_stale(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+	) -> Result<(), OversyncError> {
+		self.snapshot_client
+			.query(DELETE_STALE_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.bind(("cycle_id", cycle_id))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("delete_stale: {e}")))?;
+
+		debug!("rotated stale snapshots for cycle < {cycle_id}");
+		Ok(())
+	}
+
+	/// Atomic upsert + delete_stale in a single transaction.
+	/// For datasets that fit in one batch, this is a single round trip.
+	/// For larger datasets, upserts are chunked and the delete runs at the end.
+	pub async fn commit_cycle(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+		rows: &[RawRow],
+	) -> Result<usize, OversyncError> {
+		if rows.len() <= BATCH_SIZE {
+			let batch: Vec<serde_json::Value> = rows
+				.iter()
+				.map(|row| {
+					serde_json::json!({
+						"source_id": source_id,
+						"query_id": query_id,
+						"row_key": row.row_key,
+						"row_data": row.row_data,
+						"row_hash": hash_row_data(&row.row_data),
+						"cycle_id": cycle_id,
+					})
+				})
+				.collect();
+
+			let txn_query = format!(
+				"BEGIN TRANSACTION;\n{PREP_PREV_HASH_SQL};\n{BATCH_UPSERT_SQL};\n{DELETE_STALE_SQL};\nCOMMIT TRANSACTION;"
+			);
+
+			let response = self
+				.snapshot_client
+				.query(txn_query)
+				.bind(("rows", batch))
+				.bind(("source_id", source_id.to_string()))
+				.bind(("query_id", query_id.to_string()))
+				.bind(("cycle_id", cycle_id))
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("commit_cycle txn: {e}")))?;
+
+			if let Err(e) = response.check() {
+				return Err(OversyncError::SurrealDb(format!(
+					"commit_cycle txn check: {e}"
+				)));
+			}
+
+			info!(rows = rows.len(), "committed cycle in single transaction");
+			Ok(rows.len())
+		} else {
+			let count = self
+				.upsert_batch(source_id, query_id, cycle_id, rows)
+				.await?;
+			self.delete_stale(source_id, query_id, cycle_id).await?;
+			info!(rows = count, "committed cycle in chunked batches");
+			Ok(count)
+		}
+	}
+
+	/// Compute delta from DB after upsert_batch. Uses prev_hash field
+	/// to distinguish created/updated/deleted. Paginates to handle large datasets.
+	pub async fn compute_delta_from_db(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+	) -> Result<DeltaResult, OversyncError> {
+		let now = chrono::Utc::now();
+		let src = source_id.to_string();
+		let qid = query_id.to_string();
+
+		let to_event = |row: &serde_json::Value, op: OpType| DeltaEvent {
+			op,
+			source_id: src.clone(),
+			query_id: qid.clone(),
+			row_key: row
+				.get("row_key")
+				.and_then(|v| v.as_str())
+				.unwrap_or_default()
+				.to_string(),
+			row_data: row
+				.get("row_data")
+				.cloned()
+				.unwrap_or(serde_json::Value::Null),
+			row_hash: row
+				.get("row_hash")
+				.and_then(|v| v.as_str())
+				.unwrap_or_default()
+				.to_string(),
+			cycle_id: cycle_id as u64,
+			timestamp: now,
+		};
+
+		let created = self
+			.paginated_query(FIND_CREATED_SQL, &src, &qid, cycle_id, |r| {
+				to_event(r, OpType::Created)
+			})
+			.await?;
+		let updated = self
+			.paginated_query(FIND_UPDATED_SQL, &src, &qid, cycle_id, |r| {
+				to_event(r, OpType::Updated)
+			})
+			.await?;
+		let deleted = self
+			.paginated_query(FIND_DELETED_SQL, &src, &qid, cycle_id, |r| {
+				to_event(r, OpType::Deleted)
+			})
+			.await?;
+
+		let result = DeltaResult {
+			created,
+			updated,
+			deleted,
+		};
+
+		debug!(
+			created = result.created.len(),
+			updated = result.updated.len(),
+			deleted = result.deleted.len(),
+			"computed delta from db"
+		);
+
+		Ok(result)
+	}
+
+	async fn paginated_query(
+		&self,
+		base_sql: &str,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+		map_fn: impl Fn(&serde_json::Value) -> DeltaEvent,
+	) -> Result<Vec<DeltaEvent>, OversyncError> {
+		const PAGE_SIZE: usize = 5000;
+		let mut all = Vec::new();
+		let mut offset: usize = 0;
+
+		loop {
+			let sql = format!("{base_sql}\nLIMIT {PAGE_SIZE} START {offset}");
+
+			let mut resp = self
+				.snapshot_client
+				.query(&sql)
+				.bind(("source_id", source_id.to_string()))
+				.bind(("query_id", query_id.to_string()))
+				.bind(("cycle_id", cycle_id))
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("paginated query: {e}")))?;
+
+			let rows: Vec<serde_json::Value> = resp
+				.take(0)
+				.map_err(|e| OversyncError::SurrealDb(format!("paginated take: {e}")))?;
+
+			let count = rows.len();
+			all.extend(rows.iter().map(&map_fn));
+
+			if all.len() % 10000 == 0 || count < PAGE_SIZE {
+				info!(fetched = all.len(), page_rows = count, "delta query progress");
+			}
+
+			if count < PAGE_SIZE {
+				break;
+			}
+			offset += PAGE_SIZE;
+		}
+
+		Ok(all)
+	}
+
+	pub async fn save_pending_events(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+		events: &[EventEnvelope],
+	) -> Result<(), OversyncError> {
+		let events_json = serde_json::to_string(events)
+			.map_err(|e| OversyncError::Internal(format!("serialize events: {e}")))?;
+		self.state_client
+			.query(SAVE_PENDING_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.bind(("cycle_id", cycle_id))
+			.bind(("events_json", events_json))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("save_pending: {e}")))?;
+		debug!(count = events.len(), "saved pending events");
+		Ok(())
+	}
+
+	pub async fn read_pending_events(
+		&self,
+		source_id: &str,
+		query_id: &str,
+	) -> Result<Vec<(i64, Vec<EventEnvelope>)>, OversyncError> {
+		let mut response = self
+			.state_client
+			.query(READ_PENDING_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("read_pending: {e}")))?;
+
+		let rows: Vec<serde_json::Value> = response
+			.take(0)
+			.map_err(|e| OversyncError::SurrealDb(format!("read_pending take: {e}")))?;
+
+		let mut result = Vec::new();
+		for row in &rows {
+			let cycle_id = row.get("cycle_id").and_then(|v| v.as_i64()).unwrap_or(0);
+			let json_str = row
+				.get("events_json")
+				.and_then(|v| v.as_str())
+				.unwrap_or("[]");
+			let events: Vec<EventEnvelope> =
+				serde_json::from_str(json_str).unwrap_or_default();
+			result.push((cycle_id, events));
+		}
+
+		debug!(pending_batches = result.len(), "read pending events");
+		Ok(result)
+	}
+
+	pub async fn delete_pending_events(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		up_to_cycle_id: i64,
+	) -> Result<(), OversyncError> {
+		self.state_client
+			.query(DELETE_PENDING_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.bind(("cycle_id", up_to_cycle_id))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("delete_pending: {e}")))?;
+		Ok(())
+	}
+
+	pub async fn log_cycle_start(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+	) -> Result<(), OversyncError> {
+		self.state_client
+			.query(LOG_CYCLE_START_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.bind(("cycle_id", cycle_id))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("log_cycle_start: {e}")))?;
+		Ok(())
+	}
+
+	pub async fn log_cycle_finish(
+		&self,
+		source_id: &str,
+		query_id: &str,
+		cycle_id: i64,
+		status: CycleStatus,
+		rows_fetched: i64,
+		rows_created: i64,
+		rows_updated: i64,
+		rows_deleted: i64,
+	) -> Result<(), OversyncError> {
+		self.state_client
+			.query(LOG_CYCLE_FINISH_SQL)
+			.bind(("source_id", source_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.bind(("cycle_id", cycle_id))
+			.bind(("status", status.to_string()))
+			.bind(("rows_fetched", rows_fetched))
+			.bind(("rows_created", rows_created))
+			.bind(("rows_updated", rows_updated))
+			.bind(("rows_deleted", rows_deleted))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("log_cycle_finish: {e}")))?;
+		Ok(())
+	}
+}
+
+pub fn check_fail_safe(previous_count: usize, deleted_count: usize, threshold_pct: f64) -> bool {
+	if previous_count == 0 {
+		return true;
+	}
+	let deleted_pct = (deleted_count as f64 / previous_count as f64) * 100.0;
+	deleted_pct <= threshold_pct
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn fail_safe_allows_below_threshold() {
+		assert!(check_fail_safe(100, 10, 30.0));
+	}
+
+	#[test]
+	fn fail_safe_allows_at_threshold() {
+		assert!(check_fail_safe(100, 30, 30.0));
+	}
+
+	#[test]
+	fn fail_safe_rejects_above_threshold() {
+		assert!(!check_fail_safe(100, 31, 30.0));
+	}
+
+	#[test]
+	fn fail_safe_allows_zero_previous() {
+		assert!(check_fail_safe(0, 0, 30.0));
+	}
+
+	#[test]
+	fn fail_safe_allows_zero_deleted() {
+		assert!(check_fail_safe(50, 0, 30.0));
+	}
+
+	#[test]
+	fn fail_safe_rejects_all_deleted() {
+		assert!(!check_fail_safe(10, 10, 30.0));
+	}
+}
