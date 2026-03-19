@@ -18,6 +18,10 @@ use crate::config::{SurrealDbDef, SyncConfig};
 use crate::lifecycle::LifecycleManager;
 use crate::registry::PluginRegistry;
 
+/// Builder for [`OversyncEngine`]. Created via [`OversyncEngine::builder()`].
+///
+/// Configures SurrealDB connections, registers connector/sink factories,
+/// and controls schema application.
 pub struct OversyncEngineBuilder {
 	url: String,
 	namespace: String,
@@ -35,6 +39,30 @@ pub struct OversyncEngineBuilder {
 	skip_schema: bool,
 }
 
+/// High-level facade for the oversync data sync engine.
+///
+/// Encapsulates `DeltaEngine`, `LifecycleManager`, and `PluginRegistry`.
+/// Use as an embedded library or as the core of a standalone binary.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+/// use oversync::OversyncEngine;
+///
+/// let engine = OversyncEngine::builder("http://localhost:8000")
+///     .namespace("myapp")
+///     .credentials("root", "root")
+///     .build()
+///     .await?;
+///
+/// engine.start_from_toml(std::path::Path::new("oversync.toml")).await?;
+/// // engine.pause().await;
+/// // engine.resume().await?;
+/// engine.shutdown().await;
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Clone)]
 pub struct OversyncEngine {
 	lifecycle: Arc<LifecycleManager>,
@@ -43,6 +71,8 @@ pub struct OversyncEngine {
 }
 
 impl OversyncEngine {
+	/// Create a new engine builder. The `surrealdb_url` is the connection URL
+	/// for the state store (e.g. `"http://localhost:8000"` or `"mem://"`).
 	pub fn builder(surrealdb_url: &str) -> OversyncEngineBuilder {
 		OversyncEngineBuilder {
 			url: surrealdb_url.to_string(),
@@ -62,29 +92,35 @@ impl OversyncEngine {
 		}
 	}
 
+	/// Start syncing with the given config. Stops any running scheduler first.
 	pub async fn start(&self, config: SyncConfig) -> Result<(), OversyncError> {
 		self.lifecycle.start(config).await
 	}
 
+	/// Load config from `source_config`/`query_config`/`sink_config` tables in SurrealDB and start.
 	pub async fn start_from_db(&self) -> Result<(), OversyncError> {
 		let config = crate::config_db::load_config_from_db(&self.state_client, &self.surreal_def)
 			.await?;
 		self.lifecycle.start(config).await
 	}
 
+	/// Parse a TOML config file and start syncing.
 	pub async fn start_from_toml(&self, path: &Path) -> Result<(), OversyncError> {
 		let config = SyncConfig::from_file(path)?;
 		self.lifecycle.start(config).await
 	}
 
+	/// Stop all sync tasks and clear config.
 	pub async fn shutdown(&self) {
 		self.lifecycle.shutdown().await;
 	}
 
+	/// Pause sync — stops the scheduler but remembers config for resume.
 	pub async fn pause(&self) {
 		self.lifecycle.pause().await;
 	}
 
+	/// Resume sync with the previously stored config.
 	pub async fn resume(&self) -> Result<(), OversyncError> {
 		self.lifecycle.resume().await
 	}
@@ -109,6 +145,8 @@ impl OversyncEngine {
 		&self.surreal_def
 	}
 
+	/// Build an axum `Router` with the full oversync REST API.
+	/// Requires the `api` feature. Mount into your own axum app or serve standalone.
 	#[cfg(feature = "api")]
 	pub fn api_router(&self) -> axum::Router {
 		use std::collections::HashMap;
@@ -132,22 +170,26 @@ impl OversyncEngine {
 }
 
 impl OversyncEngineBuilder {
+	/// SurrealDB namespace (default: `"oversync"`).
 	pub fn namespace(mut self, ns: &str) -> Self {
 		self.namespace = ns.to_string();
 		self
 	}
 
+	/// SurrealDB database (default: `"sync"`).
 	pub fn database(mut self, db: &str) -> Self {
 		self.database = db.to_string();
 		self
 	}
 
+	/// SurrealDB credentials (default: `"root"` / `"root"`).
 	pub fn credentials(mut self, username: &str, password: &str) -> Self {
 		self.username = username.to_string();
 		self.password = password.to_string();
 		self
 	}
 
+	/// Separate SurrealDB for snapshot storage. If not set, uses embedded `mem://`.
 	pub fn snapshot_url(mut self, url: &str) -> Self {
 		self.snapshot_url = Some(url.to_string());
 		self
@@ -169,21 +211,25 @@ impl OversyncEngineBuilder {
 		self
 	}
 
+	/// Register an additional source connector factory (on top of built-in ones).
 	pub fn register_source(mut self, factory: Box<dyn SourceFactory>) -> Self {
 		self.extra_sources.push(factory);
 		self
 	}
 
+	/// Register an additional sink factory (on top of built-in ones).
 	pub fn register_sink(mut self, factory: Box<dyn SinkFactory>) -> Self {
 		self.extra_sinks.push(factory);
 		self
 	}
 
+	/// If true, don't register built-in connectors/sinks — only custom ones.
 	pub fn skip_defaults(mut self, skip: bool) -> Self {
 		self.skip_defaults = skip;
 		self
 	}
 
+	/// If true, don't apply overshift schema on build (assumes schema already exists).
 	pub fn skip_schema(mut self, skip: bool) -> Self {
 		self.skip_schema = skip;
 		self
