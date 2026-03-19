@@ -5,7 +5,7 @@ use reqwest::StatusCode;
 use serde::Deserialize;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tracing::{debug, warn};
+use tracing::{Instrument, debug, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
@@ -126,6 +126,7 @@ impl TrinoClient {
 		})
 	}
 
+	#[tracing::instrument(skip(self, sql), fields(url = %self.base_url, user = %self.user))]
 	pub async fn execute(&self, sql: &str) -> Result<QueryExecution, OversyncError> {
 		let mut req = self
 			.http
@@ -209,8 +210,7 @@ impl QueryExecution {
 		self.initial_data.take()
 	}
 
-	/// Advance to the next page. Returns None when query is finished (no more pages).
-	/// Returns Some(vec) with data rows (may be empty for progress-only pages).
+	#[tracing::instrument(skip(self), fields(query = %self.query_id))]
 	pub async fn advance(&mut self) -> Result<Option<Vec<Vec<serde_json::Value>>>, OversyncError> {
 		loop {
 			let next = match self.next_uri.take() {
@@ -473,29 +473,36 @@ impl SourceConnector for TrinoConnector {
 	}
 
 	async fn fetch_all(&self, sql: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
-		let mut exec = self.client.execute(sql).await?;
-		let mut all_rows = Vec::new();
+		async {
+			let mut exec = self.client.execute(sql).await?;
+			let query_id = exec.query_id().to_string();
+			let mut all_rows = Vec::new();
+			let mut pages = 0u32;
 
-		// Process initial data from POST response
-		if let Some(data) = exec.take_initial_data() {
-			if !data.is_empty() && !exec.columns().is_empty() {
-				all_rows.extend(rows_to_raw_rows(exec.columns(), &data, key_column)?);
+			if let Some(data) = exec.take_initial_data() {
+				if !data.is_empty() && !exec.columns().is_empty() {
+					all_rows.extend(rows_to_raw_rows(exec.columns(), &data, key_column)?);
+					pages += 1;
+				}
 			}
-		}
 
-		// Poll remaining pages
-		while let Some(data) = exec.advance().await? {
-			if !data.is_empty() && !exec.columns().is_empty() {
-				all_rows.extend(rows_to_raw_rows(exec.columns(), &data, key_column)?);
+			while let Some(data) = exec.advance().await? {
+				if !data.is_empty() && !exec.columns().is_empty() {
+					all_rows.extend(rows_to_raw_rows(exec.columns(), &data, key_column)?);
+					pages += 1;
+				}
 			}
-		}
 
-		debug!(
-			count = all_rows.len(),
-			query_id = %exec.query_id(),
-			"fetched rows from trino"
-		);
-		Ok(all_rows)
+			info!(
+				rows = all_rows.len(),
+				pages,
+				query_id = %query_id,
+				"trino fetch_all complete"
+			);
+			Ok(all_rows)
+		}
+		.instrument(tracing::info_span!("trino_fetch_all", source = %self.source_name))
+		.await
 	}
 
 	async fn fetch_into(
@@ -505,43 +512,55 @@ impl SourceConnector for TrinoConnector {
 		_batch_size: usize,
 		tx: mpsc::Sender<Vec<RawRow>>,
 	) -> Result<usize, OversyncError> {
-		let mut exec = self.client.execute(sql).await?;
-		let mut total = 0;
+		async {
+			let mut exec = self.client.execute(sql).await?;
+			let query_id = exec.query_id().to_string();
+			let mut total = 0;
+			let mut pages = 0u32;
 
-		// Process initial data
-		if let Some(data) = exec.take_initial_data() {
-			if !data.is_empty() && !exec.columns().is_empty() {
-				let rows = rows_to_raw_rows(exec.columns(), &data, key_column)?;
-				total += rows.len();
-				tx.send(rows)
-					.await
-					.map_err(|_| OversyncError::Internal("channel closed".into()))?;
+			if let Some(data) = exec.take_initial_data() {
+				if !data.is_empty() && !exec.columns().is_empty() {
+					let rows = rows_to_raw_rows(exec.columns(), &data, key_column)?;
+					total += rows.len();
+					pages += 1;
+					tx.send(rows)
+						.await
+						.map_err(|_| OversyncError::Internal("channel closed".into()))?;
+				}
 			}
-		}
 
-		// Stream pages — each Trino page is one batch (natural streaming boundary)
-		while let Some(data) = exec.advance().await? {
-			if !data.is_empty() && !exec.columns().is_empty() {
-				let rows = rows_to_raw_rows(exec.columns(), &data, key_column)?;
-				total += rows.len();
-				tx.send(rows)
-					.await
-					.map_err(|_| OversyncError::Internal("channel closed".into()))?;
+			while let Some(data) = exec.advance().await? {
+				if !data.is_empty() && !exec.columns().is_empty() {
+					let rows = rows_to_raw_rows(exec.columns(), &data, key_column)?;
+					total += rows.len();
+					pages += 1;
+					tx.send(rows)
+						.await
+						.map_err(|_| OversyncError::Internal("channel closed".into()))?;
+				}
 			}
-		}
 
-		debug!(
-			total,
-			query_id = %exec.query_id(),
-			"streamed rows from trino"
-		);
-		Ok(total)
+			info!(
+				total,
+				pages,
+				query_id = %query_id,
+				"trino fetch_into complete"
+			);
+			Ok(total)
+		}
+		.instrument(tracing::info_span!("trino_fetch_into", source = %self.source_name))
+		.await
 	}
 
 	async fn test_connection(&self) -> Result<(), OversyncError> {
-		let mut exec = self.client.execute("SELECT 1 AS _health").await?;
-		while exec.advance().await?.is_some() {}
-		Ok(())
+		async {
+			let mut exec = self.client.execute("SELECT 1 AS _health").await?;
+			while exec.advance().await?.is_some() {}
+			info!("trino health check passed");
+			Ok(())
+		}
+		.instrument(tracing::info_span!("trino_health", source = %self.source_name))
+		.await
 	}
 }
 
