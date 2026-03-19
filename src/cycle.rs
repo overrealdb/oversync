@@ -125,6 +125,8 @@ impl<'a> CycleRunner<'a> {
 			DiffMode::Db => self.run_db_diff(config, cycle_id).await?,
 		};
 
+		let created_count = diff.created.len();
+		let updated_count = diff.updated.len();
 		let deleted_count = diff.deleted.len();
 		let previous_count = total_upserted + deleted_count;
 
@@ -140,6 +142,32 @@ impl<'a> CycleRunner<'a> {
 				"fail-safe: {deleted_count}/{previous_count} rows deleted (>{:.0}%)",
 				config.fail_safe_threshold,
 			)));
+		}
+
+		// Anomaly warnings — emit before delivery so OTel/log alerting can fire.
+		if previous_count > 0 {
+			let delete_pct = (deleted_count as f64 / previous_count as f64) * 100.0;
+			if delete_pct > config.fail_safe_threshold * 0.5 && deleted_count > 10 {
+				warn!(
+					source = %config.source_id,
+					previous = previous_count,
+					deleted = deleted_count,
+					delete_pct = format!("{delete_pct:.1}"),
+					threshold = config.fail_safe_threshold,
+					"high delete ratio approaching fail-safe threshold"
+				);
+			}
+		}
+
+		if previous_count > 0 && created_count > previous_count {
+			let growth_pct = (created_count as f64 / previous_count as f64) * 100.0;
+			warn!(
+				source = %config.source_id,
+				previous = previous_count,
+				created = created_count,
+				growth_pct = format!("{growth_pct:.1}"),
+				"unusual growth: new records exceed previous total"
+			);
 		}
 
 		if !diff.is_empty() {
