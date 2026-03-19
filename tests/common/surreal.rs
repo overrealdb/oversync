@@ -61,6 +61,10 @@ impl TestSurrealContainer {
 		t
 	}
 
+	pub async fn url() -> String {
+		shared_container().await.url.clone()
+	}
+
 	pub async fn new_raw() -> Self {
 		let shared = shared_container().await;
 

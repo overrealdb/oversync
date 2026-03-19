@@ -208,6 +208,12 @@ impl OversyncEngineBuilder {
 			apply_schema(&state_client, &self.namespace, &self.database).await?;
 		}
 
+		state_client
+			.use_ns(&self.namespace)
+			.use_db(&self.database)
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("use ns/db: {e}")))?;
+
 		let snapshot_client = match &self.snapshot_url {
 			Some(url) => {
 				let snap = surrealdb::engine::any::connect(url)
@@ -231,6 +237,13 @@ impl OversyncEngineBuilder {
 					apply_schema(&snap, ns, db).await?;
 				}
 
+				let ns = self.snapshot_ns.as_deref().unwrap_or(&self.namespace);
+				let db = self.snapshot_db.as_deref().unwrap_or(&self.database);
+				snap.use_ns(ns)
+					.use_db(db)
+					.await
+					.map_err(|e| OversyncError::SurrealDb(format!("snapshot use ns/db: {e}")))?;
+
 				info!(url = %url, "snapshot DB connected (separate)");
 				snap
 			}
@@ -243,6 +256,11 @@ impl OversyncEngineBuilder {
 				if !self.skip_schema {
 					apply_schema(&snap, "oversync", "snapshot").await?;
 				}
+
+				snap.use_ns("oversync")
+					.use_db("snapshot")
+					.await
+					.map_err(|e| OversyncError::SurrealDb(format!("snapshot use ns/db: {e}")))?;
 
 				info!("snapshot DB: embedded kv-mem");
 				snap

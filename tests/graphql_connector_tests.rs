@@ -222,6 +222,126 @@ async fn graphql_errors_returned_as_oversync_error() {
 	assert!(err.contains("Syntax error"));
 }
 
+// ── Edge cases ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn http_500_returns_error() {
+	let app = Router::new().route(
+		"/graphql",
+		post(|| async { axum::http::StatusCode::INTERNAL_SERVER_ERROR }),
+	);
+	let base = start_server(app).await;
+	let config = make_config(&format!("{base}/graphql"));
+	let connector = GraphqlConnector::new("test", config).unwrap();
+
+	let result = connector.fetch_all("{ test }", "id").await;
+	assert!(result.is_err());
+	assert!(result.unwrap_err().to_string().contains("500"));
+}
+
+#[tokio::test]
+async fn empty_response_returns_empty_rows() {
+	let app = Router::new().route(
+		"/graphql",
+		post(|| async {
+			Json(serde_json::json!({
+				"data": {"items": []}
+			}))
+		}),
+	);
+	let base = start_server(app).await;
+	let mut config = make_config(&format!("{base}/graphql"));
+	config.response_path = Some("data.items".into());
+	let connector = GraphqlConnector::new("test", config).unwrap();
+
+	let rows = connector
+		.fetch_all("{ items { id } }", "id")
+		.await
+		.unwrap();
+	assert!(rows.is_empty());
+}
+
+#[tokio::test]
+async fn missing_key_column_errors() {
+	let app = Router::new().route(
+		"/graphql",
+		post(|| async {
+			Json(serde_json::json!({
+				"data": {"items": [{"name": "no-id-field"}]}
+			}))
+		}),
+	);
+	let base = start_server(app).await;
+	let mut config = make_config(&format!("{base}/graphql"));
+	config.response_path = Some("data.items".into());
+	let connector = GraphqlConnector::new("test", config).unwrap();
+
+	let result = connector.fetch_all("{ items { name } }", "id").await;
+	assert!(result.is_err());
+	assert!(result.unwrap_err().to_string().contains("missing key field"));
+}
+
+#[tokio::test]
+async fn custom_headers_forwarded() {
+	let app = Router::new().route(
+		"/graphql",
+		post(|headers: axum::http::HeaderMap| async move {
+			let custom = headers
+				.get("x-custom")
+				.and_then(|v| v.to_str().ok())
+				.unwrap_or("");
+			Json(serde_json::json!({
+				"data": {"items": [{"id": custom}]}
+			}))
+		}),
+	);
+	let base = start_server(app).await;
+	let mut config = make_config(&format!("{base}/graphql"));
+	config.response_path = Some("data.items".into());
+	config.headers.insert("X-Custom".into(), "test-val".into());
+	let connector = GraphqlConnector::new("test", config).unwrap();
+
+	let rows = connector
+		.fetch_all("{ items { id } }", "id")
+		.await
+		.unwrap();
+	assert_eq!(rows[0].row_key, "test-val");
+}
+
+#[tokio::test]
+async fn fetch_into_streams_pages() {
+	let app = Router::new().route(
+		"/graphql",
+		post(|| async {
+			Json(serde_json::json!({
+				"data": {"items": [
+					{"id": "1"}, {"id": "2"}, {"id": "3"},
+					{"id": "4"}, {"id": "5"},
+				]}
+			}))
+		}),
+	);
+	let base = start_server(app).await;
+	let mut config = make_config(&format!("{base}/graphql"));
+	config.response_path = Some("data.items".into());
+	let connector = GraphqlConnector::new("test", config).unwrap();
+
+	let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+	let total = connector
+		.fetch_into("{ items { id } }", "id", 2, tx)
+		.await
+		.unwrap();
+	assert_eq!(total, 5);
+
+	let mut batches = vec![];
+	while let Ok(batch) = rx.try_recv() {
+		batches.push(batch);
+	}
+	assert_eq!(batches.len(), 3); // chunks of 2,2,1
+	assert_eq!(batches[0].len(), 2);
+	assert_eq!(batches[2].len(), 1);
+}
+
 // ── Factory ─────────────────────────────────────────────────
 
 #[tokio::test]
