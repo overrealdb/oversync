@@ -41,6 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			max_retries: 3,
 			retry_base_delay_secs: 5,
 			diff_mode: DiffMode::Memory,
+			missed_tick_policy: Default::default(),
 			config: serde_json::json!({}),
 			queries: vec![
 				QueryDef {

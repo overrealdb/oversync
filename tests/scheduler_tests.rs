@@ -36,6 +36,7 @@ fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 			max_retries: 1,
 			retry_base_delay_secs: 1,
 			diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::Value::Null,
 			queries: vec![QueryDef {
 				id: "items".into(),
@@ -148,6 +149,7 @@ async fn scheduler_handles_connector_error() {
 			max_retries: 0,
 			retry_base_delay_secs: 1,
 			diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::Value::Null,
 			queries: vec![QueryDef {
 				id: "q".into(),
@@ -228,6 +230,7 @@ async fn scheduler_detects_data_changes() {
 			max_retries: 1,
 			retry_base_delay_secs: 1,
 			diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::Value::Null,
 			queries: vec![QueryDef {
 				id: "items".into(),
@@ -320,6 +323,7 @@ async fn scheduler_multiple_queries() {
 			max_retries: 1,
 			retry_base_delay_secs: 1,
 			diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::Value::Null,
 			queries: vec![
 				QueryDef {
@@ -410,6 +414,7 @@ async fn scheduler_multiple_sources() {
 				max_retries: 1,
 				retry_base_delay_secs: 1,
 				diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
 				config: serde_json::Value::Null,
 				queries: vec![QueryDef {
 					id: "items".into(),
@@ -428,6 +433,7 @@ async fn scheduler_multiple_sources() {
 				max_retries: 1,
 				retry_base_delay_secs: 1,
 				diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
 				config: serde_json::Value::Null,
 				queries: vec![QueryDef {
 					id: "users".into(),

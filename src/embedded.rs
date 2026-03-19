@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
@@ -359,29 +359,40 @@ async fn run_embedded_query(
 		"embedded polling task started"
 	);
 
-	run_embedded_cycle(
+	run_timed_embedded_cycle(
 		&engine,
 		connector.as_ref(),
 		&query_sinks,
 		&source,
 		&query,
 		&transform_hooks,
+		interval,
 	)
 	.await;
 
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
 
+	match source.missed_tick_policy {
+		crate::config::MissedTickPolicy::Skip => {
+			ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+		}
+		crate::config::MissedTickPolicy::Burst => {
+			ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
+		}
+	}
+
 	loop {
 		tokio::select! {
 			_ = ticker.tick() => {
-				run_embedded_cycle(
+				run_timed_embedded_cycle(
 					&engine,
 					connector.as_ref(),
 					&query_sinks,
 					&source,
 					&query,
 					&transform_hooks,
+					interval,
 				).await;
 			}
 			_ = shutdown.changed() => {
@@ -389,6 +400,31 @@ async fn run_embedded_query(
 				break;
 			}
 		}
+	}
+}
+
+async fn run_timed_embedded_cycle(
+	engine: &DeltaEngine,
+	connector: &dyn oversync_core::traits::SourceConnector,
+	sinks: &[Arc<dyn Sink>],
+	source: &SourceDef,
+	query: &crate::config::QueryDef,
+	transform_hooks: &HashMap<String, Arc<dyn TransformHook>>,
+	interval: Duration,
+) {
+	let start = Instant::now();
+	run_embedded_cycle(engine, connector, sinks, source, query, transform_hooks).await;
+	let elapsed = start.elapsed();
+
+	if elapsed > interval {
+		warn!(
+			source = %source.name,
+			query = %query.id,
+			elapsed_secs = elapsed.as_secs(),
+			interval_secs = interval.as_secs(),
+			policy = ?source.missed_tick_policy,
+			"cycle took longer than polling interval"
+		);
 	}
 }
 

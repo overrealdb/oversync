@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::sync::watch;
+use tokio::time::MissedTickBehavior;
 use tracing::{error, info, warn};
 
 use oversync_core::error::OversyncError;
@@ -169,20 +170,30 @@ async fn run_source_query(
 		"polling task started"
 	);
 
-	run_with_retry(&engine, connector.as_ref(), &sinks, &source, &query).await;
+	run_timed_cycle(&engine, connector.as_ref(), &sinks, &source, &query, interval).await;
 
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
 
+	match source.missed_tick_policy {
+		crate::config::MissedTickPolicy::Skip => {
+			ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+		}
+		crate::config::MissedTickPolicy::Burst => {
+			ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
+		}
+	}
+
 	loop {
 		tokio::select! {
 			_ = ticker.tick() => {
-				run_with_retry(
+				run_timed_cycle(
 					&engine,
 					connector.as_ref(),
 					&sinks,
 					&source,
 					&query,
+					interval,
 				).await;
 			}
 			_ = shutdown.changed() => {
@@ -190,6 +201,30 @@ async fn run_source_query(
 				break;
 			}
 		}
+	}
+}
+
+async fn run_timed_cycle(
+	engine: &DeltaEngine,
+	connector: &dyn SourceConnector,
+	sinks: &[Arc<dyn Sink>],
+	source: &SourceDef,
+	query: &QueryDef,
+	interval: Duration,
+) {
+	let start = Instant::now();
+	run_with_retry(engine, connector, sinks, source, query).await;
+	let elapsed = start.elapsed();
+
+	if elapsed > interval {
+		warn!(
+			source = %source.name,
+			query = %query.id,
+			elapsed_secs = elapsed.as_secs(),
+			interval_secs = interval.as_secs(),
+			policy = ?source.missed_tick_policy,
+			"cycle took longer than polling interval"
+		);
 	}
 }
 

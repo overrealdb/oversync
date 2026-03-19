@@ -69,9 +69,22 @@ pub struct SourceDef {
 	#[serde(default)]
 	pub diff_mode: DiffMode,
 	#[serde(default)]
+	pub missed_tick_policy: MissedTickPolicy,
+	#[serde(default)]
 	pub config: serde_json::Value,
 	#[serde(default)]
 	pub queries: Vec<QueryDef>,
+}
+
+/// What to do when a cycle takes longer than the polling interval.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissedTickPolicy {
+	/// Drop missed ticks — wait for the next interval boundary after the cycle finishes.
+	#[default]
+	Skip,
+	/// Fire missed ticks immediately — run back-to-back until caught up.
+	Burst,
 }
 
 #[derive(Debug, Clone, Deserialize)]

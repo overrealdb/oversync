@@ -97,6 +97,7 @@ async fn engine_http_source_to_stdout_produces_cycle() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
+			missed_tick_policy: Default::default(),
 		config: serde_json::json!({"dsn": source_url}),
 		queries: vec![QueryDef {
 			id: "items".into(),
@@ -179,6 +180,7 @@ async fn engine_http_source_to_http_sink_delivers_events() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
+			missed_tick_policy: Default::default(),
 		config: serde_json::json!({"dsn": source_url}),
 		queries: vec![QueryDef {
 			id: "data".into(),
@@ -240,6 +242,7 @@ async fn engine_graphql_source_produces_cycle() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
+			missed_tick_policy: Default::default(),
 		config: serde_json::json!({
 			"dsn": gql_endpoint,
 			"response_path": "data.items",
@@ -307,6 +310,7 @@ async fn engine_second_cycle_detects_no_changes() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
+			missed_tick_policy: Default::default(),
 		config: serde_json::json!({"dsn": source_url}),
 		queries: vec![QueryDef {
 			id: "items".into(),

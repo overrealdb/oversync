@@ -104,6 +104,7 @@ async fn load_sources(client: &Surreal<Any>) -> Result<Vec<SourceDef>, OversyncE
 				.and_then(|v| v.as_u64())
 				.unwrap_or(5),
 			diff_mode: DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config,
 			queries,
 		});

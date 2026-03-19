@@ -101,6 +101,7 @@ fn test_source_def() -> SourceDef {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: oversync::config::DiffMode::Memory,
+			missed_tick_policy: Default::default(),
 		config: serde_json::Value::Null,
 		queries: vec![QueryDef {
 			id: "q1".into(),

@@ -89,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			max_retries: 0,
 			retry_base_delay_secs: 1,
 			diff_mode: Default::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::json!({}),
 			queries: vec![QueryDef {
 				id: "all-employees".into(),

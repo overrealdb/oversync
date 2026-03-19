@@ -35,6 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			max_retries: 2,
 			retry_base_delay_secs: 10,
 			diff_mode: DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::json!({
 				"dsn": "https://api.github.com/graphql",
 				"auth": {

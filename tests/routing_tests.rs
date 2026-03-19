@@ -19,6 +19,7 @@ fn cycle_config(schema: &str) -> CycleConfig {
 		key_column: "id".into(),
 		fail_safe_threshold: 30.0,
 		diff_mode: oversync::config::DiffMode::Db,
+			missed_tick_policy: Default::default(),
 		transform: None,
 	}
 }

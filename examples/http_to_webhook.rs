@@ -35,6 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			max_retries: 3,
 			retry_base_delay_secs: 5,
 			diff_mode: DiffMode::default(),
+			missed_tick_policy: Default::default(),
 			config: serde_json::json!({
 				"dsn": "https://api.example.com",
 				"auth": {"type": "bearer", "token": "sk-api-key"},
