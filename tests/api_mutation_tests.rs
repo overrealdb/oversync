@@ -21,6 +21,7 @@ fn test_state_with_db(
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(client),
 		lifecycle: None,
+		api_key: None,
 	})
 }
 
@@ -31,6 +32,7 @@ fn test_state_no_db() -> Arc<ApiState> {
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: None,
 		lifecycle: None,
+		api_key: None,
 	})
 }
 
@@ -358,6 +360,200 @@ async fn get_sinks_reflects_created_sink() {
 	assert_eq!(sinks.len(), 1);
 	assert_eq!(sinks[0]["name"], "wh");
 	assert_eq!(sinks[0]["sink_type"], "http");
+}
+
+// ── Query CRUD ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn create_and_list_queries() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	// Create a source first
+	post_json(
+		&app,
+		"/sources",
+		serde_json::json!({"name": "pg", "connector": "postgres"}),
+	)
+	.await;
+
+	// Create a query
+	let (status, json) = post_json(
+		&app,
+		"/sources/pg/queries",
+		serde_json::json!({
+			"name": "users",
+			"query": "SELECT id, name FROM users",
+			"key_column": "id",
+		}),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+
+	// List queries
+	let (status, json) = get_json(&app, "/sources/pg/queries").await;
+	assert_eq!(status, StatusCode::OK);
+	let queries = json["queries"].as_array().unwrap();
+	assert_eq!(queries.len(), 1);
+	assert_eq!(queries[0]["name"], "users");
+	assert_eq!(queries[0]["key_column"], "id");
+}
+
+#[tokio::test]
+async fn update_query_changes_db() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/sources",
+		serde_json::json!({"name": "pg", "connector": "postgres"}),
+	)
+	.await;
+	post_json(
+		&app,
+		"/sources/pg/queries",
+		serde_json::json!({
+			"name": "q1",
+			"query": "SELECT 1 AS id",
+			"key_column": "id",
+		}),
+	)
+	.await;
+
+	let (status, json) = put_json(
+		&app,
+		"/sources/pg/queries/q1",
+		serde_json::json!({"query": "SELECT 2 AS id"}),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+
+	// Verify
+	let mut resp = container
+		.client
+		.query("SELECT * FROM query_config WHERE source_id = 'pg' AND name = 'q1'")
+		.await
+		.unwrap();
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert_eq!(rows[0]["query"], "SELECT 2 AS id");
+}
+
+#[tokio::test]
+async fn delete_query_removes_from_db() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/sources",
+		serde_json::json!({"name": "pg", "connector": "postgres"}),
+	)
+	.await;
+	post_json(
+		&app,
+		"/sources/pg/queries",
+		serde_json::json!({
+			"name": "to-del",
+			"query": "SELECT 1 AS id",
+			"key_column": "id",
+		}),
+	)
+	.await;
+
+	let (status, json) = delete_req(&app, "/sources/pg/queries/to-del").await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+
+	let mut resp = container
+		.client
+		.query("SELECT * FROM query_config WHERE source_id = 'pg' AND name = 'to-del'")
+		.await
+		.unwrap();
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert!(rows.is_empty());
+}
+
+// ── Auth middleware ─────────────────────────────────────────
+
+#[tokio::test]
+async fn auth_key_blocks_unauthorized_requests() {
+	let container = TestSurrealContainer::new().await;
+	let state = Arc::new(ApiState {
+		sources: Arc::new(RwLock::new(vec![])),
+		sinks: Arc::new(RwLock::new(vec![])),
+		cycle_status: Arc::new(RwLock::new(HashMap::new())),
+		db_client: Some(container.client.clone()),
+		lifecycle: None,
+		api_key: Some("secret-key".into()),
+	});
+	let app = oversync_api::router(state);
+
+	// Health is public — no auth needed
+	let (status, _) = get_json(&app, "/health").await;
+	assert_eq!(status, StatusCode::OK);
+
+	// Protected route without key → 401
+	let req = Request::get("/sources")
+		.body(Body::empty())
+		.unwrap();
+	let resp = app.clone().oneshot(req).await.unwrap();
+	assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn auth_key_allows_authorized_requests() {
+	let container = TestSurrealContainer::new().await;
+	let state = Arc::new(ApiState {
+		sources: Arc::new(RwLock::new(vec![])),
+		sinks: Arc::new(RwLock::new(vec![])),
+		cycle_status: Arc::new(RwLock::new(HashMap::new())),
+		db_client: Some(container.client.clone()),
+		lifecycle: None,
+		api_key: Some("secret-key".into()),
+	});
+	let app = oversync_api::router(state);
+
+	// Bearer auth
+	let req = Request::get("/sources")
+		.header("authorization", "Bearer secret-key")
+		.body(Body::empty())
+		.unwrap();
+	let resp = app.clone().oneshot(req).await.unwrap();
+	assert_eq!(resp.status(), StatusCode::OK);
+
+	// X-API-Key header
+	let req = Request::get("/sinks")
+		.header("x-api-key", "secret-key")
+		.body(Body::empty())
+		.unwrap();
+	let resp = app.clone().oneshot(req).await.unwrap();
+	assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn auth_key_wrong_key_returns_401() {
+	let state = Arc::new(ApiState {
+		sources: Arc::new(RwLock::new(vec![])),
+		sinks: Arc::new(RwLock::new(vec![])),
+		cycle_status: Arc::new(RwLock::new(HashMap::new())),
+		db_client: None,
+		lifecycle: None,
+		api_key: Some("correct-key".into()),
+	});
+	let app = oversync_api::router(state);
+
+	let req = Request::get("/sources")
+		.header("authorization", "Bearer wrong-key")
+		.body(Body::empty())
+		.unwrap();
+	let resp = app.clone().oneshot(req).await.unwrap();
+	assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
 // ── Error cases ─────────────────────────────────────────────

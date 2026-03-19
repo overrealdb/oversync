@@ -99,6 +99,37 @@ pub struct UpdateSinkRequest {
 	pub enabled: Option<bool>,
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateQueryRequest {
+	pub name: String,
+	pub query: String,
+	pub key_column: String,
+	#[serde(default)]
+	pub sinks: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateQueryRequest {
+	pub query: Option<String>,
+	pub key_column: Option<String>,
+	pub sinks: Option<Vec<String>>,
+	pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QueryListResponse {
+	pub queries: Vec<QueryDetail>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QueryDetail {
+	pub name: String,
+	pub query: String,
+	pub key_column: String,
+	pub sinks: Option<Vec<String>>,
+	pub enabled: bool,
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MutationResponse {
 	pub ok: bool,

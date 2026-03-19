@@ -26,6 +26,9 @@ struct Cli {
 
 	#[arg(long, env = "OVERSYNC_OTEL_ENDPOINT")]
 	otel_endpoint: Option<String>,
+
+	#[arg(long, env = "OVERSYNC_API_KEY")]
+	api_key: Option<String>,
 }
 
 #[tokio::main]
@@ -52,6 +55,10 @@ async fn main() -> anyhow::Result<()> {
 			.snapshot_credentials(&snap.username, &snap.password)
 			.snapshot_namespace(&snap.namespace)
 			.snapshot_database(&snap.database);
+	}
+
+	if let Some(ref key) = cli.api_key {
+		builder = builder.api_key(key);
 	}
 
 	let engine = builder.build().await?;

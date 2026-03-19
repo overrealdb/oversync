@@ -37,6 +37,7 @@ pub struct OversyncEngineBuilder {
 	extra_sinks: Vec<Box<dyn SinkFactory>>,
 	skip_defaults: bool,
 	skip_schema: bool,
+	api_key: Option<String>,
 }
 
 /// High-level facade for the oversync data sync engine.
@@ -68,6 +69,8 @@ pub struct OversyncEngine {
 	lifecycle: Arc<LifecycleManager>,
 	state_client: Surreal<Any>,
 	surreal_def: SurrealDbDef,
+	#[allow(dead_code)] // used by api_router() behind #[cfg(feature = "api")]
+	api_key: Option<String>,
 }
 
 impl OversyncEngine {
@@ -89,6 +92,7 @@ impl OversyncEngine {
 			extra_sinks: vec![],
 			skip_defaults: false,
 			skip_schema: false,
+			api_key: None,
 		}
 	}
 
@@ -163,6 +167,7 @@ impl OversyncEngine {
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: Some(self.state_client.clone()),
 			lifecycle: Some(Arc::new(lifecycle_adapter)),
+			api_key: self.api_key.clone(),
 		});
 
 		oversync_api::router(api_state)
@@ -235,6 +240,15 @@ impl OversyncEngineBuilder {
 		self
 	}
 
+	/// Set an API key for the REST API. When set, all mutation/operation
+	/// endpoints require `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+	/// Health and OpenAPI endpoints remain public.
+	pub fn api_key(mut self, key: &str) -> Self {
+		self.api_key = Some(key.to_string());
+		self
+	}
+
+	/// Build the engine: connect to SurrealDB, apply schema, register factories.
 	pub async fn build(self) -> Result<OversyncEngine, OversyncError> {
 		let state_client = surrealdb::engine::any::connect(&self.url)
 			.await
@@ -350,6 +364,7 @@ impl OversyncEngineBuilder {
 			lifecycle,
 			state_client,
 			surreal_def,
+			api_key: self.api_key,
 		})
 	}
 }

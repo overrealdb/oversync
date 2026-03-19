@@ -1,12 +1,15 @@
+pub mod auth;
 pub mod handlers;
 pub mod mutations;
 pub mod operations;
+pub mod queries;
 pub mod state;
 pub mod types;
 
 use std::sync::Arc;
 
 use axum::Router;
+use axum::middleware;
 use axum::routing::{get, post, put};
 use utoipa::OpenApi;
 
@@ -30,6 +33,10 @@ use crate::state::ApiState;
 		operations::resume_sync,
 		operations::get_history,
 		operations::sync_status,
+		queries::list_queries,
+		queries::create_query,
+		queries::update_query,
+		queries::delete_query,
 	),
 	components(schemas(
 		types::HealthResponse,
@@ -49,6 +56,10 @@ use crate::state::ApiState;
 		types::MutationResponse,
 		types::HistoryResponse,
 		types::StatusResponse,
+		types::CreateQueryRequest,
+		types::UpdateQueryRequest,
+		types::QueryListResponse,
+		types::QueryDetail,
 	)),
 	info(
 		title = "oversync API",
@@ -59,9 +70,8 @@ use crate::state::ApiState;
 pub struct ApiDoc;
 
 pub fn router(state: Arc<ApiState>) -> Router {
-	Router::new()
-		// Read routes
-		.route("/health", get(handlers::health))
+	// Protected routes — require API key when configured
+	let protected = Router::new()
 		.route("/sources", get(handlers::list_sources).post(mutations::create_source))
 		.route(
 			"/sources/{name}",
@@ -70,21 +80,36 @@ pub fn router(state: Arc<ApiState>) -> Router {
 				.delete(mutations::delete_source),
 		)
 		.route("/sources/{name}/trigger", post(operations::trigger_source))
+		.route(
+			"/sources/{source}/queries",
+			get(queries::list_queries).post(queries::create_query),
+		)
+		.route(
+			"/sources/{source}/queries/{name}",
+			put(queries::update_query).delete(queries::delete_query),
+		)
 		.route("/sinks", get(handlers::list_sinks).post(mutations::create_sink))
 		.route(
 			"/sinks/{name}",
 			put(mutations::update_sink).delete(mutations::delete_sink),
 		)
-		// Operations
 		.route("/sync/pause", post(operations::pause_sync))
 		.route("/sync/resume", post(operations::resume_sync))
 		.route("/sync/status", get(operations::sync_status))
 		.route("/history", get(operations::get_history))
-		// OpenAPI
+		.route_layer(middleware::from_fn_with_state(
+			state.clone(),
+			auth::require_api_key,
+		));
+
+	// Public routes — no auth required
+	Router::new()
+		.route("/health", get(handlers::health))
 		.route(
 			"/openapi.json",
 			get(|| async { axum::Json(ApiDoc::openapi()) }),
 		)
+		.merge(protected)
 		.with_state(state)
 }
 
@@ -117,6 +142,7 @@ mod tests {
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: None,
 			lifecycle: None,
+			api_key: None,
 		})
 	}
 

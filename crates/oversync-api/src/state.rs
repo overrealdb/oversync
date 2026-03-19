@@ -11,6 +11,7 @@ pub struct ApiState {
 	pub cycle_status: Arc<RwLock<HashMap<String, SourceStatus>>>,
 	pub db_client: Option<surrealdb::Surreal<surrealdb::engine::any::Any>>,
 	pub lifecycle: Option<Arc<dyn LifecycleControl>>,
+	pub api_key: Option<String>,
 }
 
 /// Trait for lifecycle operations so the API crate doesn't depend on the root crate.
