@@ -98,7 +98,9 @@ impl TrinoClient {
 				let creds = base64_encode(&format!("{username}:{password}"));
 				h.insert(
 					reqwest::header::AUTHORIZATION,
-					format!("Basic {creds}").parse().unwrap(),
+					format!("Basic {creds}")
+						.parse()
+						.map_err(|e| OversyncError::Config(format!("trino basic auth header: {e}")))?,
 				);
 				h
 			});
@@ -391,7 +393,13 @@ fn rows_to_raw_rows(
 
 	let mut rows = Vec::with_capacity(data.len());
 	for row_values in data {
-		let key = value_to_string(&row_values[key_idx]);
+		let key_val = &row_values[key_idx];
+		if key_val.is_null() {
+			return Err(OversyncError::Connector(format!(
+				"trino: NULL key in column '{key_column}'"
+			)));
+		}
+		let key = value_to_string(key_val);
 
 		let mut map = serde_json::Map::with_capacity(columns.len());
 		for (i, col) in columns.iter().enumerate() {
