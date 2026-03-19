@@ -1,41 +1,46 @@
+#[cfg(feature = "cli")]
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Parser, Serialize, Deserialize)]
-#[command(
-	name = "oversync",
-	about = "Lightweight data sync engine: poll, delta, sink"
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "cli", derive(Parser))]
+#[cfg_attr(
+	feature = "cli",
+	command(
+		name = "oversync",
+		about = "Lightweight data sync engine: poll, delta, sink"
+	)
 )]
 pub struct OversyncConfig {
-	#[arg(long, env = "OVERSYNC_BIND", default_value = "0.0.0.0:4200")]
+	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_BIND", default_value = "0.0.0.0:4200"))]
 	pub bind: String,
 
-	#[arg(long, env = "OVERSYNC_LOG_LEVEL", default_value = "info")]
+	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_LOG_LEVEL", default_value = "info"))]
 	pub log_level: String,
 
-	#[command(flatten)]
+	#[cfg_attr(feature = "cli", command(flatten))]
 	pub surrealdb: SurrealDbConfig,
 }
 
-#[derive(Debug, Clone, Parser, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "cli", derive(Parser))]
 pub struct SurrealDbConfig {
-	#[arg(
-		long,
-		env = "OVERSYNC_SURREALDB_URL",
-		default_value = "http://127.0.0.1:8000"
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_SURREALDB_URL", default_value = "http://127.0.0.1:8000")
 	)]
 	pub url: String,
 
-	#[arg(long, env = "OVERSYNC_SURREALDB_USER", default_value = "root")]
+	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_USER", default_value = "root"))]
 	pub user: String,
 
-	#[arg(long, env = "OVERSYNC_SURREALDB_PASS", default_value = "root")]
+	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_PASS", default_value = "root"))]
 	pub pass: String,
 
-	#[arg(long, env = "OVERSYNC_SURREALDB_NS", default_value = "oversync")]
+	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_NS", default_value = "oversync"))]
 	pub ns: String,
 
-	#[arg(long, env = "OVERSYNC_SURREALDB_DB", default_value = "sync")]
+	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_DB", default_value = "sync"))]
 	pub db: String,
 }
 

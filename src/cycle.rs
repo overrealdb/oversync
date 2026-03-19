@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope};
-use oversync_core::traits::{Sink, SourceConnector};
+use oversync_core::traits::{Sink, SourceConnector, TransformHook};
 use oversync_delta::{DeltaEngine, check_fail_safe};
 use tracing::{Instrument, error, info, warn};
 
@@ -22,6 +22,7 @@ pub struct CycleRunner<'a> {
 	engine: &'a DeltaEngine,
 	connector: &'a dyn SourceConnector,
 	sinks: &'a [Arc<dyn Sink>],
+	transform_hook: Option<Arc<dyn TransformHook>>,
 }
 
 impl<'a> CycleRunner<'a> {
@@ -34,7 +35,13 @@ impl<'a> CycleRunner<'a> {
 			engine,
 			connector,
 			sinks,
+			transform_hook: None,
 		}
+	}
+
+	pub fn with_transform(mut self, hook: Arc<dyn TransformHook>) -> Self {
+		self.transform_hook = Some(hook);
+		self
 	}
 
 	#[tracing::instrument(skip(self, config), fields(source = %config.source_id, query = %config.query_id))]
@@ -144,7 +151,9 @@ impl<'a> CycleRunner<'a> {
 				.map(EventEnvelope::from)
 				.collect();
 
-			if let Some(ref fn_name) = config.transform {
+			if let Some(ref hook) = self.transform_hook {
+				envelopes = hook.transform(envelopes).await?;
+			} else if let Some(ref fn_name) = config.transform {
 				envelopes = self.engine.apply_transform(fn_name, envelopes).await?;
 			}
 

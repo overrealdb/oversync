@@ -78,6 +78,9 @@ name = "oversync"
 path = "bin/oversync.rs"
 required-features = ["cli"]
 
+[[example]]
+name = "embedded"
+
 [features]
 default = []
 schema = ["dep:overshift"]
@@ -85,6 +88,7 @@ api = ["dep:oversync-api", "dep:axum", "dep:async-trait"]
 cli = [
 	"api",
 	"schema",
+	"oversync-core/cli",
 	"dep:clap",
 	"dep:opentelemetry",
 	"dep:opentelemetry_sdk",

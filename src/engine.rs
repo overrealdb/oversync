@@ -369,7 +369,7 @@ impl OversyncEngineBuilder {
 	}
 }
 
-fn default_registry() -> PluginRegistry {
+pub(crate) fn default_registry() -> PluginRegistry {
 	let mut registry = PluginRegistry::new();
 	registry.register_source(Box::new(PostgresSourceFactory));
 	registry.register_source(Box::new(HttpSourceFactory));
@@ -385,7 +385,7 @@ fn default_registry() -> PluginRegistry {
 }
 
 #[cfg(feature = "schema")]
-async fn apply_schema(
+pub(crate) async fn apply_schema(
 	db: &Surreal<Any>,
 	ns: &str,
 	db_name: &str,

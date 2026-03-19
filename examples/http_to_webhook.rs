@@ -57,10 +57,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		}],
 		sinks: vec![
 			SinkDef {
-				name: "datacat-webhook".into(),
+				name: "my-webhook".into(),
 				sink_type: "http".into(),
 				config: serde_json::json!({
-					"url": "https://datacat.example.com/api/webhooks/oversync",
+					"url": "https://example.com/api/webhooks/oversync",
 					"auth": {"type": "bearer", "token": "webhook-secret"},
 					"headers": {"X-Source": "oversync"},
 					"retry_count": 3,

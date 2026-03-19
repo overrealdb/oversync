@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Core types, traits, and config for the oversync data sync engine."
 
+[features]
+default = []
+cli = ["dep:clap"]
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -14,4 +18,4 @@ async-trait = { workspace = true }
 tokio = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
-clap = { workspace = true }
+clap = { workspace = true, optional = true }
