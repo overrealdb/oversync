@@ -361,9 +361,16 @@ impl SourceConnector for HttpSource {
 		let mut req = self.client.get(&self.config.base_url);
 		req = self.apply_headers(req);
 		req = self.apply_auth(req);
-		req.send()
+		let resp = req
+			.send()
 			.await
 			.map_err(|e| OversyncError::Connector(format!("http test: {e}")))?;
+		if !resp.status().is_success() {
+			return Err(OversyncError::Connector(format!(
+				"http test: status {}",
+				resp.status()
+			)));
+		}
 		Ok(())
 	}
 }

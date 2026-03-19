@@ -69,7 +69,8 @@ impl Sink for SurrealDbSink {
 	}
 
 	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError> {
-		self.client
+		let response = self
+			.client
 			.query(UPSERT_EVENT_SQL)
 			.bind(("table", self.table.clone()))
 			.bind(("key", envelope.meta.key.clone()))
@@ -81,6 +82,9 @@ impl Sink for SurrealDbSink {
 			.bind(("cycle_id", envelope.meta.cycle_id))
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb upsert: {e}")))?;
+		response
+			.check()
+			.map_err(|e| OversyncError::Sink(format!("surrealdb upsert check: {e}")))?;
 
 		debug!(table = %self.table, key = %envelope.meta.key, "upserted event");
 		Ok(())
@@ -107,11 +111,15 @@ impl Sink for SurrealDbSink {
 			})
 			.collect();
 
-		self.client
+		let response = self
+			.client
 			.query(BATCH_UPSERT_EVENTS_SQL)
 			.bind(("events", events))
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb batch upsert: {e}")))?;
+		response
+			.check()
+			.map_err(|e| OversyncError::Sink(format!("surrealdb batch upsert check: {e}")))?;
 
 		debug!(table = %self.table, count = envelopes.len(), "batch upserted events");
 		Ok(())

@@ -90,7 +90,7 @@ impl SourceFactory for FlightSqlSourceFactory {
 		let dsn = config
 			.get("dsn")
 			.and_then(|v| v.as_str())
-			.ok_or_else(|| OversyncError::Config("trino: missing 'dsn'".into()))?;
+			.ok_or_else(|| OversyncError::Config("flight-sql: missing 'dsn'".into()))?;
 
 		let connector = FlightSqlConnector::new(name, dsn)?;
 		Ok(Box::new(connector))

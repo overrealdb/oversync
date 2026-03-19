@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -62,6 +61,7 @@ struct QueryResults {
 #[serde(rename_all = "camelCase")]
 struct TrinoColumn {
 	name: String,
+	#[allow(dead_code)] // Deserialized for future type-aware conversion
 	#[serde(rename = "type")]
 	type_name: String,
 }
@@ -314,9 +314,14 @@ impl QueryExecution {
 
 	fn update_heartbeat(&mut self, next_uri: &str) {
 		if let Some(ref tx) = self.heartbeat_uri_tx {
-			// Update existing heartbeat with new URI
-			let _ = tx.send(next_uri.to_string());
-			return;
+			if tx.send(next_uri.to_string()).is_err() {
+				warn!(query = %self.query_id, "heartbeat task died, restarting");
+				self.heartbeat_uri_tx = None;
+				self.heartbeat_handle = None;
+				// Fall through to spawn a new one
+			} else {
+				return;
+			}
 		}
 
 		// First call — spawn heartbeat task
@@ -361,8 +366,22 @@ impl Drop for QueryExecution {
 	fn drop(&mut self) {
 		if let Some(uri) = self.next_uri.take() {
 			let http = self.http.clone();
+			let query_id = self.query_id.clone();
 			tokio::spawn(async move {
-				let _ = http.delete(&uri).send().await;
+				let result = tokio::time::timeout(
+					Duration::from_secs(5),
+					http.delete(&uri).send(),
+				)
+				.await;
+				match result {
+					Ok(Ok(_)) => {}
+					Ok(Err(e)) => {
+						tracing::warn!(query = %query_id, error = %e, "failed to cancel trino query");
+					}
+					Err(_) => {
+						tracing::warn!(query = %query_id, "trino query cancel timed out");
+					}
+				}
 			});
 		}
 		self.cancel_heartbeat();
@@ -393,7 +412,12 @@ fn rows_to_raw_rows(
 
 	let mut rows = Vec::with_capacity(data.len());
 	for row_values in data {
-		let key_val = &row_values[key_idx];
+		let key_val = row_values.get(key_idx).ok_or_else(|| {
+			OversyncError::Connector(format!(
+				"trino: row has {} columns, key column '{key_column}' at index {key_idx}",
+				row_values.len()
+			))
+		})?;
 		if key_val.is_null() {
 			return Err(OversyncError::Connector(format!(
 				"trino: NULL key in column '{key_column}'"
