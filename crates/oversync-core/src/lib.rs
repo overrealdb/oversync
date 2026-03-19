@@ -11,6 +11,7 @@ pub mod traits;
 pub use config::OversyncConfig;
 pub use error::OversyncError;
 pub use model::{
-	CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, OpType, RawRow, compute_diff,
+	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, OpType, RawRow,
+	compute_diff,
 };
 pub use traits::{Sink, SinkFactory, SourceConnector, SourceFactory};

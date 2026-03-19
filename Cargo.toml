@@ -81,6 +81,7 @@ required-features = ["cli"]
 [features]
 default = []
 cli = [
+	"dep:async-trait",
 	"dep:clap",
 	"dep:opentelemetry",
 	"dep:opentelemetry_sdk",
@@ -109,6 +110,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # CLI-only deps (behind "cli" feature)
+async-trait = { workspace = true, optional = true }
 overshift = { workspace = true, optional = true }
 oversync-api = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
@@ -135,7 +137,10 @@ uuid = { workspace = true }
 tokio = { workspace = true }
 rdkafka = { workspace = true }
 axum = { workspace = true }
+oversync-api = { workspace = true }
 reqwest = { workspace = true }
+tower = "0.5"
+http-body-util = "0.1"
 tokio-stream = "0.1"
 testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true }

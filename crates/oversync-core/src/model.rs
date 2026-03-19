@@ -181,6 +181,14 @@ impl std::fmt::Display for OpType {
 	}
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AuthConfig {
+	Bearer { token: String },
+	Header { name: String, value: String },
+	Basic { username: String, password: String },
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

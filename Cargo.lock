@@ -3494,6 +3494,7 @@ dependencies = [
  "axum 0.8.8",
  "chrono",
  "clap",
+ "http-body-util",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
@@ -3516,6 +3517,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "toml",
+ "tower 0.5.3",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
@@ -3526,12 +3528,14 @@ dependencies = [
 name = "oversync-api"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum 0.8.8",
  "chrono",
  "http-body-util",
  "oversync-core",
  "serde",
  "serde_json",
+ "surrealdb",
  "tokio",
  "tower 0.5.3",
  "tracing",
@@ -3598,6 +3602,7 @@ dependencies = [
  "chrono",
  "oversync-core",
  "rdkafka",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "surrealdb",

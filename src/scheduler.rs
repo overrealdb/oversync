@@ -23,9 +23,17 @@ pub struct Scheduler {
 
 impl Scheduler {
 	pub fn new(engine: DeltaEngine, config: SyncConfig, registry: PluginRegistry) -> Self {
+		Self::from_arc_engine(Arc::new(engine), config, registry)
+	}
+
+	pub fn from_arc_engine(
+		engine: Arc<DeltaEngine>,
+		config: SyncConfig,
+		registry: PluginRegistry,
+	) -> Self {
 		let (shutdown_tx, shutdown_rx) = watch::channel(false);
 		Self {
-			engine: Arc::new(engine),
+			engine,
 			config,
 			registry: Arc::new(registry),
 			shutdown_tx,

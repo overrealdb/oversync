@@ -1,11 +1,13 @@
 pub mod handlers;
+pub mod mutations;
+pub mod operations;
 pub mod state;
 pub mod types;
 
 use std::sync::Arc;
 
 use axum::Router;
-use axum::routing::get;
+use axum::routing::{get, post, put};
 use utoipa::OpenApi;
 
 use crate::state::ApiState;
@@ -17,6 +19,17 @@ use crate::state::ApiState;
 		handlers::list_sources,
 		handlers::get_source,
 		handlers::list_sinks,
+		mutations::create_source,
+		mutations::update_source,
+		mutations::delete_source,
+		mutations::create_sink,
+		mutations::update_sink,
+		mutations::delete_sink,
+		operations::trigger_source,
+		operations::pause_sync,
+		operations::resume_sync,
+		operations::get_history,
+		operations::sync_status,
 	),
 	components(schemas(
 		types::HealthResponse,
@@ -29,6 +42,13 @@ use crate::state::ApiState;
 		types::SinkInfo,
 		types::TriggerResponse,
 		types::ErrorResponse,
+		types::CreateSourceRequest,
+		types::UpdateSourceRequest,
+		types::CreateSinkRequest,
+		types::UpdateSinkRequest,
+		types::MutationResponse,
+		types::HistoryResponse,
+		types::StatusResponse,
 	)),
 	info(
 		title = "oversync API",
@@ -40,10 +60,27 @@ pub struct ApiDoc;
 
 pub fn router(state: Arc<ApiState>) -> Router {
 	Router::new()
+		// Read routes
 		.route("/health", get(handlers::health))
-		.route("/sources", get(handlers::list_sources))
-		.route("/sources/{name}", get(handlers::get_source))
-		.route("/sinks", get(handlers::list_sinks))
+		.route("/sources", get(handlers::list_sources).post(mutations::create_source))
+		.route(
+			"/sources/{name}",
+			get(handlers::get_source)
+				.put(mutations::update_source)
+				.delete(mutations::delete_source),
+		)
+		.route("/sources/{name}/trigger", post(operations::trigger_source))
+		.route("/sinks", get(handlers::list_sinks).post(mutations::create_sink))
+		.route(
+			"/sinks/{name}",
+			put(mutations::update_sink).delete(mutations::delete_sink),
+		)
+		// Operations
+		.route("/sync/pause", post(operations::pause_sync))
+		.route("/sync/resume", post(operations::resume_sync))
+		.route("/sync/status", get(operations::sync_status))
+		.route("/history", get(operations::get_history))
+		// OpenAPI
 		.route(
 			"/openapi.json",
 			get(|| async { axum::Json(ApiDoc::openapi()) }),
@@ -64,7 +101,7 @@ mod tests {
 
 	fn test_state() -> Arc<ApiState> {
 		Arc::new(ApiState {
-			sources: vec![SourceConfig {
+			sources: Arc::new(RwLock::new(vec![SourceConfig {
 				name: "pg-prod".into(),
 				connector: "postgres".into(),
 				interval_secs: 300,
@@ -72,12 +109,14 @@ mod tests {
 					id: "users".into(),
 					key_column: "id".into(),
 				}],
-			}],
-			sinks: vec![SinkConfig {
+			}])),
+			sinks: Arc::new(RwLock::new(vec![SinkConfig {
 				name: "stdout".into(),
 				sink_type: "stdout".into(),
-			}],
+			}])),
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
+			db_client: None,
+			lifecycle: None,
 		})
 	}
 
@@ -148,5 +187,16 @@ mod tests {
 		assert!(json["paths"]["/health"].is_object());
 		assert!(json["paths"]["/sources"].is_object());
 		assert!(json["paths"]["/sinks"].is_object());
+		assert!(json["paths"]["/history"].is_object());
+		assert!(json["paths"]["/sync/pause"].is_object());
+		assert!(json["paths"]["/sync/resume"].is_object());
+	}
+
+	#[tokio::test]
+	async fn sync_status_returns_default() {
+		let app = router(test_state());
+		let (status, json) = get_json(&app, "/sync/status").await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(json["running"], false);
 	}
 }

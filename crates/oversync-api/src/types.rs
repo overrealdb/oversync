@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -23,13 +23,13 @@ pub struct QueryInfo {
 	pub key_column: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SourceStatus {
 	pub last_cycle: Option<CycleInfo>,
 	pub total_cycles: u64,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct CycleInfo {
 	pub cycle_id: u64,
 	pub status: String,
@@ -65,4 +65,53 @@ pub struct SourceListResponse {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SinkListResponse {
 	pub sinks: Vec<SinkInfo>,
+}
+
+// ── Mutation request types ──────────────────────────────────
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateSourceRequest {
+	pub name: String,
+	pub connector: String,
+	#[serde(default)]
+	pub config: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateSourceRequest {
+	pub connector: Option<String>,
+	pub config: Option<serde_json::Value>,
+	pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateSinkRequest {
+	pub name: String,
+	pub sink_type: String,
+	#[serde(default)]
+	pub config: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateSinkRequest {
+	pub sink_type: Option<String>,
+	pub config: Option<serde_json::Value>,
+	pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MutationResponse {
+	pub ok: bool,
+	pub message: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HistoryResponse {
+	pub cycles: Vec<CycleInfo>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StatusResponse {
+	pub running: bool,
+	pub paused: bool,
 }

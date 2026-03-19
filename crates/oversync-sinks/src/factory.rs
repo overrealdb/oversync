@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{Sink, SinkFactory};
 
+use crate::http_sink::HttpSink;
+use oversync_core::model::AuthConfig;
 use crate::kafka::KafkaSink;
 use crate::stdout::StdoutSink;
 use crate::surrealdb_sink::SurrealDbSink;
@@ -93,5 +97,73 @@ impl SinkFactory for SurrealDbSinkFactory {
 		Ok(Box::new(
 			SurrealDbSink::new(name, url, namespace, database, table, username, password).await?,
 		))
+	}
+}
+
+pub struct HttpSinkFactory;
+
+#[async_trait]
+impl SinkFactory for HttpSinkFactory {
+	fn sink_type(&self) -> &str {
+		"http"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn Sink>, OversyncError> {
+		let url = config
+			.get("url")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("http sink: missing 'url'".into()))?;
+
+		let method = match config
+			.get("method")
+			.and_then(|v| v.as_str())
+			.unwrap_or("POST")
+			.to_uppercase()
+			.as_str()
+		{
+			"POST" => reqwest::Method::POST,
+			"PUT" => reqwest::Method::PUT,
+			other => {
+				return Err(OversyncError::Config(format!(
+					"http sink: unsupported method '{other}'"
+				)))
+			}
+		};
+
+		let headers: HashMap<String, String> = match config.get("headers") {
+			Some(v) => serde_json::from_value(v.clone())
+				.map_err(|e| OversyncError::Config(format!("http sink headers: {e}")))?,
+			None => HashMap::new(),
+		};
+
+		let auth: Option<AuthConfig> = match config.get("auth") {
+			Some(v) => Some(serde_json::from_value(v.clone())
+				.map_err(|e| OversyncError::Config(format!("http sink auth: {e}")))?),
+			None => None,
+		};
+
+		let timeout_secs = config
+			.get("timeout_secs")
+			.and_then(|v| v.as_u64())
+			.unwrap_or(30);
+
+		let retry_count = config
+			.get("retry_count")
+			.and_then(|v| v.as_u64())
+			.unwrap_or(3) as u32;
+
+		Ok(Box::new(HttpSink::new(
+			name,
+			url,
+			method,
+			headers,
+			auth,
+			timeout_secs,
+			retry_count,
+		)?))
 	}
 }

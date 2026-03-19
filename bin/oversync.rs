@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use clap::Parser;
 use opentelemetry::trace::TracerProvider;
@@ -9,14 +10,14 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use oversync::config::SyncConfig;
+use oversync::lifecycle::LifecycleManager;
 use oversync::registry::PluginRegistry;
-use oversync::scheduler::Scheduler;
 use oversync_connectors::{
-	FlightSqlSourceFactory, HttpSourceFactory, MysqlSourceFactory, PostgresSourceFactory,
-	TrinoSourceFactory,
+	FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory, MysqlSourceFactory,
+	PostgresSourceFactory, TrinoSourceFactory,
 };
 use oversync_delta::DeltaEngine;
-use oversync_sinks::{KafkaSinkFactory, StdoutSinkFactory, SurrealDbSinkFactory};
+use oversync_sinks::{HttpSinkFactory, KafkaSinkFactory, StdoutSinkFactory, SurrealDbSinkFactory};
 
 #[derive(Parser)]
 #[command(
@@ -58,9 +59,11 @@ fn default_registry() -> PluginRegistry {
 	registry.register_source(Box::new(MysqlSourceFactory));
 	registry.register_source(Box::new(FlightSqlSourceFactory));
 	registry.register_source(Box::new(TrinoSourceFactory));
+	registry.register_source(Box::new(GraphqlSourceFactory));
 	registry.register_sink(Box::new(StdoutSinkFactory));
 	registry.register_sink(Box::new(KafkaSinkFactory));
 	registry.register_sink(Box::new(SurrealDbSinkFactory));
+	registry.register_sink(Box::new(HttpSinkFactory));
 	registry
 }
 
@@ -131,40 +134,79 @@ async fn main() -> anyhow::Result<()> {
 			url = %snap_cfg.url,
 			"snapshot DB connected (separate)"
 		);
-		DeltaEngine::new(db, snap_db)
+		DeltaEngine::new(db.clone(), snap_db)
 	} else {
 		let snap_db = surrealdb::engine::any::connect("mem://").await?;
 		apply_schema(&snap_db, "oversync", "snapshot").await?;
 		tracing::info!("snapshot DB: embedded kv-mem");
-		DeltaEngine::new(db, snap_db)
+		DeltaEngine::new(db.clone(), snap_db)
 	};
 
-	let api_state = build_api_state(&config);
-	let scheduler = Scheduler::new(delta_engine, config, default_registry());
+	let lifecycle = Arc::new(LifecycleManager::new(delta_engine, default_registry));
+	let surreal_def = config.surrealdb.clone();
+	let db_for_api = db.clone();
 
-	let shutdown_tx = scheduler.shutdown_tx_clone();
+	// Build ApiState with DB and lifecycle
+	let api_state = build_api_state(&config, Some(db_for_api), Some(lifecycle.clone()), &surreal_def);
+
+	// Start with TOML config, lifecycle will manage scheduler
+	lifecycle.start(config).await?;
+
+	let shutdown_lifecycle = lifecycle.clone();
 	tokio::spawn(async move {
 		tokio::signal::ctrl_c().await.ok();
 		tracing::info!("received ctrl-c, shutting down");
-		let _ = shutdown_tx.send(true);
+		shutdown_lifecycle.shutdown().await;
 	});
 
-	// Start API server in background
+	// Start API server
 	let bind = cli.bind.clone();
-	tokio::spawn(async move {
-		let app = oversync_api::router(api_state);
-		let listener = tokio::net::TcpListener::bind(&bind).await.unwrap();
-		tracing::info!(bind = %bind, "API server started");
-		axum::serve(listener, app).await.unwrap();
-	});
+	let app = oversync_api::router(api_state);
+	let listener = tokio::net::TcpListener::bind(&bind).await?;
+	tracing::info!(bind = %bind, "API server started");
+	axum::serve(listener, app).await?;
 
-	scheduler.run().await?;
 	Ok(())
+}
+
+struct LifecycleAdapter {
+	lifecycle: Arc<LifecycleManager>,
+	surreal_def: oversync::config::SurrealDbDef,
+}
+
+#[async_trait::async_trait]
+impl oversync_api::state::LifecycleControl for LifecycleAdapter {
+	async fn restart_with_config_json(
+		&self,
+		db: &Surreal<Any>,
+	) -> Result<(), oversync_core::error::OversyncError> {
+		let config = oversync::load_config_from_db(db, &self.surreal_def).await?;
+		self.lifecycle.start(config).await
+	}
+
+	async fn pause(&self) {
+		self.lifecycle.pause().await;
+	}
+
+	async fn resume(&self) -> Result<(), oversync_core::error::OversyncError> {
+		self.lifecycle.resume().await
+	}
+
+	async fn is_running(&self) -> bool {
+		self.lifecycle.is_running().await
+	}
+
+	async fn is_paused(&self) -> bool {
+		self.lifecycle.is_paused().await
+	}
 }
 
 fn build_api_state(
 	config: &SyncConfig,
-) -> std::sync::Arc<oversync_api::state::ApiState> {
+	db_client: Option<Surreal<Any>>,
+	lifecycle: Option<Arc<LifecycleManager>>,
+	surreal_def: &oversync::config::SurrealDbDef,
+) -> Arc<oversync_api::state::ApiState> {
 	use oversync_api::state::*;
 
 	let sources = config
@@ -194,11 +236,21 @@ fn build_api_state(
 		})
 		.collect();
 
-	std::sync::Arc::new(ApiState {
-		sources,
-		sinks,
-		cycle_status: std::sync::Arc::new(tokio::sync::RwLock::new(
+	let lifecycle_control: Option<Arc<dyn LifecycleControl>> =
+		lifecycle.map(|lc| -> Arc<dyn LifecycleControl> {
+			Arc::new(LifecycleAdapter {
+				lifecycle: lc,
+				surreal_def: surreal_def.clone(),
+			})
+		});
+
+	Arc::new(ApiState {
+		sources: Arc::new(tokio::sync::RwLock::new(sources)),
+		sinks: Arc::new(tokio::sync::RwLock::new(sinks)),
+		cycle_status: Arc::new(tokio::sync::RwLock::new(
 			std::collections::HashMap::new(),
 		)),
+		db_client,
+		lifecycle: lifecycle_control,
 	})
 }

@@ -4,6 +4,7 @@ use oversync_core::error::OversyncError;
 use oversync_core::traits::{SourceConnector, SourceFactory};
 
 use crate::flight_sql::FlightSqlConnector;
+use crate::graphql::{GraphqlConfig, GraphqlConnector};
 use crate::http_source::{HttpSource, HttpSourceConfig};
 use crate::mysql::MysqlConnector;
 use crate::trino::{TrinoConfig, TrinoConnector};
@@ -113,6 +114,26 @@ impl SourceFactory for TrinoSourceFactory {
 		let trino_config: TrinoConfig = serde_json::from_value(config.clone())
 			.map_err(|e| OversyncError::Config(format!("trino: {e}")))?;
 		let connector = TrinoConnector::new(name, trino_config)?;
+		Ok(Box::new(connector))
+	}
+}
+
+pub struct GraphqlSourceFactory;
+
+#[async_trait]
+impl SourceFactory for GraphqlSourceFactory {
+	fn connector_type(&self) -> &str {
+		"graphql"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+		let gql_config: GraphqlConfig = serde_json::from_value(config.clone())
+			.map_err(|e| OversyncError::Config(format!("graphql: {e}")))?;
+		let connector = GraphqlConnector::new(name, gql_config)?;
 		Ok(Box::new(connector))
 	}
 }

@@ -3,12 +3,27 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::types::{CycleInfo, SinkInfo, SourceInfo, SourceStatus};
+use crate::types::{SinkInfo, SourceInfo, SourceStatus};
 
 pub struct ApiState {
-	pub sources: Vec<SourceConfig>,
-	pub sinks: Vec<SinkConfig>,
+	pub sources: Arc<RwLock<Vec<SourceConfig>>>,
+	pub sinks: Arc<RwLock<Vec<SinkConfig>>>,
 	pub cycle_status: Arc<RwLock<HashMap<String, SourceStatus>>>,
+	pub db_client: Option<surrealdb::Surreal<surrealdb::engine::any::Any>>,
+	pub lifecycle: Option<Arc<dyn LifecycleControl>>,
+}
+
+/// Trait for lifecycle operations so the API crate doesn't depend on the root crate.
+#[async_trait::async_trait]
+pub trait LifecycleControl: Send + Sync {
+	async fn restart_with_config_json(
+		&self,
+		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+	) -> Result<(), oversync_core::error::OversyncError>;
+	async fn pause(&self);
+	async fn resume(&self) -> Result<(), oversync_core::error::OversyncError>;
+	async fn is_running(&self) -> bool;
+	async fn is_paused(&self) -> bool;
 }
 
 pub struct SourceConfig {
@@ -30,7 +45,11 @@ pub struct SinkConfig {
 
 impl ApiState {
 	pub fn sources_info(&self) -> Vec<SourceInfo> {
-		self.sources
+		let sources = match self.sources.try_read() {
+			Ok(s) => s,
+			Err(_) => return vec![],
+		};
+		sources
 			.iter()
 			.map(|s| {
 				let status = self
@@ -62,29 +81,16 @@ impl ApiState {
 	}
 
 	pub fn sinks_info(&self) -> Vec<SinkInfo> {
-		self.sinks
+		let sinks = match self.sinks.try_read() {
+			Ok(s) => s,
+			Err(_) => return vec![],
+		};
+		sinks
 			.iter()
 			.map(|s| SinkInfo {
 				name: s.name.clone(),
 				sink_type: s.sink_type.clone(),
 			})
 			.collect()
-	}
-}
-
-impl Clone for SourceStatus {
-	fn clone(&self) -> Self {
-		Self {
-			last_cycle: self.last_cycle.as_ref().map(|c| CycleInfo {
-				cycle_id: c.cycle_id,
-				status: c.status.clone(),
-				started_at: c.started_at,
-				finished_at: c.finished_at,
-				rows_created: c.rows_created,
-				rows_updated: c.rows_updated,
-				rows_deleted: c.rows_deleted,
-			}),
-			total_cycles: self.total_cycles,
-		}
 	}
 }
