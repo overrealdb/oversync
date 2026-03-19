@@ -4,3 +4,4 @@ pub mod mysql;
 pub mod postgres;
 pub mod surreal;
 pub mod flight_sql;
+pub mod trino;

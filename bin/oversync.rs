@@ -12,7 +12,8 @@ use oversync::config::SyncConfig;
 use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
 use oversync_connectors::{
-	HttpSourceFactory, MysqlSourceFactory, PostgresSourceFactory, FlightSqlSourceFactory,
+	FlightSqlSourceFactory, HttpSourceFactory, MysqlSourceFactory, PostgresSourceFactory,
+	TrinoSourceFactory,
 };
 use oversync_delta::DeltaEngine;
 use oversync_sinks::{KafkaSinkFactory, StdoutSinkFactory, SurrealDbSinkFactory};
@@ -56,6 +57,7 @@ fn default_registry() -> PluginRegistry {
 	registry.register_source(Box::new(HttpSourceFactory));
 	registry.register_source(Box::new(MysqlSourceFactory));
 	registry.register_source(Box::new(FlightSqlSourceFactory));
+	registry.register_source(Box::new(TrinoSourceFactory));
 	registry.register_sink(Box::new(StdoutSinkFactory));
 	registry.register_sink(Box::new(KafkaSinkFactory));
 	registry.register_sink(Box::new(SurrealDbSinkFactory));

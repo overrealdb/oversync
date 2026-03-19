@@ -14,6 +14,7 @@ futures = "0.3"
 reqwest = { workspace = true }
 serde = { workspace = true }
 arrow = { workspace = true }
+base64 = "0.22"
 arrow-flight = { workspace = true }
 serde_json = { workspace = true }
 tonic = "0.14"
