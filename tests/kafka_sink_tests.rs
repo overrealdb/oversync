@@ -8,8 +8,8 @@ use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio_stream::StreamExt;
 
 use oversync_core::model::{EventEnvelope, EventMeta, OpType};
-use oversync_core::traits::Sink;
-use oversync_sinks::KafkaSink;
+use oversync_core::traits::{Sink, SinkFactory};
+use oversync_sinks::{KafkaSink, KafkaSinkFactory};
 
 use common::kafka::TestKafka;
 
@@ -148,7 +148,7 @@ async fn kafka_sink_test_connection() {
 async fn kafka_sink_name() {
 	let kf = TestKafka::new().await;
 	let sink = KafkaSink::new(&kf.broker, "t").unwrap();
-	assert_eq!(sink.name(), "kafka");
+	assert_eq!(sink.name(), "kafka:t");
 }
 
 #[tokio::test]
@@ -181,4 +181,51 @@ async fn kafka_sink_many_events() {
 	}
 
 	assert_eq!(count, 500, "all 500 events consumed");
+}
+
+// ── Factory tests ───────────────────────────────────────────
+
+#[tokio::test]
+async fn kafka_factory_creates_working_sink() {
+	let kf = TestKafka::new().await;
+	let topic = "test_factory";
+
+	let factory = KafkaSinkFactory;
+	assert_eq!(factory.sink_type(), "kafka");
+
+	let config = serde_json::json!({"brokers": kf.broker, "topic": topic});
+	let sink = factory.create("my-kafka", &config).await.unwrap();
+	assert!(sink.name().starts_with("kafka:"));
+
+	sink.send_event(&make_envelope("fac_1", OpType::Created))
+		.await
+		.unwrap();
+
+	let consumer = make_consumer(&kf.broker, topic).await;
+	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
+		.await
+		.expect("timeout")
+		.expect("stream ended")
+		.expect("consume error");
+
+	let received: EventEnvelope = serde_json::from_slice(msg.payload().unwrap()).unwrap();
+	assert_eq!(received.meta.key, "fac_1");
+}
+
+#[tokio::test]
+async fn kafka_factory_missing_brokers_errors() {
+	let factory = KafkaSinkFactory;
+	let config = serde_json::json!({"topic": "t"});
+	let result = factory.create("x", &config).await;
+	let err = result.err().expect("should error");
+	assert!(err.to_string().contains("brokers"));
+}
+
+#[tokio::test]
+async fn kafka_factory_missing_topic_errors() {
+	let factory = KafkaSinkFactory;
+	let config = serde_json::json!({"brokers": "localhost:9092"});
+	let result = factory.create("x", &config).await;
+	let err = result.err().expect("should error");
+	assert!(err.to_string().contains("topic"));
 }

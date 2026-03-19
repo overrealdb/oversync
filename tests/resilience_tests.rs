@@ -137,6 +137,7 @@ fn cycle_config() -> CycleConfig {
 		key_column: "id".into(),
 		fail_safe_threshold: 50.0,
 		diff_mode: oversync::config::DiffMode::Db,
+		transform: None,
 	}
 }
 
@@ -148,7 +149,7 @@ async fn source_down_cycle_fails_gracefully() {
 	let engine = DeltaEngine::single(t.client.clone());
 
 	let connector = FailingConnector::new(999, vec![]);
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let result = runner.run(&cycle_config()).await;
@@ -167,7 +168,7 @@ async fn source_recovers_after_failures() {
 	let engine = DeltaEngine::single(t.client.clone());
 
 	let connector = FailingConnector::new(2, test_rows(3));
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	// First 2 attempts fail
@@ -185,7 +186,7 @@ async fn source_failure_does_not_corrupt_snapshot() {
 
 	// Cycle 1: succeeds with 3 rows
 	let good_connector = FailingConnector::new(0, test_rows(3));
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner = CycleRunner::new(&engine, &good_connector, &sinks);
 	runner.run(&cycle_config()).await.unwrap();
 
@@ -208,7 +209,7 @@ async fn sink_down_events_saved_to_outbox() {
 
 	let connector = FailingConnector::new(0, test_rows(3));
 	let sink = Arc::new(FailingSink::new(999));
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(FailingSink::new(999))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(FailingSink::new(999))];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	// Cycle fails because sink is down
@@ -230,7 +231,7 @@ async fn sink_recovers_pending_events_delivered() {
 
 	// Cycle 1: sink fails → events go to outbox
 	let connector = FailingConnector::new(0, test_rows(3));
-	let sinks_fail: Vec<Box<dyn Sink>> = vec![Box::new(FailingSink::new(999))];
+	let sinks_fail: Vec<Arc<dyn Sink>> = vec![Arc::new(FailingSink::new(999))];
 	let runner1 = CycleRunner::new(&engine, &connector, &sinks_fail);
 	assert!(runner1.run(&cycle_config()).await.is_err());
 
@@ -239,7 +240,7 @@ async fn sink_recovers_pending_events_delivered() {
 
 	// Cycle 2: sink works → pending events delivered first, then new cycle
 	let counting = Arc::new(CountingSink::new());
-	let sinks_ok: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks_ok: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner2 = CycleRunner::new(&engine, &connector, &sinks_ok);
 
 	// This should: 1) deliver pending events, 2) run new cycle
@@ -262,13 +263,13 @@ async fn sink_failure_does_not_delete_stale_rows() {
 
 	// Cycle 1: 5 rows, succeeds
 	let connector1 = FailingConnector::new(0, test_rows(5));
-	let sinks_ok: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks_ok: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner1 = CycleRunner::new(&engine, &connector1, &sinks_ok);
 	runner1.run(&cycle_config()).await.unwrap();
 
 	// Cycle 2: only 3 rows (2 deleted), but sink fails
 	let connector2 = FailingConnector::new(0, test_rows(3));
-	let sinks_fail: Vec<Box<dyn Sink>> = vec![Box::new(FailingSink::new(999))];
+	let sinks_fail: Vec<Arc<dyn Sink>> = vec![Arc::new(FailingSink::new(999))];
 	let runner2 = CycleRunner::new(&engine, &connector2, &sinks_fail);
 	assert!(runner2.run(&cycle_config()).await.is_err());
 
@@ -405,7 +406,7 @@ async fn three_cycles_with_middle_failure() {
 
 	// Cycle 1: 3 rows, succeeds
 	let connector = FailingConnector::new(0, test_rows(3));
-	let sinks_ok: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks_ok: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner = CycleRunner::new(&engine, &connector, &sinks_ok);
 	let d1 = runner.run(&cycle_config()).await.unwrap();
 	assert_eq!(d1.created.len(), 3);
@@ -450,7 +451,7 @@ async fn recovery_after_extended_downtime_with_changes() {
 		},
 	];
 	let conn1 = FailingConnector::new(0, rows1);
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner1 = CycleRunner::new(&engine, &conn1, &sinks);
 	runner1.run(&cycle_config()).await.unwrap();
 
@@ -499,7 +500,7 @@ async fn cycle_log_tracks_failed_status() {
 	let engine = DeltaEngine::single(t.client.clone());
 
 	let connector = FailingConnector::new(999, vec![]);
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	runner.run(&cycle_config()).await.ok();
@@ -520,7 +521,7 @@ async fn empty_source_no_events_no_error() {
 	let engine = DeltaEngine::single(t.client.clone());
 
 	let connector = FailingConnector::new(0, vec![]);
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(CountingSink::new())];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(CountingSink::new())];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let diff = runner.run(&cycle_config()).await.unwrap();

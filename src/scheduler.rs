@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -41,22 +42,24 @@ impl Scheduler {
 	}
 
 	pub async fn run(&self) -> Result<(), OversyncError> {
-		// Create sinks from config (shared across all sources)
-		let sinks = self.create_sinks().await?;
-		let sinks = Arc::new(sinks);
+		let named_sinks = self.create_sinks().await?;
+		let named_sinks = Arc::new(named_sinks);
 		let mut handles = Vec::new();
 
 		for source in &self.config.sources {
 			for query in &source.queries {
+				let query_sinks =
+					resolve_query_sinks(&named_sinks, &query.sinks, &source.name, &query.id)?;
+
 				let engine = self.engine.clone();
 				let registry = self.registry.clone();
 				let source = source.clone();
 				let query = query.clone();
-				let sinks = sinks.clone();
 				let mut shutdown = self.shutdown_rx.clone();
 
 				let handle = tokio::spawn(async move {
-					run_source_query(engine, registry, source, query, sinks, &mut shutdown).await;
+					run_source_query(engine, registry, source, query, query_sinks, &mut shutdown)
+						.await;
 				});
 
 				handles.push(handle);
@@ -73,24 +76,47 @@ impl Scheduler {
 		Ok(())
 	}
 
-	async fn create_sinks(&self) -> Result<Vec<Box<dyn Sink>>, OversyncError> {
-		let mut sinks: Vec<Box<dyn Sink>> = Vec::new();
+	async fn create_sinks(&self) -> Result<HashMap<String, Arc<dyn Sink>>, OversyncError> {
+		let mut sinks = HashMap::new();
 		for sink_def in &self.config.sinks {
 			let sink = self
 				.registry
 				.create_sink(&sink_def.sink_type, &sink_def.name, &sink_def.config)
 				.await?;
-			sinks.push(sink);
+			sinks.insert(sink_def.name.clone(), Arc::from(sink));
 		}
 		// Default to stdout if no sinks configured
 		if sinks.is_empty() {
-			sinks.push(
-				self.registry
-					.create_sink("stdout", "default", &serde_json::json!({}))
-					.await?,
-			);
+			let sink = self
+				.registry
+				.create_sink("stdout", "default", &serde_json::json!({}))
+				.await?;
+			sinks.insert("default".into(), Arc::from(sink));
 		}
 		Ok(sinks)
+	}
+}
+
+pub fn resolve_query_sinks(
+	named_sinks: &HashMap<String, Arc<dyn Sink>>,
+	query_sinks: &Option<Vec<String>>,
+	source_name: &str,
+	query_id: &str,
+) -> Result<Vec<Arc<dyn Sink>>, OversyncError> {
+	match query_sinks {
+		None => Ok(named_sinks.values().cloned().collect()),
+		Some(names) => {
+			let mut resolved = Vec::with_capacity(names.len());
+			for name in names {
+				let sink = named_sinks.get(name).ok_or_else(|| {
+					OversyncError::Config(format!(
+						"source '{source_name}' query '{query_id}': unknown sink '{name}'"
+					))
+				})?;
+				resolved.push(sink.clone());
+			}
+			Ok(resolved)
+		}
 	}
 }
 
@@ -99,10 +125,17 @@ async fn run_source_query(
 	registry: Arc<PluginRegistry>,
 	source: SourceDef,
 	query: QueryDef,
-	sinks: Arc<Vec<Box<dyn Sink>>>,
+	sinks: Vec<Arc<dyn Sink>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let connector_config = serde_json::json!({ "dsn": source.dsn });
+	let connector_config = {
+		let mut map = match &source.config {
+			serde_json::Value::Object(m) => m.clone(),
+			_ => serde_json::Map::new(),
+		};
+		map.insert("dsn".into(), serde_json::Value::String(source.dsn.clone()));
+		serde_json::Value::Object(map)
+	};
 	let connector = match registry
 		.create_source(&source.connector, &source.name, &connector_config)
 		.await
@@ -155,7 +188,7 @@ async fn run_source_query(
 async fn run_with_retry(
 	engine: &DeltaEngine,
 	connector: &dyn SourceConnector,
-	sinks: &[Box<dyn Sink>],
+	sinks: &[Arc<dyn Sink>],
 	source: &SourceDef,
 	query: &QueryDef,
 ) {
@@ -166,6 +199,7 @@ async fn run_with_retry(
 		key_column: query.key_column.clone(),
 		fail_safe_threshold: source.fail_safe_threshold,
 		diff_mode: source.diff_mode.clone(),
+		transform: query.transform.clone(),
 	};
 
 	let runner = CycleRunner::new(engine, connector, sinks);

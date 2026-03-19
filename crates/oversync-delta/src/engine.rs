@@ -531,6 +531,66 @@ impl DeltaEngine {
 			.map_err(|e| OversyncError::SurrealDb(format!("log_cycle_finish: {e}")))?;
 		Ok(())
 	}
+
+	/// Apply a SurrealQL transform function to event envelopes.
+	/// The function receives an array of event objects and returns transformed events.
+	/// Events where the function returns NONE are filtered out.
+	pub async fn apply_transform(
+		&self,
+		fn_name: &str,
+		envelopes: Vec<EventEnvelope>,
+	) -> Result<Vec<EventEnvelope>, OversyncError> {
+		// Validate function name to prevent injection
+		if !fn_name
+			.chars()
+			.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':')
+		{
+			return Err(OversyncError::Config(format!(
+				"invalid transform function name: '{fn_name}'"
+			)));
+		}
+
+		let events_json: Vec<serde_json::Value> = envelopes
+			.iter()
+			.map(|e| serde_json::to_value(e))
+			.collect::<Result<_, _>>()?;
+
+		let sql = format!("RETURN fn::{fn_name}($events)");
+		let mut response = self
+			.state_client
+			.query(&sql)
+			.bind(("events", events_json))
+			.await
+			.map_err(|e| {
+				OversyncError::Internal(format!("transform fn::{fn_name}: {e}"))
+			})?;
+
+		let items: Vec<serde_json::Value> = response
+			.take(0)
+			.map_err(|e| {
+				OversyncError::Internal(format!("transform fn::{fn_name} result: {e}"))
+			})?;
+		let mut transformed = Vec::with_capacity(items.len());
+		for item in items {
+			if item.is_null() {
+				continue;
+			}
+			let envelope: EventEnvelope = serde_json::from_value(item).map_err(|e| {
+				OversyncError::Internal(format!(
+					"transform fn::{fn_name} returned invalid envelope: {e}"
+				))
+			})?;
+			transformed.push(envelope);
+		}
+
+		debug!(
+			fn_name,
+			input = envelopes.len(),
+			output = transformed.len(),
+			"applied transform"
+		);
+		Ok(transformed)
+	}
 }
 
 pub fn check_fail_safe(previous_count: usize, deleted_count: usize, threshold_pct: f64) -> bool {

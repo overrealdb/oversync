@@ -11,6 +11,8 @@ async-trait = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 rdkafka = { workspace = true }
+serde = { workspace = true }
+surrealdb = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

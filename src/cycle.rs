@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use oversync_core::error::OversyncError;
 use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope};
 use oversync_core::traits::{Sink, SourceConnector};
@@ -13,19 +15,20 @@ pub struct CycleConfig {
 	pub key_column: String,
 	pub fail_safe_threshold: f64,
 	pub diff_mode: DiffMode,
+	pub transform: Option<String>,
 }
 
 pub struct CycleRunner<'a> {
 	engine: &'a DeltaEngine,
 	connector: &'a dyn SourceConnector,
-	sinks: &'a [Box<dyn Sink>],
+	sinks: &'a [Arc<dyn Sink>],
 }
 
 impl<'a> CycleRunner<'a> {
 	pub fn new(
 		engine: &'a DeltaEngine,
 		connector: &'a dyn SourceConnector,
-		sinks: &'a [Box<dyn Sink>],
+		sinks: &'a [Arc<dyn Sink>],
 	) -> Self {
 		Self {
 			engine,
@@ -133,14 +136,19 @@ impl<'a> CycleRunner<'a> {
 		}
 
 		if !diff.is_empty() {
-			let all_events: Vec<&DeltaEvent> = diff
+			let mut envelopes: Vec<EventEnvelope> = diff
 				.created
 				.iter()
 				.chain(diff.updated.iter())
 				.chain(diff.deleted.iter())
+				.map(EventEnvelope::from)
 				.collect();
 
-			let delivered = async { self.deliver_paged(config, cycle_id, &all_events).await }
+			if let Some(ref fn_name) = config.transform {
+				envelopes = self.engine.apply_transform(fn_name, envelopes).await?;
+			}
+
+			let delivered = async { self.deliver_paged(config, cycle_id, &envelopes).await }
 				.instrument(tracing::info_span!("deliver", source = %config.source_id))
 				.await?;
 
@@ -315,18 +323,17 @@ impl<'a> CycleRunner<'a> {
 		Ok(total)
 	}
 
-	/// Deliver events in pages of 1000 envelopes. Each page saved to outbox before sending.
+	/// Deliver envelopes in pages of 1000. Each page saved to outbox before sending.
 	async fn deliver_paged(
 		&self,
 		config: &CycleConfig,
 		cycle_id: i64,
-		events: &[&DeltaEvent],
+		envelopes: &[EventEnvelope],
 	) -> Result<bool, OversyncError> {
 		const PAGE: usize = 1000;
 
-		for (i, chunk) in events.chunks(PAGE).enumerate() {
-			let envelopes: Vec<EventEnvelope> =
-				chunk.iter().map(|e| EventEnvelope::from(*e)).collect();
+		for (i, chunk) in envelopes.chunks(PAGE).enumerate() {
+			let envelopes = chunk;
 
 			let page_id = cycle_id * 10000 + i as i64;
 

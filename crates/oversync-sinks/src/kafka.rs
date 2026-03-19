@@ -12,6 +12,7 @@ use oversync_core::traits::Sink;
 pub struct KafkaSink {
 	producer: FutureProducer,
 	topic: String,
+	sink_name: String,
 }
 
 impl KafkaSink {
@@ -25,6 +26,7 @@ impl KafkaSink {
 		Ok(Self {
 			producer,
 			topic: topic.to_string(),
+			sink_name: format!("kafka:{topic}"),
 		})
 	}
 }
@@ -32,7 +34,7 @@ impl KafkaSink {
 #[async_trait]
 impl Sink for KafkaSink {
 	fn name(&self) -> &str {
-		"kafka"
+		&self.sink_name
 	}
 
 	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError> {

@@ -69,6 +69,8 @@ pub struct SourceDef {
 	#[serde(default)]
 	pub diff_mode: DiffMode,
 	#[serde(default)]
+	pub config: serde_json::Value,
+	#[serde(default)]
 	pub queries: Vec<QueryDef>,
 }
 
@@ -109,6 +111,10 @@ pub struct QueryDef {
 	pub id: String,
 	pub sql: String,
 	pub key_column: String,
+	#[serde(default)]
+	pub sinks: Option<Vec<String>>,
+	#[serde(default)]
+	pub transform: Option<String>,
 }
 
 impl SyncConfig {
@@ -279,6 +285,133 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert!(config.sources[0].queries.is_empty());
+	}
+
+	#[test]
+	fn parse_http_source_with_config() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "github-repos"
+connector = "http"
+dsn = "https://api.github.com"
+interval_secs = 3600
+
+[sources.config]
+headers = { "Accept" = "application/vnd.github+json" }
+response_path = "items"
+
+[sources.config.auth]
+type = "bearer"
+token = "ghp_test123"
+
+[sources.config.pagination]
+type = "offset"
+page_size = 100
+limit_param = "per_page"
+offset_param = "page"
+
+[[sources.queries]]
+id = "repos"
+sql = "/orgs/example/repos"
+key_column = "id"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let src = &config.sources[0];
+		assert_eq!(src.name, "github-repos");
+		assert_eq!(src.connector, "http");
+		assert_eq!(src.dsn, "https://api.github.com");
+		assert_eq!(src.interval_secs, 3600);
+
+		let cfg = src.config.as_object().unwrap();
+		assert_eq!(cfg["response_path"], "items");
+		assert_eq!(cfg["auth"]["type"], "bearer");
+		assert_eq!(cfg["auth"]["token"], "ghp_test123");
+		assert_eq!(cfg["pagination"]["type"], "offset");
+		assert_eq!(cfg["pagination"]["page_size"], 100);
+	}
+
+	#[test]
+	fn parse_query_with_sinks() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "pg"
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[sources.queries]]
+id = "q1"
+sql = "SELECT 1 AS id"
+key_column = "id"
+sinks = ["kafka-main", "stdout-debug"]
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let sinks = config.sources[0].queries[0].sinks.as_ref().unwrap();
+		assert_eq!(sinks, &["kafka-main", "stdout-debug"]);
+	}
+
+	#[test]
+	fn parse_query_with_transform() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "pg"
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[sources.queries]]
+id = "q1"
+sql = "SELECT 1 AS id"
+key_column = "id"
+transform = "smt::normalize_users"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert_eq!(
+			config.sources[0].queries[0].transform.as_deref(),
+			Some("smt::normalize_users")
+		);
+	}
+
+	#[test]
+	fn parse_query_without_sinks_is_none() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "pg"
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[sources.queries]]
+id = "q1"
+sql = "SELECT 1 AS id"
+key_column = "id"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert!(config.sources[0].queries[0].sinks.is_none());
+	}
+
+	#[test]
+	fn source_config_defaults_to_null() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "pg"
+connector = "postgres"
+dsn = "postgres://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert!(config.sources[0].config.is_null());
 	}
 
 	#[test]

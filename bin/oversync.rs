@@ -11,9 +11,11 @@ use tracing_subscriber::util::SubscriberInitExt;
 use oversync::config::SyncConfig;
 use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
-use oversync_connectors::PostgresSourceFactory;
+use oversync_connectors::{
+	HttpSourceFactory, MysqlSourceFactory, PostgresSourceFactory, FlightSqlSourceFactory,
+};
 use oversync_delta::DeltaEngine;
-use oversync_sinks::StdoutSinkFactory;
+use oversync_sinks::{KafkaSinkFactory, StdoutSinkFactory, SurrealDbSinkFactory};
 
 #[derive(Parser)]
 #[command(
@@ -51,7 +53,12 @@ async fn apply_schema(db: &Surreal<Any>, ns: &str, db_name: &str) -> anyhow::Res
 fn default_registry() -> PluginRegistry {
 	let mut registry = PluginRegistry::new();
 	registry.register_source(Box::new(PostgresSourceFactory));
+	registry.register_source(Box::new(HttpSourceFactory));
+	registry.register_source(Box::new(MysqlSourceFactory));
+	registry.register_source(Box::new(FlightSqlSourceFactory));
 	registry.register_sink(Box::new(StdoutSinkFactory));
+	registry.register_sink(Box::new(KafkaSinkFactory));
+	registry.register_sink(Box::new(SurrealDbSinkFactory));
 	registry
 }
 

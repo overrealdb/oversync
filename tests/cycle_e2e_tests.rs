@@ -3,6 +3,7 @@ mod common;
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_connectors::PostgresConnector;
 use oversync_core::model::OpType;
+use std::sync::Arc;
 use oversync_core::traits::Sink;
 use oversync_delta::DeltaEngine;
 use oversync_sinks::StdoutSink;
@@ -18,6 +19,7 @@ fn cycle_config(schema: &str) -> CycleConfig {
 		key_column: "id".into(),
 		fail_safe_threshold: 30.0,
 		diff_mode: oversync::config::DiffMode::Db,
+		transform: None,
 	}
 }
 
@@ -36,7 +38,7 @@ async fn e2e_first_cycle_all_created() {
 	let engine = DeltaEngine::single(surreal.client.clone());
 	let connector = PostgresConnector::from_pool("pg-test", pg.pool.clone());
 	let sink = StdoutSink::new(false);
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(StdoutSink::new(false))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(StdoutSink::new(false))];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let config = cycle_config(&pg.schema);
@@ -74,7 +76,7 @@ async fn e2e_second_cycle_detects_changes() {
 
 	let engine = DeltaEngine::single(surreal.client.clone());
 	let connector = PostgresConnector::from_pool("pg-test", pg.pool.clone());
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(StdoutSink::new(false))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(StdoutSink::new(false))];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let config = cycle_config(&pg.schema);
@@ -112,7 +114,7 @@ async fn e2e_no_change_cycle_produces_empty_diff() {
 
 	let engine = DeltaEngine::single(surreal.client.clone());
 	let connector = PostgresConnector::from_pool("pg-test", pg.pool.clone());
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(StdoutSink::new(false))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(StdoutSink::new(false))];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let config = cycle_config(&pg.schema);
@@ -139,7 +141,7 @@ async fn e2e_fail_safe_aborts_on_mass_deletion() {
 
 	let engine = DeltaEngine::single(surreal.client.clone());
 	let connector = PostgresConnector::from_pool("pg-test", pg.pool.clone());
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(StdoutSink::new(false))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(StdoutSink::new(false))];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let config = cycle_config(&pg.schema);
@@ -176,7 +178,7 @@ async fn e2e_sink_receives_all_events() {
 	let engine = DeltaEngine::single(surreal.client.clone());
 	let connector = PostgresConnector::from_pool("pg-test", pg.pool.clone());
 	let sink = StdoutSink::new(false);
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(StdoutSink::new(false))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(StdoutSink::new(false))];
 	let runner = CycleRunner::new(&engine, &connector, &sinks);
 
 	let config = cycle_config(&pg.schema);

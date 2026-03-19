@@ -116,6 +116,7 @@ fn make_config(schema: &str, threshold: f64) -> CycleConfig {
 		key_column: "id".into(),
 		fail_safe_threshold: threshold,
 		diff_mode: oversync::config::DiffMode::Db,
+		transform: None,
 	}
 }
 
@@ -143,7 +144,7 @@ async fn stress_two_tables_join_full_lifecycle() {
 	let sink = Arc::new(VerifySink::new(sink_on.clone()));
 	// Need to share sink between the sinks vec and our reference
 	let sink2 = Arc::new(VerifySink::new(sink_on.clone()));
-	let sinks: Vec<Box<dyn Sink>> = vec![Box::new(VerifySink::new(sink_on.clone()))];
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(VerifySink::new(sink_on.clone()))];
 
 	let config = make_config(s, 30.0);
 

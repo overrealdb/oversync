@@ -19,3 +19,7 @@ path = "schema/links"
 [[modules]]
 name = "plugin"
 path = "schema/plugin"
+
+[[modules]]
+name = "transforms"
+path = "schema/transforms"
