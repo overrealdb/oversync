@@ -1,9 +1,10 @@
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use reqwest::StatusCode;
 use serde::Deserialize;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
 
@@ -176,6 +177,7 @@ impl TrinoClient {
 			query_id: results.id,
 			initial_data: results.data,
 			heartbeat_handle: None,
+			heartbeat_uri_tx: None,
 		})
 	}
 
@@ -196,6 +198,7 @@ pub(crate) struct QueryExecution {
 	query_id: String,
 	initial_data: Option<Vec<Vec<serde_json::Value>>>,
 	heartbeat_handle: Option<JoinHandle<()>>,
+	heartbeat_uri_tx: Option<watch::Sender<String>>,
 }
 
 impl QueryExecution {
@@ -204,40 +207,49 @@ impl QueryExecution {
 		self.initial_data.take()
 	}
 
-	/// Advance to the next page. Returns None when query is finished.
+	/// Advance to the next page. Returns None when query is finished (no more pages).
+	/// Returns Some(vec) with data rows (may be empty for progress-only pages).
 	pub async fn advance(&mut self) -> Result<Option<Vec<Vec<serde_json::Value>>>, OversyncError> {
-		let next = match self.next_uri.take() {
-			Some(uri) => uri,
-			None => return Ok(None),
-		};
+		loop {
+			let next = match self.next_uri.take() {
+				Some(uri) => uri,
+				None => return Ok(None), // query finished
+			};
 
-		// Start or update heartbeat
-		self.update_heartbeat(&next);
+			self.update_heartbeat(&next);
 
-		let resp = self.request_with_retry(&next).await?;
-		let results: QueryResults = resp
-			.json()
-			.await
-			.map_err(|e| OversyncError::Connector(format!("trino page parse: {e}")))?;
+			let resp = self.request_with_retry(&next).await?;
+			let results: QueryResults = resp
+				.json()
+				.await
+				.map_err(|e| OversyncError::Connector(format!("trino page parse: {e}")))?;
 
-		self.next_uri = results.next_uri;
-		if self.columns.is_none() {
-			self.columns = results.columns;
+			self.next_uri = results.next_uri;
+			if self.columns.is_none() {
+				self.columns = results.columns;
+			}
+
+			if let Some(ref err) = results.error {
+				self.cancel_heartbeat();
+				return Err(OversyncError::Connector(format!(
+					"trino query {}: {} ({})",
+					self.query_id, err.message, err.error_name
+				)));
+			}
+
+			if self.next_uri.is_none() {
+				self.cancel_heartbeat();
+			}
+
+			// If this page has data, return it.
+			// If no data but nextUri exists, keep polling (progress-only page).
+			// If no data and no nextUri, query is done — return None.
+			match results.data {
+				Some(data) if !data.is_empty() => return Ok(Some(data)),
+				_ if self.next_uri.is_some() => continue, // progress page, keep polling
+				_ => return Ok(None),                      // done
+			}
 		}
-
-		if let Some(ref err) = results.error {
-			self.cancel_heartbeat();
-			return Err(OversyncError::Connector(format!(
-				"trino query {}: {} ({})",
-				self.query_id, err.message, err.error_name
-			)));
-		}
-
-		if self.next_uri.is_none() {
-			self.cancel_heartbeat();
-		}
-
-		Ok(results.data)
 	}
 
 	pub fn columns(&self) -> &[TrinoColumn] {
@@ -299,13 +311,21 @@ impl QueryExecution {
 	}
 
 	fn update_heartbeat(&mut self, next_uri: &str) {
-		self.cancel_heartbeat();
+		if let Some(ref tx) = self.heartbeat_uri_tx {
+			// Update existing heartbeat with new URI
+			let _ = tx.send(next_uri.to_string());
+			return;
+		}
+
+		// First call — spawn heartbeat task
+		let (tx, mut rx) = watch::channel(next_uri.to_string());
 		let http = self.http.clone();
-		let uri = next_uri.to_string();
+		self.heartbeat_uri_tx = Some(tx);
 		self.heartbeat_handle = Some(tokio::spawn(async move {
 			let mut failures = 0u32;
 			loop {
 				tokio::time::sleep(Duration::from_secs(30)).await;
+				let uri = rx.borrow().clone();
 				match http.head(&uri).send().await {
 					Ok(r) if r.status().is_success() => {
 						failures = 0;
@@ -328,6 +348,7 @@ impl QueryExecution {
 	}
 
 	fn cancel_heartbeat(&mut self) {
+		self.heartbeat_uri_tx.take();
 		if let Some(h) = self.heartbeat_handle.take() {
 			h.abort();
 		}

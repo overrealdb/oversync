@@ -147,12 +147,32 @@ fn navigate_path<'a>(value: &'a serde_json::Value, path: &str) -> &'a serde_json
 
 fn extract_items(body: &serde_json::Value, response_path: &Option<String>) -> Vec<serde_json::Value> {
 	let target = match response_path {
-		Some(path) if !path.is_empty() => navigate_path(body, path),
+		Some(path) if !path.is_empty() => {
+			let resolved = navigate_path(body, path);
+			if resolved.is_null() {
+				tracing::warn!(path, "response_path resolved to null — check config");
+			}
+			resolved
+		}
 		_ => body,
 	};
 	match target.as_array() {
 		Some(arr) => arr.clone(),
-		None => vec![],
+		None => {
+			if !target.is_null() {
+				tracing::warn!(
+					"response is not an array (got {}), returning empty",
+					match target {
+						serde_json::Value::Object(_) => "object",
+						serde_json::Value::String(_) => "string",
+						serde_json::Value::Number(_) => "number",
+						serde_json::Value::Bool(_) => "bool",
+						_ => "unknown",
+					}
+				);
+			}
+			vec![]
+		}
 	}
 }
 

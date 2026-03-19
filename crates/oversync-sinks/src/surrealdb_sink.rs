@@ -8,6 +8,8 @@ use oversync_core::model::EventEnvelope;
 use oversync_core::traits::Sink;
 
 const UPSERT_EVENT_SQL: &str = include_str!("../../../surql/queries/sink/upsert_event.surql");
+const BATCH_UPSERT_EVENTS_SQL: &str =
+	include_str!("../../../surql/queries/sink/batch_upsert_events.surql");
 
 pub struct SurrealDbSink {
 	client: Surreal<Any>,
@@ -81,6 +83,37 @@ impl Sink for SurrealDbSink {
 			.map_err(|e| OversyncError::Sink(format!("surrealdb upsert: {e}")))?;
 
 		debug!(table = %self.table, key = %envelope.meta.key, "upserted event");
+		Ok(())
+	}
+
+	async fn send_batch(&self, envelopes: &[EventEnvelope]) -> Result<(), OversyncError> {
+		if envelopes.is_empty() {
+			return Ok(());
+		}
+
+		let events: Vec<serde_json::Value> = envelopes
+			.iter()
+			.map(|e| {
+				serde_json::json!({
+					"table": self.table,
+					"key": e.meta.key,
+					"data": e.data,
+					"source_id": e.meta.source_id,
+					"query_id": e.meta.query_id,
+					"op": e.meta.op.to_string(),
+					"hash": e.meta.hash,
+					"cycle_id": e.meta.cycle_id,
+				})
+			})
+			.collect();
+
+		self.client
+			.query(BATCH_UPSERT_EVENTS_SQL)
+			.bind(("events", events))
+			.await
+			.map_err(|e| OversyncError::Sink(format!("surrealdb batch upsert: {e}")))?;
+
+		debug!(table = %self.table, count = envelopes.len(), "batch upserted events");
 		Ok(())
 	}
 

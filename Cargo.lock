@@ -3545,6 +3545,7 @@ dependencies = [
  "arrow",
  "arrow-flight",
  "async-trait",
+ "base64 0.22.1",
  "futures",
  "oversync-core",
  "reqwest 0.12.28",
