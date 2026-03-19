@@ -85,6 +85,33 @@ pub trait SinkFactory: Send + Sync {
 	) -> Result<Box<dyn Sink>, OversyncError>;
 }
 
+/// Chain multiple [`TransformHook`]s into a sequential pipeline.
+///
+/// Each hook receives the output of the previous one. If any hook
+/// returns an error, the pipeline short-circuits.
+pub struct TransformPipeline {
+	hooks: Vec<std::sync::Arc<dyn TransformHook>>,
+}
+
+impl TransformPipeline {
+	pub fn new(hooks: Vec<std::sync::Arc<dyn TransformHook>>) -> Self {
+		Self { hooks }
+	}
+}
+
+#[async_trait]
+impl TransformHook for TransformPipeline {
+	async fn transform(
+		&self,
+		mut envelopes: Vec<EventEnvelope>,
+	) -> Result<Vec<EventEnvelope>, OversyncError> {
+		for hook in &self.hooks {
+			envelopes = hook.transform(envelopes).await?;
+		}
+		Ok(envelopes)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -164,5 +191,65 @@ mod tests {
 			"expected Internal variant, got: {err}"
 		);
 		assert!(err.to_string().contains("transform failed"));
+	}
+
+	// ── TransformPipeline tests ──────────────────────────────
+
+	#[tokio::test]
+	async fn pipeline_chains_transforms_in_order() {
+		struct AppendSuffix(&'static str);
+		#[async_trait]
+		impl TransformHook for AppendSuffix {
+			async fn transform(
+				&self,
+				envelopes: Vec<EventEnvelope>,
+			) -> Result<Vec<EventEnvelope>, OversyncError> {
+				Ok(envelopes
+					.into_iter()
+					.map(|mut e| {
+						e.meta.source_id.push_str(self.0);
+						e
+					})
+					.collect())
+			}
+		}
+
+		let pipeline = TransformPipeline::new(vec![
+			std::sync::Arc::new(AppendSuffix("_a")),
+			std::sync::Arc::new(AppendSuffix("_b")),
+		]);
+		let output = pipeline.transform(vec![test_envelope()]).await.unwrap();
+		assert_eq!(output[0].meta.source_id, "s_a_b");
+	}
+
+	#[tokio::test]
+	async fn pipeline_empty_hooks_is_passthrough() {
+		let pipeline = TransformPipeline::new(vec![]);
+		let input = vec![test_envelope()];
+		let output = pipeline.transform(input.clone()).await.unwrap();
+		assert_eq!(output.len(), 1);
+		assert_eq!(output[0].meta.key, input[0].meta.key);
+	}
+
+	#[tokio::test]
+	async fn pipeline_short_circuits_on_error() {
+		struct Fail;
+		#[async_trait]
+		impl TransformHook for Fail {
+			async fn transform(
+				&self,
+				_: Vec<EventEnvelope>,
+			) -> Result<Vec<EventEnvelope>, OversyncError> {
+				Err(OversyncError::Internal("stage 2 failed".into()))
+			}
+		}
+
+		let pipeline = TransformPipeline::new(vec![
+			std::sync::Arc::new(DoubleTransform),
+			std::sync::Arc::new(Fail),
+		]);
+		let result = pipeline.transform(vec![test_envelope()]).await;
+		assert!(result.is_err());
+		assert!(result.unwrap_err().to_string().contains("stage 2"));
 	}
 }

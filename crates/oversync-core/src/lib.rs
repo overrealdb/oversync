@@ -14,4 +14,4 @@ pub use model::{
 	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, OpType, RawRow,
 	compute_diff,
 };
-pub use traits::{Sink, SinkFactory, SourceConnector, SourceFactory, TransformHook};
+pub use traits::{Sink, SinkFactory, SourceConnector, SourceFactory, TransformHook, TransformPipeline};
