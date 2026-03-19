@@ -1,19 +1,25 @@
 //! `oversync` — a lightweight data sync engine: poll, delta, sink.
 //!
-//! # Quick Start
-//!
-//! ```toml
-//! [dependencies]
-//! oversync = "0.1"
-//! ```
+//! # Quick Start (embedded)
 //!
 //! ```rust,no_run
-//! use oversync::{RawRow, DeltaEvent, OpType, SourceConnector, Sink};
+//! use oversync::OversyncEngine;
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let engine = OversyncEngine::builder("mem://")
+//!     .skip_schema(true)
+//!     .build()
+//!     .await?;
+//! engine.start_from_toml(std::path::Path::new("oversync.toml")).await?;
+//! // engine.shutdown().await;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod config;
 pub mod config_db;
 pub mod cycle;
+pub mod engine;
 pub mod lifecycle;
 pub mod registry;
 pub mod scheduler;
@@ -21,6 +27,7 @@ pub mod scheduler;
 pub use config::SyncConfig;
 pub use config_db::load_config_from_db;
 pub use cycle::{CycleConfig, CycleRunner};
+pub use engine::OversyncEngine;
 pub use lifecycle::LifecycleManager;
 pub use oversync_core::*;
 pub use registry::PluginRegistry;

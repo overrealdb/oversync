@@ -13,7 +13,7 @@ use crate::scheduler::Scheduler;
 
 pub struct LifecycleManager {
 	engine: Arc<DeltaEngine>,
-	registry_fn: fn() -> PluginRegistry,
+	registry: PluginRegistry,
 	inner: Arc<Mutex<Inner>>,
 }
 
@@ -25,10 +25,23 @@ struct Inner {
 }
 
 impl LifecycleManager {
-	pub fn new(engine: DeltaEngine, registry_fn: fn() -> PluginRegistry) -> Self {
+	pub fn new(engine: DeltaEngine, registry: PluginRegistry) -> Self {
 		Self {
 			engine: Arc::new(engine),
-			registry_fn,
+			registry,
+			inner: Arc::new(Mutex::new(Inner {
+				shutdown_tx: None,
+				run_handle: None,
+				config: None,
+				paused: false,
+			})),
+		}
+	}
+
+	pub fn from_arc_engine(engine: Arc<DeltaEngine>, registry: PluginRegistry) -> Self {
+		Self {
+			engine,
+			registry,
 			inner: Arc::new(Mutex::new(Inner {
 				shutdown_tx: None,
 				run_handle: None,
@@ -110,7 +123,7 @@ impl LifecycleManager {
 
 	fn spawn_inner(&self, inner: &mut Inner, config: SyncConfig) {
 		let engine = Arc::clone(&self.engine);
-		let registry = (self.registry_fn)();
+		let registry = self.registry.clone();
 		let scheduler = Scheduler::from_arc_engine(engine, config, registry);
 		let shutdown_tx = scheduler.shutdown_tx_clone();
 

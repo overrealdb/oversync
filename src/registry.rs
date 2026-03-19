@@ -1,11 +1,13 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{Sink, SinkFactory, SourceConnector, SourceFactory};
 
+#[derive(Clone)]
 pub struct PluginRegistry {
-	sources: HashMap<String, Box<dyn SourceFactory>>,
-	sinks: HashMap<String, Box<dyn SinkFactory>>,
+	sources: HashMap<String, Arc<dyn SourceFactory>>,
+	sinks: HashMap<String, Arc<dyn SinkFactory>>,
 }
 
 impl PluginRegistry {
@@ -18,11 +20,12 @@ impl PluginRegistry {
 
 	pub fn register_source(&mut self, factory: Box<dyn SourceFactory>) {
 		self.sources
-			.insert(factory.connector_type().to_string(), factory);
+			.insert(factory.connector_type().to_string(), Arc::from(factory));
 	}
 
 	pub fn register_sink(&mut self, factory: Box<dyn SinkFactory>) {
-		self.sinks.insert(factory.sink_type().to_string(), factory);
+		self.sinks
+			.insert(factory.sink_type().to_string(), Arc::from(factory));
 	}
 
 	pub async fn create_source(
@@ -173,5 +176,16 @@ mod tests {
 				.await
 				.is_err()
 		);
+	}
+
+	#[tokio::test]
+	async fn registry_is_cloneable() {
+		let mut r = PluginRegistry::new();
+		r.register_source(Box::new(MockSourceFactory));
+		let r2 = r.clone();
+		let src = r2
+			.create_source("mock", "test", &serde_json::json!({}))
+			.await;
+		assert!(src.is_ok());
 	}
 }

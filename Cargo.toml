@@ -80,16 +80,16 @@ required-features = ["cli"]
 
 [features]
 default = []
+schema = ["dep:overshift"]
+api = ["dep:oversync-api", "dep:axum", "dep:async-trait"]
 cli = [
-	"dep:async-trait",
+	"api",
+	"schema",
 	"dep:clap",
 	"dep:opentelemetry",
 	"dep:opentelemetry_sdk",
 	"dep:opentelemetry-otlp",
 	"dep:tracing-opentelemetry",
-	"dep:overshift",
-	"dep:oversync-api",
-	"dep:axum",
 ]
 validate-docker = []
 
