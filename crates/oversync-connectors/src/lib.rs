@@ -2,6 +2,7 @@
 //!
 //! Each connector implements [`SourceConnector`] to fetch rows from an external source.
 
+pub mod clickhouse;
 pub mod factory;
 pub mod graphql;
 pub mod http_common;
@@ -11,9 +12,10 @@ pub mod postgres;
 pub mod flight_sql;
 pub mod trino;
 
+pub use clickhouse::ClickHouseConnector;
 pub use factory::{
-	FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory, MysqlSourceFactory,
-	PostgresSourceFactory, TrinoSourceFactory,
+	ClickHouseSourceFactory, FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory,
+	MysqlSourceFactory, PostgresSourceFactory, TrinoSourceFactory,
 };
 pub use graphql::GraphqlConnector;
 pub use http_source::HttpSource;

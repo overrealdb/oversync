@@ -7,6 +7,7 @@ use crate::flight_sql::FlightSqlConnector;
 use crate::graphql::{GraphqlConfig, GraphqlConnector};
 use crate::http_source::{HttpSource, HttpSourceConfig};
 use crate::mysql::MysqlConnector;
+use crate::clickhouse::{ClickHouseConfig, ClickHouseConnector};
 use crate::trino::{TrinoConfig, TrinoConnector};
 use crate::PostgresConnector;
 
@@ -114,6 +115,26 @@ impl SourceFactory for TrinoSourceFactory {
 		let trino_config: TrinoConfig = serde_json::from_value(config.clone())
 			.map_err(|e| OversyncError::Config(format!("trino: {e}")))?;
 		let connector = TrinoConnector::new(name, trino_config)?;
+		Ok(Box::new(connector))
+	}
+}
+
+pub struct ClickHouseSourceFactory;
+
+#[async_trait]
+impl SourceFactory for ClickHouseSourceFactory {
+	fn connector_type(&self) -> &str {
+		"clickhouse"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+		let ch_config: ClickHouseConfig = serde_json::from_value(config.clone())
+			.map_err(|e| OversyncError::Config(format!("clickhouse: {e}")))?;
+		let connector = ClickHouseConnector::new(name, ch_config)?;
 		Ok(Box::new(connector))
 	}
 }

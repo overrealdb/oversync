@@ -6,8 +6,8 @@ use surrealdb::engine::any::Any;
 use tracing::info;
 
 use oversync_connectors::{
-	FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory, MysqlSourceFactory,
-	PostgresSourceFactory, TrinoSourceFactory,
+	ClickHouseSourceFactory, FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory,
+	MysqlSourceFactory, PostgresSourceFactory, TrinoSourceFactory,
 };
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{SinkFactory, SourceFactory};
@@ -377,6 +377,7 @@ pub(crate) fn default_registry() -> PluginRegistry {
 	registry.register_source(Box::new(FlightSqlSourceFactory));
 	registry.register_source(Box::new(TrinoSourceFactory));
 	registry.register_source(Box::new(GraphqlSourceFactory));
+	registry.register_source(Box::new(ClickHouseSourceFactory));
 	registry.register_sink(Box::new(StdoutSinkFactory));
 	registry.register_sink(Box::new(KafkaSinkFactory));
 	registry.register_sink(Box::new(SurrealDbSinkFactory));
