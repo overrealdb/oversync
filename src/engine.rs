@@ -97,21 +97,37 @@ impl OversyncEngine {
 	}
 
 	/// Start syncing with the given config. Stops any running scheduler first.
-	pub async fn start(&self, config: SyncConfig) -> Result<(), OversyncError> {
+	/// Resolves credential references in pipe configs before starting.
+	pub async fn start(&self, mut config: SyncConfig) -> Result<(), OversyncError> {
+		self.resolve_credentials(&mut config).await?;
 		self.lifecycle.start(config).await
 	}
 
-	/// Load config from `source_config`/`query_config`/`sink_config` tables in SurrealDB and start.
+	/// Load config from SurrealDB tables and start.
 	pub async fn start_from_db(&self) -> Result<(), OversyncError> {
-		let config = crate::config_db::load_config_from_db(&self.state_client, &self.surreal_def)
-			.await?;
+		let mut config =
+			crate::config_db::load_config_from_db(&self.state_client, &self.surreal_def).await?;
+		self.resolve_credentials(&mut config).await?;
 		self.lifecycle.start(config).await
 	}
 
 	/// Parse a TOML config file and start syncing.
 	pub async fn start_from_toml(&self, path: &Path) -> Result<(), OversyncError> {
-		let config = SyncConfig::from_file(path)?;
+		let mut config = SyncConfig::from_file(path)?;
+		self.resolve_credentials(&mut config).await?;
 		self.lifecycle.start(config).await
+	}
+
+	async fn resolve_credentials(&self, config: &mut SyncConfig) -> Result<(), OversyncError> {
+		let has_credentials = config.pipes.iter().any(|p| p.origin.credential.is_some());
+		if !has_credentials {
+			return Ok(());
+		}
+		let cred_key = std::env::var("OVERSYNC_CREDENTIAL_KEY")
+			.unwrap_or_else(|_| "oversync-dev-key".into());
+		let store = crate::credential::AesGcmStore::from_passphrase(&cred_key);
+		crate::credential::resolve_pipe_credentials(&mut config.pipes, &self.state_client, &store)
+			.await
 	}
 
 	/// Stop all sync tasks and clear config.
