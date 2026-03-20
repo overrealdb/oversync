@@ -47,6 +47,7 @@ fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 			}],
 		}],
 		sinks: vec![],
+		pipes: vec![],
 	}
 }
 
@@ -160,6 +161,7 @@ async fn scheduler_handles_connector_error() {
 			}],
 		}],
 		sinks: vec![],
+		pipes: vec![],
 	};
 
 	let scheduler = Scheduler::new(engine, config, test_registry());
@@ -191,6 +193,7 @@ async fn scheduler_no_sources_exits_immediately() {
 		},
 		sources: vec![],
 		sinks: vec![],
+		pipes: vec![],
 	};
 
 	let scheduler = Scheduler::new(engine, config, test_registry());
@@ -241,6 +244,7 @@ async fn scheduler_detects_data_changes() {
 			}],
 		}],
 		sinks: vec![],
+		pipes: vec![],
 	};
 
 	let scheduler = Scheduler::new(engine, config, test_registry());
@@ -343,6 +347,7 @@ async fn scheduler_multiple_queries() {
 			],
 		}],
 		sinks: vec![],
+		pipes: vec![],
 	};
 
 	let scheduler = Scheduler::new(engine, config, test_registry());
@@ -445,6 +450,7 @@ async fn scheduler_multiple_sources() {
 			},
 		],
 		sinks: vec![],
+		pipes: vec![],
 	};
 
 	let scheduler = Scheduler::new(engine, config, test_registry());

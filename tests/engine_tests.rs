@@ -20,6 +20,7 @@ fn make_config(container: &TestSurrealContainer) -> SyncConfig {
 			sink_type: "stdout".into(),
 			config: serde_json::json!({}),
 		}],
+		pipes: vec![],
 	}
 }
 
@@ -253,6 +254,7 @@ async fn engine_is_cloneable() {
 		},
 		sources: vec![],
 		sinks: vec![],
+		pipes: vec![],
 	};
 
 	engine.start(config).await.unwrap();

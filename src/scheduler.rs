@@ -10,7 +10,7 @@ use oversync_core::error::OversyncError;
 use oversync_core::traits::{Sink, OriginConnector};
 use oversync_delta::DeltaEngine;
 
-use crate::config::{QueryDef, SourceDef, SyncConfig};
+use crate::config::{MissedTickPolicy, PipeConfig, QueryDef, SyncConfig};
 use crate::cycle::{CycleConfig, CycleRunner};
 use crate::registry::PluginRegistry;
 
@@ -55,19 +55,25 @@ impl Scheduler {
 		let named_sinks = Arc::new(named_sinks);
 		let mut handles = Vec::new();
 
-		for source in &self.config.sources {
-			for query in &source.queries {
+		let pipes = self.config.effective_pipes();
+		for pipe in &pipes {
+			if !pipe.enabled {
+				info!(pipe = %pipe.name, "pipe disabled, skipping");
+				continue;
+			}
+
+			for query in &pipe.queries {
 				let query_sinks =
-					resolve_query_sinks(&named_sinks, &query.sinks, &source.name, &query.id)?;
+					resolve_pipe_query_sinks(&named_sinks, pipe, query)?;
 
 				let engine = self.engine.clone();
 				let registry = self.registry.clone();
-				let source = source.clone();
+				let pipe = pipe.clone();
 				let query = query.clone();
 				let mut shutdown = self.shutdown_rx.clone();
 
 				let handle = tokio::spawn(async move {
-					run_source_query(engine, registry, source, query, query_sinks, &mut shutdown)
+					run_pipe_query(engine, registry, pipe, query, query_sinks, &mut shutdown)
 						.await;
 				});
 
@@ -94,7 +100,6 @@ impl Scheduler {
 				.await?;
 			sinks.insert(sink_def.name.clone(), Arc::from(sink));
 		}
-		// Default to stdout if no sinks configured
 		if sinks.is_empty() {
 			let sink = self
 				.registry
@@ -106,20 +111,31 @@ impl Scheduler {
 	}
 }
 
-pub fn resolve_query_sinks(
+/// Resolve sinks for a query within a pipe.
+///
+/// Priority: query-level sinks > pipe-level targets > all named sinks.
+pub fn resolve_pipe_query_sinks(
 	named_sinks: &HashMap<String, Arc<dyn Sink>>,
-	query_sinks: &Option<Vec<String>>,
-	source_name: &str,
-	query_id: &str,
+	pipe: &PipeConfig,
+	query: &QueryDef,
 ) -> Result<Vec<Arc<dyn Sink>>, OversyncError> {
-	match query_sinks {
+	let target_names = if let Some(ref query_sinks) = query.sinks {
+		Some(query_sinks.as_slice())
+	} else if !pipe.targets.is_empty() {
+		Some(pipe.targets.as_slice())
+	} else {
+		None
+	};
+
+	match target_names {
 		None => Ok(named_sinks.values().cloned().collect()),
 		Some(names) => {
 			let mut resolved = Vec::with_capacity(names.len());
 			for name in names {
 				let sink = named_sinks.get(name).ok_or_else(|| {
 					OversyncError::Config(format!(
-						"source '{source_name}' query '{query_id}': unknown sink '{name}'"
+						"pipe '{}' query '{}': unknown sink '{name}'",
+						pipe.name, query.id
 					))
 				})?;
 				resolved.push(sink.clone());
@@ -129,30 +145,30 @@ pub fn resolve_query_sinks(
 	}
 }
 
-async fn run_source_query(
+async fn run_pipe_query(
 	engine: Arc<DeltaEngine>,
 	registry: Arc<PluginRegistry>,
-	source: SourceDef,
+	pipe: PipeConfig,
 	query: QueryDef,
 	sinks: Vec<Arc<dyn Sink>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
 	let connector_config = {
-		let mut map = match &source.config {
+		let mut map = match &pipe.origin.config {
 			serde_json::Value::Object(m) => m.clone(),
 			_ => serde_json::Map::new(),
 		};
-		map.insert("dsn".into(), serde_json::Value::String(source.dsn.clone()));
+		map.insert("dsn".into(), serde_json::Value::String(pipe.origin.dsn.clone()));
 		serde_json::Value::Object(map)
 	};
 	let connector = match registry
-		.create_source(&source.connector, &source.name, &connector_config)
+		.create_source(&pipe.origin.connector, &pipe.name, &connector_config)
 		.await
 	{
 		Ok(c) => c,
 		Err(e) => {
 			error!(
-				source = %source.name,
+				pipe = %pipe.name,
 				error = %e,
 				"failed to create connector, task exiting"
 			);
@@ -160,36 +176,35 @@ async fn run_source_query(
 		}
 	};
 
-	// Per-source delta engine with isolated tables.
-	let source_engine = engine.for_source(&source.name);
-	if let Err(e) = source_engine.ensure_tables().await {
-		error!(source = %source.name, error = %e, "failed to create pipeline tables");
+	let pipe_engine = engine.for_source(&pipe.name);
+	if let Err(e) = pipe_engine.ensure_tables().await {
+		error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
 		return;
 	}
 
-	let source_engine = Arc::new(source_engine);
+	let pipe_engine = Arc::new(pipe_engine);
 
-	let interval = Duration::from_secs(source.interval_secs);
+	let interval = Duration::from_secs(pipe.schedule.interval_secs);
 
 	info!(
-		source = %source.name,
+		pipe = %pipe.name,
 		query = %query.id,
-		interval_secs = source.interval_secs,
-		max_retries = source.max_retries,
-		tables = ?source_engine.tables(),
+		interval_secs = pipe.schedule.interval_secs,
+		max_retries = pipe.retry.max_retries,
+		tables = ?pipe_engine.tables(),
 		"polling task started"
 	);
 
-	run_timed_cycle(&source_engine, connector.as_ref(), &sinks, &source, &query, interval).await;
+	run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
 
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
 
-	match source.missed_tick_policy {
-		crate::config::MissedTickPolicy::Skip => {
+	match pipe.schedule.missed_tick_policy {
+		MissedTickPolicy::Skip => {
 			ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 		}
-		crate::config::MissedTickPolicy::Burst => {
+		MissedTickPolicy::Burst => {
 			ticker.set_missed_tick_behavior(MissedTickBehavior::Burst);
 		}
 	}
@@ -198,16 +213,16 @@ async fn run_source_query(
 		tokio::select! {
 			_ = ticker.tick() => {
 				run_timed_cycle(
-					&source_engine,
+					&pipe_engine,
 					connector.as_ref(),
 					&sinks,
-					&source,
+					&pipe,
 					&query,
 					interval,
 				).await;
 			}
 			_ = shutdown.changed() => {
-				info!(source = %source.name, query = %query.id, "shutting down");
+				info!(pipe = %pipe.name, query = %query.id, "shutting down");
 				break;
 			}
 		}
@@ -218,21 +233,21 @@ async fn run_timed_cycle(
 	engine: &DeltaEngine,
 	connector: &dyn OriginConnector,
 	sinks: &[Arc<dyn Sink>],
-	source: &SourceDef,
+	pipe: &PipeConfig,
 	query: &QueryDef,
 	interval: Duration,
 ) {
 	let start = Instant::now();
-	run_with_retry(engine, connector, sinks, source, query).await;
+	run_with_retry(engine, connector, sinks, pipe, query).await;
 	let elapsed = start.elapsed();
 
 	if elapsed > interval {
 		warn!(
-			source = %source.name,
+			pipe = %pipe.name,
 			query = %query.id,
 			elapsed_secs = elapsed.as_secs(),
 			interval_secs = interval.as_secs(),
-			policy = ?source.missed_tick_policy,
+			policy = ?pipe.schedule.missed_tick_policy,
 			"cycle took longer than polling interval"
 		);
 	}
@@ -242,27 +257,27 @@ async fn run_with_retry(
 	engine: &DeltaEngine,
 	connector: &dyn OriginConnector,
 	sinks: &[Arc<dyn Sink>],
-	source: &SourceDef,
+	pipe: &PipeConfig,
 	query: &QueryDef,
 ) {
 	let cycle_config = CycleConfig {
-		origin_id: source.name.clone(),
+		origin_id: pipe.name.clone(),
 		query_id: query.id.clone(),
 		sql: query.sql.clone(),
 		key_column: query.key_column.clone(),
-		fail_safe_threshold: source.fail_safe_threshold,
-		diff_mode: source.diff_mode.clone(),
+		fail_safe_threshold: pipe.delta.fail_safe_threshold,
+		diff_mode: pipe.delta.diff_mode.clone(),
 		transform: query.transform.clone(),
 	};
 
 	let runner = CycleRunner::new(engine, connector, sinks);
 
-	for attempt in 0..=source.max_retries {
+	for attempt in 0..=pipe.retry.max_retries {
 		match runner.run(&cycle_config).await {
 			Ok(diff) => {
 				if !diff.is_empty() {
 					info!(
-						source = %source.name,
+						pipe = %pipe.name,
 						query = %query.id,
 						created = diff.created.len(),
 						updated = diff.updated.len(),
@@ -273,14 +288,17 @@ async fn run_with_retry(
 				return;
 			}
 			Err(e) => {
-				if attempt < source.max_retries {
-					let delay =
-						Duration::from_secs(source.retry_base_delay_secs * 2u64.pow(attempt));
+				if attempt < pipe.retry.max_retries {
+					let delay = Duration::from_secs(
+						pipe.retry.retry_base_delay_secs.saturating_mul(
+							2u64.saturating_pow(attempt),
+						),
+					);
 					warn!(
-						source = %source.name,
+						pipe = %pipe.name,
 						query = %query.id,
 						attempt = attempt + 1,
-						max_retries = source.max_retries,
+						max_retries = pipe.retry.max_retries,
 						delay_secs = delay.as_secs(),
 						error = %e,
 						"cycle failed, retrying"
@@ -288,9 +306,9 @@ async fn run_with_retry(
 					tokio::time::sleep(delay).await;
 				} else {
 					error!(
-						source = %source.name,
+						pipe = %pipe.name,
 						query = %query.id,
-						attempts = source.max_retries + 1,
+						attempts = pipe.retry.max_retries + 1,
 						error = %e,
 						"cycle failed after all retries"
 					);

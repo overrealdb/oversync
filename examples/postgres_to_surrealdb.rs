@@ -70,6 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				"table": "synced_data",
 			}),
 		}],
+		pipes: vec![],
 	};
 
 	engine.start(config).await?;

@@ -164,6 +164,7 @@ impl OversyncEngine {
 		let api_state = Arc::new(oversync_api::state::ApiState {
 			sources: Arc::new(RwLock::new(vec![])),
 			sinks: Arc::new(RwLock::new(vec![])),
+			pipes: Arc::new(RwLock::new(vec![])),
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: Some(self.state_client.clone()),
 			lifecycle: Some(Arc::new(lifecycle_adapter)),

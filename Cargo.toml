@@ -81,6 +81,10 @@ required-features = ["cli"]
 [[example]]
 name = "embedded"
 
+[[example]]
+name = "http_api"
+required-features = ["api"]
+
 [features]
 default = []
 schema = ["dep:overshift"]

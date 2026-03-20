@@ -77,8 +77,9 @@ async fn routing_subset_of_sinks() {
 }
 
 #[tokio::test]
-async fn routing_resolve_query_sinks_filters() {
+async fn routing_resolve_pipe_query_sinks_filters() {
 	use std::collections::HashMap;
+	use oversync::config::{DeltaDef, DiffMode, OriginDef, PipeConfig, RetryDef, ScheduleDef};
 	use oversync_core::traits::Sink;
 
 	let sink_a = Arc::new(StdoutSink::new(false));
@@ -90,30 +91,52 @@ async fn routing_resolve_query_sinks_filters() {
 	named.insert("beta".into(), sink_b.clone());
 	named.insert("gamma".into(), sink_c.clone());
 
-	// None → all sinks
-	let all = oversync::scheduler::resolve_query_sinks(&named, &None, "src", "q")
-		.map_err(|e| panic!("should resolve all: {e}"))
-		.unwrap();
+	let make_pipe = |targets: Vec<String>| PipeConfig {
+		name: "test-pipe".into(),
+		origin: OriginDef {
+			connector: "postgres".into(),
+			dsn: "postgres://localhost/db".into(),
+			config: serde_json::Value::Null,
+		},
+		targets,
+		queries: vec![],
+		schedule: ScheduleDef::default(),
+		delta: DeltaDef::default(),
+		retry: RetryDef::default(),
+		enabled: true,
+	};
+
+	let make_query = |sinks: Option<Vec<String>>| oversync::config::QueryDef {
+		id: "q".into(),
+		sql: "SELECT 1".into(),
+		key_column: "id".into(),
+		sinks,
+		transform: None,
+	};
+
+	// No pipe targets, no query sinks → all sinks
+	let pipe = make_pipe(vec![]);
+	let query = make_query(None);
+	let all = oversync::scheduler::resolve_pipe_query_sinks(&named, &pipe, &query).unwrap();
 	assert_eq!(all.len(), 3);
 
-	// Some → filtered
-	let filtered = oversync::scheduler::resolve_query_sinks(
-		&named,
-		&Some(vec!["alpha".into(), "gamma".into()]),
-		"src",
-		"q",
-	)
-	.map_err(|e| panic!("should resolve filtered: {e}"))
-	.unwrap();
+	// Pipe targets set, no query sinks → pipe targets
+	let pipe = make_pipe(vec!["alpha".into(), "gamma".into()]);
+	let query = make_query(None);
+	let filtered = oversync::scheduler::resolve_pipe_query_sinks(&named, &pipe, &query).unwrap();
 	assert_eq!(filtered.len(), 2);
 
+	// Query sinks override pipe targets
+	let pipe = make_pipe(vec!["alpha".into(), "beta".into(), "gamma".into()]);
+	let query = make_query(Some(vec!["beta".into()]));
+	let override_sinks =
+		oversync::scheduler::resolve_pipe_query_sinks(&named, &pipe, &query).unwrap();
+	assert_eq!(override_sinks.len(), 1);
+
 	// Unknown sink → error
-	let err = oversync::scheduler::resolve_query_sinks(
-		&named,
-		&Some(vec!["nonexistent".into()]),
-		"src",
-		"q",
-	);
+	let pipe = make_pipe(vec![]);
+	let query = make_query(Some(vec!["nonexistent".into()]));
+	let err = oversync::scheduler::resolve_pipe_query_sinks(&named, &pipe, &query);
 	assert!(err.is_err());
 	let err_msg = err.err().expect("should error").to_string();
 	assert!(err_msg.contains("nonexistent"));

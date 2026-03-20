@@ -146,3 +146,49 @@ pub struct StatusResponse {
 	pub running: bool,
 	pub paused: bool,
 }
+
+// ── Pipe types ──────────────────────────────────────────────
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PipeListResponse {
+	pub pipes: Vec<PipeInfo>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PipeInfo {
+	pub name: String,
+	pub origin_connector: String,
+	pub origin_dsn: String,
+	pub targets: Vec<String>,
+	pub interval_secs: u64,
+	pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreatePipeRequest {
+	pub name: String,
+	pub origin_connector: String,
+	pub origin_dsn: String,
+	#[serde(default)]
+	pub origin_config: serde_json::Value,
+	#[serde(default)]
+	pub targets: Vec<String>,
+	#[serde(default)]
+	pub schedule: serde_json::Value,
+	#[serde(default)]
+	pub delta: serde_json::Value,
+	#[serde(default)]
+	pub retry: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdatePipeRequest {
+	pub origin_connector: Option<String>,
+	pub origin_dsn: Option<String>,
+	pub origin_config: Option<serde_json::Value>,
+	pub targets: Option<Vec<String>>,
+	pub schedule: Option<serde_json::Value>,
+	pub delta: Option<serde_json::Value>,
+	pub retry: Option<serde_json::Value>,
+	pub enabled: Option<bool>,
+}

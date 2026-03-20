@@ -22,6 +22,7 @@ fn make_config(surreal_def: &SurrealDbDef) -> SyncConfig {
 			sink_type: "stdout".into(),
 			config: serde_json::json!({}),
 		}],
+		pipes: vec![],
 	}
 }
 

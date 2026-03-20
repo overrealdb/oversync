@@ -8,6 +8,7 @@ use crate::types::{SinkInfo, SourceInfo, SourceStatus};
 pub struct ApiState {
 	pub sources: Arc<RwLock<Vec<SourceConfig>>>,
 	pub sinks: Arc<RwLock<Vec<SinkConfig>>>,
+	pub pipes: Arc<RwLock<Vec<PipeConfigCache>>>,
 	pub cycle_status: Arc<RwLock<HashMap<String, SourceStatus>>>,
 	pub db_client: Option<surrealdb::Surreal<surrealdb::engine::any::Any>>,
 	pub lifecycle: Option<Arc<dyn LifecycleControl>>,
@@ -42,6 +43,15 @@ pub struct QueryConfig {
 pub struct SinkConfig {
 	pub name: String,
 	pub sink_type: String,
+}
+
+pub struct PipeConfigCache {
+	pub name: String,
+	pub origin_connector: String,
+	pub origin_dsn: String,
+	pub targets: Vec<String>,
+	pub interval_secs: u64,
+	pub enabled: bool,
 }
 
 impl ApiState {
@@ -91,6 +101,24 @@ impl ApiState {
 			.map(|s| SinkInfo {
 				name: s.name.clone(),
 				sink_type: s.sink_type.clone(),
+			})
+			.collect()
+	}
+
+	pub fn pipes_info(&self) -> Vec<crate::types::PipeInfo> {
+		let pipes = match self.pipes.try_read() {
+			Ok(p) => p,
+			Err(_) => return vec![],
+		};
+		pipes
+			.iter()
+			.map(|p| crate::types::PipeInfo {
+				name: p.name.clone(),
+				origin_connector: p.origin_connector.clone(),
+				origin_dsn: p.origin_dsn.clone(),
+				targets: p.targets.clone(),
+				interval_secs: p.interval_secs,
+				enabled: p.enabled,
 			})
 			.collect()
 	}

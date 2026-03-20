@@ -18,6 +18,7 @@ fn test_state_with_db(
 	Arc::new(ApiState {
 		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(client),
 		lifecycle: None,
@@ -29,6 +30,7 @@ fn test_state_no_db() -> Arc<ApiState> {
 	Arc::new(ApiState {
 		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: None,
 		lifecycle: None,
@@ -487,6 +489,7 @@ async fn auth_key_blocks_unauthorized_requests() {
 	let state = Arc::new(ApiState {
 		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(container.client.clone()),
 		lifecycle: None,
@@ -512,6 +515,7 @@ async fn auth_key_allows_authorized_requests() {
 	let state = Arc::new(ApiState {
 		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(container.client.clone()),
 		lifecycle: None,
@@ -541,6 +545,7 @@ async fn auth_key_wrong_key_returns_401() {
 	let state = Arc::new(ApiState {
 		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: None,
 		lifecycle: None,

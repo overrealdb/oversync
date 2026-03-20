@@ -70,6 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			sink_type: "stdout".into(),
 			config: serde_json::json!({"pretty": true}),
 		}],
+		pipes: vec![],
 	};
 
 	engine.start(config).await?;

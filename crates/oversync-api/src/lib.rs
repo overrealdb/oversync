@@ -22,12 +22,17 @@ use crate::state::ApiState;
 		handlers::list_sources,
 		handlers::get_source,
 		handlers::list_sinks,
+		handlers::list_pipes,
+		handlers::get_pipe,
 		mutations::create_source,
 		mutations::update_source,
 		mutations::delete_source,
 		mutations::create_sink,
 		mutations::update_sink,
 		mutations::delete_sink,
+		mutations::create_pipe,
+		mutations::update_pipe,
+		mutations::delete_pipe,
 		operations::trigger_source,
 		operations::pause_sync,
 		operations::resume_sync,
@@ -47,12 +52,16 @@ use crate::state::ApiState;
 		types::CycleInfo,
 		types::SinkListResponse,
 		types::SinkInfo,
+		types::PipeListResponse,
+		types::PipeInfo,
 		types::TriggerResponse,
 		types::ErrorResponse,
 		types::CreateSourceRequest,
 		types::UpdateSourceRequest,
 		types::CreateSinkRequest,
 		types::UpdateSinkRequest,
+		types::CreatePipeRequest,
+		types::UpdatePipeRequest,
 		types::MutationResponse,
 		types::HistoryResponse,
 		types::StatusResponse,
@@ -92,6 +101,13 @@ pub fn router(state: Arc<ApiState>) -> Router {
 		.route(
 			"/sinks/{name}",
 			put(mutations::update_sink).delete(mutations::delete_sink),
+		)
+		.route("/pipes", get(handlers::list_pipes).post(mutations::create_pipe))
+		.route(
+			"/pipes/{name}",
+			get(handlers::get_pipe)
+				.put(mutations::update_pipe)
+				.delete(mutations::delete_pipe),
 		)
 		.route("/sync/pause", post(operations::pause_sync))
 		.route("/sync/resume", post(operations::resume_sync))
@@ -138,6 +154,14 @@ mod tests {
 			sinks: Arc::new(RwLock::new(vec![SinkConfig {
 				name: "stdout".into(),
 				sink_type: "stdout".into(),
+			}])),
+			pipes: Arc::new(RwLock::new(vec![state::PipeConfigCache {
+				name: "catalog-sync".into(),
+				origin_connector: "postgres".into(),
+				origin_dsn: "postgres://ro@pg1:5432/meta".into(),
+				targets: vec!["kafka-main".into()],
+				interval_secs: 60,
+				enabled: true,
 			}])),
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: None,
@@ -213,6 +237,7 @@ mod tests {
 		assert!(json["paths"]["/health"].is_object());
 		assert!(json["paths"]["/sources"].is_object());
 		assert!(json["paths"]["/sinks"].is_object());
+		assert!(json["paths"]["/pipes"].is_object());
 		assert!(json["paths"]["/history"].is_object());
 		assert!(json["paths"]["/sync/pause"].is_object());
 		assert!(json["paths"]["/sync/resume"].is_object());
@@ -224,5 +249,36 @@ mod tests {
 		let (status, json) = get_json(&app, "/sync/status").await;
 		assert_eq!(status, StatusCode::OK);
 		assert_eq!(json["running"], false);
+	}
+
+	#[tokio::test]
+	async fn list_pipes_returns_configured() {
+		let app = router(test_state());
+		let (status, json) = get_json(&app, "/pipes").await;
+		assert_eq!(status, StatusCode::OK);
+		let pipes = json["pipes"].as_array().unwrap();
+		assert_eq!(pipes.len(), 1);
+		assert_eq!(pipes[0]["name"], "catalog-sync");
+		assert_eq!(pipes[0]["origin_connector"], "postgres");
+		assert_eq!(pipes[0]["targets"][0], "kafka-main");
+		assert_eq!(pipes[0]["interval_secs"], 60);
+		assert!(pipes[0]["enabled"].as_bool().unwrap());
+	}
+
+	#[tokio::test]
+	async fn get_pipe_by_name() {
+		let app = router(test_state());
+		let (status, json) = get_json(&app, "/pipes/catalog-sync").await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(json["name"], "catalog-sync");
+		assert_eq!(json["origin_connector"], "postgres");
+	}
+
+	#[tokio::test]
+	async fn get_pipe_not_found() {
+		let app = router(test_state());
+		let (status, json) = get_json(&app, "/pipes/nonexistent").await;
+		assert_eq!(status, StatusCode::OK);
+		assert!(json["error"].as_str().unwrap().contains("not found"));
 	}
 }

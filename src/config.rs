@@ -10,6 +10,8 @@ pub struct SyncConfig {
 	pub sources: Vec<SourceDef>,
 	#[serde(default)]
 	pub sinks: Vec<SinkDef>,
+	#[serde(default)]
+	pub pipes: Vec<PipeConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -118,6 +120,9 @@ fn default_max_retries() -> u32 {
 fn default_retry_delay() -> u64 {
 	5
 }
+fn default_true() -> bool {
+	true
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueryDef {
@@ -130,6 +135,119 @@ pub struct QueryDef {
 	pub transform: Option<String>,
 }
 
+/// A pipe is a complete data pipeline: origin → delta → transform → targets.
+///
+/// Replaces the flat `SourceDef` with structured sub-configs for origin,
+/// schedule, delta, and retry. Targets are references to named sinks.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PipeConfig {
+	pub name: String,
+	pub origin: OriginDef,
+	#[serde(default)]
+	pub targets: Vec<String>,
+	#[serde(default)]
+	pub queries: Vec<QueryDef>,
+	#[serde(default)]
+	pub schedule: ScheduleDef,
+	#[serde(default)]
+	pub delta: DeltaDef,
+	#[serde(default)]
+	pub retry: RetryDef,
+	#[serde(default = "default_true")]
+	pub enabled: bool,
+}
+
+/// Origin connector configuration within a pipe.
+#[derive(Debug, Clone, Deserialize)]
+pub struct OriginDef {
+	pub connector: String,
+	pub dsn: String,
+	#[serde(default)]
+	pub config: serde_json::Value,
+}
+
+/// Polling schedule for a pipe.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ScheduleDef {
+	#[serde(default = "default_interval")]
+	pub interval_secs: u64,
+	#[serde(default)]
+	pub missed_tick_policy: MissedTickPolicy,
+}
+
+impl Default for ScheduleDef {
+	fn default() -> Self {
+		Self {
+			interval_secs: default_interval(),
+			missed_tick_policy: MissedTickPolicy::default(),
+		}
+	}
+}
+
+/// Delta detection settings for a pipe.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeltaDef {
+	#[serde(default)]
+	pub diff_mode: DiffMode,
+	#[serde(default = "default_threshold")]
+	pub fail_safe_threshold: f64,
+}
+
+impl Default for DeltaDef {
+	fn default() -> Self {
+		Self {
+			diff_mode: DiffMode::default(),
+			fail_safe_threshold: default_threshold(),
+		}
+	}
+}
+
+/// Retry policy for failed cycles.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RetryDef {
+	#[serde(default = "default_max_retries")]
+	pub max_retries: u32,
+	#[serde(default = "default_retry_delay")]
+	pub retry_base_delay_secs: u64,
+}
+
+impl Default for RetryDef {
+	fn default() -> Self {
+		Self {
+			max_retries: default_max_retries(),
+			retry_base_delay_secs: default_retry_delay(),
+		}
+	}
+}
+
+impl From<&SourceDef> for PipeConfig {
+	fn from(src: &SourceDef) -> Self {
+		Self {
+			name: src.name.clone(),
+			origin: OriginDef {
+				connector: src.connector.clone(),
+				dsn: src.dsn.clone(),
+				config: src.config.clone(),
+			},
+			targets: vec![],
+			queries: src.queries.clone(),
+			schedule: ScheduleDef {
+				interval_secs: src.interval_secs,
+				missed_tick_policy: src.missed_tick_policy.clone(),
+			},
+			delta: DeltaDef {
+				diff_mode: src.diff_mode.clone(),
+				fail_safe_threshold: src.fail_safe_threshold,
+			},
+			retry: RetryDef {
+				max_retries: src.max_retries,
+				retry_base_delay_secs: src.retry_base_delay_secs,
+			},
+			enabled: true,
+		}
+	}
+}
+
 impl SyncConfig {
 	pub fn from_file(path: &Path) -> Result<Self, OversyncError> {
 		let content = std::fs::read_to_string(path)
@@ -139,6 +257,31 @@ impl SyncConfig {
 
 	pub fn from_str(toml_str: &str) -> Result<Self, OversyncError> {
 		toml::from_str(toml_str).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
+	}
+
+	/// Returns all pipes: explicit `[[pipes]]` entries plus auto-converted `[[sources]]`.
+	///
+	/// Legacy `[[sources]]` are converted to `PipeConfig` for backward compatibility.
+	/// When both `pipes` and `sources` define the same name, explicit pipes take precedence.
+	/// Duplicate names within `[[pipes]]` are deduplicated (last wins).
+	pub fn effective_pipes(&self) -> Vec<PipeConfig> {
+		let mut seen = std::collections::HashSet::new();
+		let mut pipes: Vec<PipeConfig> = Vec::new();
+
+		// Process in reverse so last definition wins, then reverse back.
+		for pipe in self.pipes.iter().rev() {
+			if seen.insert(pipe.name.clone()) {
+				pipes.push(pipe.clone());
+			}
+		}
+		pipes.reverse();
+
+		for source in &self.sources {
+			if seen.insert(source.name.clone()) {
+				pipes.push(PipeConfig::from(source));
+			}
+		}
+		pipes
 	}
 }
 
@@ -476,5 +619,311 @@ database = "snap_db"
 		assert_eq!(snap.password, "snap_pass");
 		assert_eq!(snap.namespace, "snap_ns");
 		assert_eq!(snap.database, "snap_db");
+	}
+
+	// ── PipeConfig tests ──────────────────────────────────────────
+
+	#[test]
+	fn parse_minimal_pipe() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "catalog-sync"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://ro@pg1:5432/meta"
+
+[[pipes.queries]]
+id = "tables"
+sql = "SELECT oid::text, relname FROM pg_class"
+key_column = "oid"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert_eq!(config.pipes.len(), 1);
+		let pipe = &config.pipes[0];
+		assert_eq!(pipe.name, "catalog-sync");
+		assert_eq!(pipe.origin.connector, "postgres");
+		assert_eq!(pipe.origin.dsn, "postgres://ro@pg1:5432/meta");
+		assert_eq!(pipe.queries.len(), 1);
+		assert_eq!(pipe.queries[0].id, "tables");
+		assert!(pipe.enabled);
+	}
+
+	#[test]
+	fn pipe_defaults() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipe = &config.pipes[0];
+		assert_eq!(pipe.schedule.interval_secs, 300);
+		assert_eq!(pipe.delta.fail_safe_threshold, 30.0);
+		assert_eq!(pipe.retry.max_retries, 3);
+		assert_eq!(pipe.retry.retry_base_delay_secs, 5);
+		assert!(pipe.targets.is_empty());
+		assert!(pipe.queries.is_empty());
+		assert!(pipe.enabled);
+	}
+
+	#[test]
+	fn parse_full_pipe() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "full-pipe"
+targets = ["kafka-main", "stdout-debug"]
+enabled = true
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://ro@pg1:5432/meta"
+
+[pipes.origin.config]
+ssl_mode = "require"
+
+[pipes.schedule]
+interval_secs = 60
+missed_tick_policy = "burst"
+
+[pipes.delta]
+diff_mode = "memory"
+fail_safe_threshold = 25.0
+
+[pipes.retry]
+max_retries = 5
+retry_base_delay_secs = 10
+
+[[pipes.queries]]
+id = "tables"
+sql = "SELECT 1 AS id"
+key_column = "id"
+transform = "smt::normalize"
+
+[[pipes.queries]]
+id = "columns"
+sql = "SELECT 2 AS id"
+key_column = "id"
+sinks = ["kafka-main"]
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipe = &config.pipes[0];
+		assert_eq!(pipe.name, "full-pipe");
+		assert_eq!(pipe.targets, vec!["kafka-main", "stdout-debug"]);
+		assert_eq!(pipe.origin.connector, "postgres");
+		assert_eq!(pipe.origin.config["ssl_mode"], "require");
+		assert_eq!(pipe.schedule.interval_secs, 60);
+		assert!(matches!(pipe.schedule.missed_tick_policy, MissedTickPolicy::Burst));
+		assert!(matches!(pipe.delta.diff_mode, DiffMode::Memory));
+		assert_eq!(pipe.delta.fail_safe_threshold, 25.0);
+		assert_eq!(pipe.retry.max_retries, 5);
+		assert_eq!(pipe.retry.retry_base_delay_secs, 10);
+		assert_eq!(pipe.queries.len(), 2);
+		assert_eq!(pipe.queries[0].transform.as_deref(), Some("smt::normalize"));
+		assert_eq!(pipe.queries[1].sinks.as_deref(), Some(["kafka-main".to_string()].as_slice()));
+	}
+
+	#[test]
+	fn parse_multiple_pipes() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "pipe-a"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://a/db"
+
+[[pipes]]
+name = "pipe-b"
+
+[pipes.origin]
+connector = "mysql"
+dsn = "mysql://b/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert_eq!(config.pipes.len(), 2);
+		assert_eq!(config.pipes[0].name, "pipe-a");
+		assert_eq!(config.pipes[0].origin.connector, "postgres");
+		assert_eq!(config.pipes[1].name, "pipe-b");
+		assert_eq!(config.pipes[1].origin.connector, "mysql");
+	}
+
+	#[test]
+	fn effective_pipes_from_sources() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "pg"
+connector = "postgres"
+dsn = "postgres://localhost/db"
+interval_secs = 120
+fail_safe_threshold = 20.0
+
+[[sources.queries]]
+id = "q1"
+sql = "SELECT 1 AS id"
+key_column = "id"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert!(config.pipes.is_empty());
+		let pipes = config.effective_pipes();
+		assert_eq!(pipes.len(), 1);
+		let pipe = &pipes[0];
+		assert_eq!(pipe.name, "pg");
+		assert_eq!(pipe.origin.connector, "postgres");
+		assert_eq!(pipe.origin.dsn, "postgres://localhost/db");
+		assert_eq!(pipe.schedule.interval_secs, 120);
+		assert_eq!(pipe.delta.fail_safe_threshold, 20.0);
+		assert_eq!(pipe.queries.len(), 1);
+	}
+
+	#[test]
+	fn effective_pipes_merges_both() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "legacy-src"
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[pipes]]
+name = "new-pipe"
+
+[pipes.origin]
+connector = "mysql"
+dsn = "mysql://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipes = config.effective_pipes();
+		assert_eq!(pipes.len(), 2);
+		let names: Vec<&str> = pipes.iter().map(|p| p.name.as_str()).collect();
+		assert!(names.contains(&"new-pipe"));
+		assert!(names.contains(&"legacy-src"));
+	}
+
+	#[test]
+	fn effective_pipes_explicit_takes_precedence() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sources]]
+name = "same-name"
+connector = "postgres"
+dsn = "postgres://old"
+
+[[pipes]]
+name = "same-name"
+
+[pipes.origin]
+connector = "mysql"
+dsn = "mysql://new"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipes = config.effective_pipes();
+		assert_eq!(pipes.len(), 1);
+		assert_eq!(pipes[0].origin.connector, "mysql");
+		assert_eq!(pipes[0].origin.dsn, "mysql://new");
+	}
+
+	#[test]
+	fn source_def_converts_to_pipe() {
+		let src = SourceDef {
+			name: "pg".into(),
+			connector: "postgres".into(),
+			dsn: "postgres://localhost/db".into(),
+			interval_secs: 120,
+			fail_safe_threshold: 20.0,
+			max_retries: 5,
+			retry_base_delay_secs: 10,
+			diff_mode: DiffMode::Memory,
+			missed_tick_policy: MissedTickPolicy::Burst,
+			config: serde_json::json!({"ssl": true}),
+			queries: vec![QueryDef {
+				id: "q1".into(),
+				sql: "SELECT 1".into(),
+				key_column: "id".into(),
+				sinks: Some(vec!["kafka".into()]),
+				transform: Some("smt::x".into()),
+			}],
+		};
+		let pipe = PipeConfig::from(&src);
+		assert_eq!(pipe.name, "pg");
+		assert_eq!(pipe.origin.connector, "postgres");
+		assert_eq!(pipe.origin.dsn, "postgres://localhost/db");
+		assert_eq!(pipe.origin.config["ssl"], true);
+		assert_eq!(pipe.schedule.interval_secs, 120);
+		assert!(matches!(pipe.schedule.missed_tick_policy, MissedTickPolicy::Burst));
+		assert!(matches!(pipe.delta.diff_mode, DiffMode::Memory));
+		assert_eq!(pipe.delta.fail_safe_threshold, 20.0);
+		assert_eq!(pipe.retry.max_retries, 5);
+		assert_eq!(pipe.retry.retry_base_delay_secs, 10);
+		assert_eq!(pipe.queries.len(), 1);
+		assert_eq!(pipe.queries[0].sinks.as_deref(), Some(&["kafka".to_string()][..]));
+		assert!(pipe.targets.is_empty());
+		assert!(pipe.enabled);
+	}
+
+	#[test]
+	fn effective_pipes_deduplicates_within_pipes() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "dup"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://first"
+
+[[pipes]]
+name = "dup"
+
+[pipes.origin]
+connector = "mysql"
+dsn = "mysql://second"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipes = config.effective_pipes();
+		assert_eq!(pipes.len(), 1);
+		assert_eq!(pipes[0].origin.connector, "mysql");
+	}
+
+	#[test]
+	fn pipe_disabled() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "disabled-pipe"
+enabled = false
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert!(!config.pipes[0].enabled);
 	}
 }

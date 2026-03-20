@@ -13,16 +13,16 @@ use oversync_core::model::DeltaResult;
 use oversync_core::traits::{Sink, TargetFactory, OriginFactory, TransformHook};
 use oversync_delta::DeltaEngine;
 
-use crate::config::SourceDef;
+use crate::config::{MissedTickPolicy, PipeConfig, SourceDef};
 use crate::cycle::{CycleConfig, CycleRunner};
 use crate::registry::PluginRegistry;
 
-fn build_connector_config(source: &SourceDef) -> serde_json::Value {
-	let mut map = match &source.config {
+fn build_connector_config(pipe: &PipeConfig) -> serde_json::Value {
+	let mut map = match &pipe.origin.config {
 		serde_json::Value::Object(m) => m.clone(),
 		_ => serde_json::Map::new(),
 	};
-	map.insert("dsn".into(), serde_json::Value::String(source.dsn.clone()));
+	map.insert("dsn".into(), serde_json::Value::String(pipe.origin.dsn.clone()));
 	serde_json::Value::Object(map)
 }
 
@@ -30,7 +30,7 @@ pub struct EmbeddedSyncBuilder {
 	state_db: Option<Surreal<Any>>,
 	snapshot_db: Option<Surreal<Any>>,
 	skip_schema: bool,
-	sources: Vec<SourceDef>,
+	pipes: Vec<PipeConfig>,
 	sinks: HashMap<String, Arc<dyn Sink>>,
 	transform_hooks: HashMap<String, Arc<dyn TransformHook>>,
 	extra_sources: Vec<Box<dyn OriginFactory>>,
@@ -39,11 +39,10 @@ pub struct EmbeddedSyncBuilder {
 
 pub struct EmbeddedSync {
 	delta_engine: Arc<DeltaEngine>,
-	sources: Vec<SourceDef>,
+	pipes: Vec<PipeConfig>,
 	sinks: HashMap<String, Arc<dyn Sink>>,
 	transform_hooks: HashMap<String, Arc<dyn TransformHook>>,
 	registry: PluginRegistry,
-	/// Separate from the mutex so `shutdown()` never blocks on `start()`.
 	shutdown_tx: std::sync::Mutex<Option<watch::Sender<bool>>>,
 	handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -51,7 +50,7 @@ pub struct EmbeddedSync {
 impl std::fmt::Debug for EmbeddedSync {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("EmbeddedSync")
-			.field("sources", &self.sources.len())
+			.field("pipes", &self.pipes.len())
 			.field("sinks", &self.sinks.len())
 			.field("transform_hooks", &self.transform_hooks.len())
 			.finish()
@@ -64,7 +63,7 @@ impl EmbeddedSync {
 			state_db: None,
 			snapshot_db: None,
 			skip_schema: false,
-			sources: vec![],
+			pipes: vec![],
 			sinks: HashMap::new(),
 			transform_hooks: HashMap::new(),
 			extra_sources: vec![],
@@ -72,51 +71,51 @@ impl EmbeddedSync {
 		}
 	}
 
-	/// Run one sync cycle for the given source and query. Returns the delta.
+	/// Run one sync cycle for the given pipe and query. Returns the delta.
 	pub async fn run_once(
 		&self,
-		source_name: &str,
+		pipe_name: &str,
 		query_id: &str,
 	) -> Result<DeltaResult, OversyncError> {
-		let source = self
-			.sources
+		let pipe = self
+			.pipes
 			.iter()
-			.find(|s| s.name == source_name)
+			.find(|p| p.name == pipe_name)
 			.ok_or_else(|| {
-				OversyncError::Config(format!("unknown source '{source_name}'"))
+				OversyncError::Config(format!("unknown pipe '{pipe_name}'"))
 			})?;
 
-		let query = source
+		let query = pipe
 			.queries
 			.iter()
 			.find(|q| q.id == query_id)
 			.ok_or_else(|| {
 				OversyncError::Config(format!(
-					"source '{source_name}': unknown query '{query_id}'"
+					"pipe '{pipe_name}': unknown query '{query_id}'"
 				))
 			})?;
 
 		let connector = self
 			.registry
-			.create_source(&source.connector, &source.name, &build_connector_config(source))
+			.create_source(&pipe.origin.connector, &pipe.name, &build_connector_config(pipe))
 			.await?;
 
-		let query_sinks = self.resolve_sinks(&query.sinks)?;
+		let query_sinks = self.resolve_sinks(pipe, &query.sinks)?;
 
 		let cycle_config = CycleConfig {
-			origin_id: source.name.clone(),
+			origin_id: pipe.name.clone(),
 			query_id: query.id.clone(),
 			sql: query.sql.clone(),
 			key_column: query.key_column.clone(),
-			fail_safe_threshold: source.fail_safe_threshold,
-			diff_mode: source.diff_mode.clone(),
+			fail_safe_threshold: pipe.delta.fail_safe_threshold,
+			diff_mode: pipe.delta.diff_mode.clone(),
 			transform: query.transform.clone(),
 		};
 
-		let source_engine = self.delta_engine.for_source(source_name);
-		source_engine.ensure_tables().await?;
+		let pipe_engine = self.delta_engine.for_source(pipe_name);
+		pipe_engine.ensure_tables().await?;
 		let mut runner =
-			CycleRunner::new(&source_engine, connector.as_ref(), &query_sinks);
+			CycleRunner::new(&pipe_engine, connector.as_ref(), &query_sinks);
 
 		if let Some(ref transform_name) = query.transform {
 			if let Some(hook) = self.transform_hooks.get(transform_name) {
@@ -127,7 +126,7 @@ impl EmbeddedSync {
 		runner.run(&cycle_config).await
 	}
 
-	/// Start scheduled polling for all sources. Non-blocking — spawns background tasks.
+	/// Start scheduled polling for all pipes. Non-blocking — spawns background tasks.
 	pub async fn start(&self) -> Result<(), OversyncError> {
 		{
 			let guard = self.shutdown_tx.lock().unwrap();
@@ -138,13 +137,13 @@ impl EmbeddedSync {
 
 		let (shutdown_tx, shutdown_rx) = watch::channel(false);
 		let engine = Arc::clone(&self.delta_engine);
-		let sources = self.sources.clone();
+		let pipes = self.pipes.clone();
 		let sinks = self.sinks.clone();
 		let transform_hooks = self.transform_hooks.clone();
 		let registry = self.registry.clone();
 
 		let handle = tokio::spawn(async move {
-			run_all_sources(engine, registry, sources, sinks, transform_hooks, shutdown_rx)
+			run_all_pipes(engine, registry, pipes, sinks, transform_hooks, shutdown_rx)
 				.await;
 		});
 
@@ -153,7 +152,6 @@ impl EmbeddedSync {
 		Ok(())
 	}
 
-	/// Signal all polling tasks to stop. Never blocks.
 	pub fn shutdown(&self) {
 		if let Some(tx) = self.shutdown_tx.lock().unwrap().take() {
 			let _ = tx.send(true);
@@ -162,9 +160,16 @@ impl EmbeddedSync {
 
 	fn resolve_sinks(
 		&self,
+		pipe: &PipeConfig,
 		query_sinks: &Option<Vec<String>>,
 	) -> Result<Vec<Arc<dyn Sink>>, OversyncError> {
-		match query_sinks {
+		let target_names: Option<&[String]> = match query_sinks {
+			Some(qs) => Some(qs.as_slice()),
+			None if !pipe.targets.is_empty() => Some(pipe.targets.as_slice()),
+			None => None,
+		};
+
+		match target_names {
 			None => Ok(self.sinks.values().cloned().collect()),
 			Some(names) => {
 				let mut resolved = Vec::with_capacity(names.len());
@@ -196,8 +201,15 @@ impl EmbeddedSyncBuilder {
 		self
 	}
 
+	/// Add a pipe to the embedded sync engine.
+	pub fn add_pipe(mut self, pipe: PipeConfig) -> Self {
+		self.pipes.push(pipe);
+		self
+	}
+
+	/// Add a legacy source definition. Internally converted to PipeConfig.
 	pub fn add_source(mut self, def: SourceDef) -> Self {
-		self.sources.push(def);
+		self.pipes.push(PipeConfig::from(&def));
 		self
 	}
 
@@ -258,7 +270,7 @@ impl EmbeddedSyncBuilder {
 
 		Ok(EmbeddedSync {
 			delta_engine,
-			sources: self.sources,
+			pipes: self.pipes,
 			sinks: self.sinks,
 			transform_hooks: self.transform_hooks,
 			registry,
@@ -268,10 +280,10 @@ impl EmbeddedSyncBuilder {
 	}
 }
 
-async fn run_all_sources(
+async fn run_all_pipes(
 	engine: Arc<DeltaEngine>,
 	registry: PluginRegistry,
-	sources: Vec<SourceDef>,
+	pipes: Vec<PipeConfig>,
 	sinks: HashMap<String, Arc<dyn Sink>>,
 	transform_hooks: HashMap<String, Arc<dyn TransformHook>>,
 	shutdown_rx: watch::Receiver<bool>,
@@ -281,21 +293,26 @@ async fn run_all_sources(
 	let transform_hooks = Arc::new(transform_hooks);
 	let mut handles = Vec::new();
 
-	for source in &sources {
-		for query in &source.queries {
+	for pipe in &pipes {
+		if !pipe.enabled {
+			info!(pipe = %pipe.name, "pipe disabled, skipping");
+			continue;
+		}
+
+		for query in &pipe.queries {
 			let engine = Arc::clone(&engine);
 			let registry = Arc::clone(&registry);
 			let sinks = Arc::clone(&sinks);
 			let transform_hooks = Arc::clone(&transform_hooks);
-			let source = source.clone();
+			let pipe = pipe.clone();
 			let query = query.clone();
 			let mut shutdown = shutdown_rx.clone();
 
 			let handle = tokio::spawn(async move {
-				run_embedded_query(
+				run_embedded_pipe_query(
 					engine,
 					registry,
-					source,
+					pipe,
 					query,
 					sinks,
 					transform_hooks,
@@ -315,64 +332,74 @@ async fn run_all_sources(
 	info!("embedded sync stopped");
 }
 
-async fn run_embedded_query(
+async fn run_embedded_pipe_query(
 	engine: Arc<DeltaEngine>,
 	registry: Arc<PluginRegistry>,
-	source: SourceDef,
+	pipe: PipeConfig,
 	query: crate::config::QueryDef,
 	sinks: Arc<HashMap<String, Arc<dyn Sink>>>,
 	transform_hooks: Arc<HashMap<String, Arc<dyn TransformHook>>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
 	let connector = match registry
-		.create_source(&source.connector, &source.name, &build_connector_config(&source))
+		.create_source(&pipe.origin.connector, &pipe.name, &build_connector_config(&pipe))
 		.await
 	{
 		Ok(c) => c,
 		Err(e) => {
-			error!(source = %source.name, error = %e, "failed to create connector");
+			error!(pipe = %pipe.name, error = %e, "failed to create connector");
 			return;
 		}
 	};
 
-	let query_sinks: Vec<Arc<dyn Sink>> = match &query.sinks {
-		None => sinks.values().cloned().collect(),
-		Some(names) => {
-			let mut resolved = Vec::new();
-			for name in names {
-				match sinks.get(name) {
-					Some(s) => resolved.push(s.clone()),
-					None => {
-						error!(sink = %name, "unknown sink in query config");
-						return;
+	let query_sinks: Vec<Arc<dyn Sink>> = {
+		let target_names = if let Some(ref qs) = query.sinks {
+			Some(qs.as_slice())
+		} else if !pipe.targets.is_empty() {
+			Some(pipe.targets.as_slice())
+		} else {
+			None
+		};
+
+		match target_names {
+			None => sinks.values().cloned().collect(),
+			Some(names) => {
+				let mut resolved = Vec::new();
+				for name in names {
+					match sinks.get(name) {
+						Some(s) => resolved.push(s.clone()),
+						None => {
+							error!(sink = %name, "unknown sink in pipe config");
+							return;
+						}
 					}
 				}
+				resolved
 			}
-			resolved
 		}
 	};
 
-	let source_engine = engine.for_source(&source.name);
-	if let Err(e) = source_engine.ensure_tables().await {
-		error!(source = %source.name, error = %e, "failed to create pipeline tables");
+	let pipe_engine = engine.for_source(&pipe.name);
+	if let Err(e) = pipe_engine.ensure_tables().await {
+		error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
 		return;
 	}
 
-	let interval = Duration::from_secs(source.interval_secs);
+	let interval = Duration::from_secs(pipe.schedule.interval_secs);
 
 	info!(
-		source = %source.name,
+		pipe = %pipe.name,
 		query = %query.id,
-		interval_secs = source.interval_secs,
-		tables = ?source_engine.tables(),
+		interval_secs = pipe.schedule.interval_secs,
+		tables = ?pipe_engine.tables(),
 		"embedded polling task started"
 	);
 
 	run_timed_embedded_cycle(
-		&source_engine,
+		&pipe_engine,
 		connector.as_ref(),
 		&query_sinks,
-		&source,
+		&pipe,
 		&query,
 		&transform_hooks,
 		interval,
@@ -382,11 +409,11 @@ async fn run_embedded_query(
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
 
-	match source.missed_tick_policy {
-		crate::config::MissedTickPolicy::Skip => {
+	match pipe.schedule.missed_tick_policy {
+		MissedTickPolicy::Skip => {
 			ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 		}
-		crate::config::MissedTickPolicy::Burst => {
+		MissedTickPolicy::Burst => {
 			ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
 		}
 	}
@@ -395,17 +422,17 @@ async fn run_embedded_query(
 		tokio::select! {
 			_ = ticker.tick() => {
 				run_timed_embedded_cycle(
-					&source_engine,
+					&pipe_engine,
 					connector.as_ref(),
 					&query_sinks,
-					&source,
+					&pipe,
 					&query,
 					&transform_hooks,
 					interval,
 				).await;
 			}
 			_ = shutdown.changed() => {
-				info!(source = %source.name, query = %query.id, "shutting down");
+				info!(pipe = %pipe.name, query = %query.id, "shutting down");
 				break;
 			}
 		}
@@ -416,22 +443,22 @@ async fn run_timed_embedded_cycle(
 	engine: &DeltaEngine,
 	connector: &dyn oversync_core::traits::OriginConnector,
 	sinks: &[Arc<dyn Sink>],
-	source: &SourceDef,
+	pipe: &PipeConfig,
 	query: &crate::config::QueryDef,
 	transform_hooks: &HashMap<String, Arc<dyn TransformHook>>,
 	interval: Duration,
 ) {
 	let start = Instant::now();
-	run_embedded_cycle(engine, connector, sinks, source, query, transform_hooks).await;
+	run_embedded_cycle(engine, connector, sinks, pipe, query, transform_hooks).await;
 	let elapsed = start.elapsed();
 
 	if elapsed > interval {
 		warn!(
-			source = %source.name,
+			pipe = %pipe.name,
 			query = %query.id,
 			elapsed_secs = elapsed.as_secs(),
 			interval_secs = interval.as_secs(),
-			policy = ?source.missed_tick_policy,
+			policy = ?pipe.schedule.missed_tick_policy,
 			"cycle took longer than polling interval"
 		);
 	}
@@ -441,17 +468,17 @@ async fn run_embedded_cycle(
 	engine: &DeltaEngine,
 	connector: &dyn oversync_core::traits::OriginConnector,
 	sinks: &[Arc<dyn Sink>],
-	source: &SourceDef,
+	pipe: &PipeConfig,
 	query: &crate::config::QueryDef,
 	transform_hooks: &HashMap<String, Arc<dyn TransformHook>>,
 ) {
 	let cycle_config = CycleConfig {
-		origin_id: source.name.clone(),
+		origin_id: pipe.name.clone(),
 		query_id: query.id.clone(),
 		sql: query.sql.clone(),
 		key_column: query.key_column.clone(),
-		fail_safe_threshold: source.fail_safe_threshold,
-		diff_mode: source.diff_mode.clone(),
+		fail_safe_threshold: pipe.delta.fail_safe_threshold,
+		diff_mode: pipe.delta.diff_mode.clone(),
 		transform: query.transform.clone(),
 	};
 
@@ -463,12 +490,12 @@ async fn run_embedded_cycle(
 		}
 	}
 
-	for attempt in 0..=source.max_retries {
+	for attempt in 0..=pipe.retry.max_retries {
 		match runner.run(&cycle_config).await {
 			Ok(diff) => {
 				if !diff.is_empty() {
 					info!(
-						source = %source.name,
+						pipe = %pipe.name,
 						query = %query.id,
 						created = diff.created.len(),
 						updated = diff.updated.len(),
@@ -479,11 +506,14 @@ async fn run_embedded_cycle(
 				return;
 			}
 			Err(e) => {
-				if attempt < source.max_retries {
-					let delay =
-						Duration::from_secs(source.retry_base_delay_secs * 2u64.pow(attempt));
+				if attempt < pipe.retry.max_retries {
+					let delay = Duration::from_secs(
+						pipe.retry.retry_base_delay_secs.saturating_mul(
+							2u64.saturating_pow(attempt),
+						),
+					);
 					warn!(
-						source = %source.name,
+						pipe = %pipe.name,
 						attempt = attempt + 1,
 						error = %e,
 						"cycle failed, retrying"
@@ -491,8 +521,8 @@ async fn run_embedded_cycle(
 					tokio::time::sleep(delay).await;
 				} else {
 					error!(
-						source = %source.name,
-						attempts = source.max_retries + 1,
+						pipe = %pipe.name,
+						attempts = pipe.retry.max_retries + 1,
 						error = %e,
 						"cycle failed after all retries"
 					);

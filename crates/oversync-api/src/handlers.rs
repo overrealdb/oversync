@@ -74,3 +74,43 @@ pub async fn list_sinks(
 		sinks: state.sinks_info(),
 	})
 }
+
+#[utoipa::path(
+	get,
+	path = "/pipes",
+	responses(
+		(status = 200, description = "List configured pipes", body = PipeListResponse)
+	)
+)]
+pub async fn list_pipes(
+	State(state): State<Arc<ApiState>>,
+) -> Json<PipeListResponse> {
+	Json(PipeListResponse {
+		pipes: state.pipes_info(),
+	})
+}
+
+#[utoipa::path(
+	get,
+	path = "/pipes/{name}",
+	params(("name" = String, Path, description = "Pipe name")),
+	responses(
+		(status = 200, description = "Pipe details", body = PipeInfo),
+		(status = 404, description = "Pipe not found", body = ErrorResponse)
+	)
+)]
+pub async fn get_pipe(
+	State(state): State<Arc<ApiState>>,
+	Path(name): Path<String>,
+) -> Result<Json<PipeInfo>, Json<ErrorResponse>> {
+	state
+		.pipes_info()
+		.into_iter()
+		.find(|p| p.name == name)
+		.map(Json)
+		.ok_or_else(|| {
+			Json(ErrorResponse {
+				error: format!("pipe not found: {name}"),
+			})
+		})
+}

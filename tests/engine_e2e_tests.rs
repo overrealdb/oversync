@@ -65,6 +65,7 @@ fn make_config(
 		},
 		sources: vec![source],
 		sinks,
+		pipes: vec![],
 	}
 }
 
