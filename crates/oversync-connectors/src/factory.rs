@@ -6,6 +6,7 @@ use oversync_core::traits::{OriginConnector, OriginFactory};
 use crate::flight_sql::FlightSqlConnector;
 use crate::graphql::{GraphqlConfig, GraphqlConnector};
 use crate::http_source::{HttpSource, HttpSourceConfig};
+use crate::mcp::{McpConfig, McpOriginConnector};
 use crate::mysql::MysqlConnector;
 use crate::clickhouse::{ClickHouseConfig, ClickHouseConnector};
 use crate::trino::{TrinoConfig, TrinoConnector};
@@ -136,6 +137,25 @@ impl OriginFactory for ClickHouseOriginFactory {
 			.map_err(|e| OversyncError::Config(format!("clickhouse: {e}")))?;
 		let connector = ClickHouseConnector::new(name, ch_config)?;
 		Ok(Box::new(connector))
+	}
+}
+
+pub struct McpOriginFactory;
+
+#[async_trait]
+impl OriginFactory for McpOriginFactory {
+	fn connector_type(&self) -> &str {
+		"mcp"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
+		let mcp_config: McpConfig = serde_json::from_value(config.clone())
+			.map_err(|e| OversyncError::Config(format!("mcp: {e}")))?;
+		Ok(Box::new(McpOriginConnector::new(name, mcp_config)))
 	}
 }
 

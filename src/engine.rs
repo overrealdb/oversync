@@ -7,12 +7,12 @@ use tracing::info;
 
 use oversync_connectors::{
 	ClickHouseOriginFactory, FlightSqlOriginFactory, GraphqlOriginFactory, HttpOriginFactory,
-	MysqlOriginFactory, PostgresOriginFactory, TrinoOriginFactory,
+	McpOriginFactory, MysqlOriginFactory, PostgresOriginFactory, TrinoOriginFactory,
 };
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{TargetFactory, OriginFactory};
 use oversync_delta::DeltaEngine;
-use oversync_sinks::{HttpTargetFactory, KafkaTargetFactory, StdoutTargetFactory, SurrealDbTargetFactory};
+use oversync_sinks::{HttpTargetFactory, KafkaTargetFactory, McpTargetFactory, StdoutTargetFactory, SurrealDbTargetFactory};
 
 use crate::config::{SurrealDbDef, SyncConfig};
 use crate::lifecycle::LifecycleManager;
@@ -521,10 +521,12 @@ pub(crate) fn default_registry() -> PluginRegistry {
 	registry.register_source(Box::new(TrinoOriginFactory));
 	registry.register_source(Box::new(GraphqlOriginFactory));
 	registry.register_source(Box::new(ClickHouseOriginFactory));
+	registry.register_source(Box::new(McpOriginFactory));
 	registry.register_sink(Box::new(StdoutTargetFactory));
 	registry.register_sink(Box::new(KafkaTargetFactory));
 	registry.register_sink(Box::new(SurrealDbTargetFactory));
 	registry.register_sink(Box::new(HttpTargetFactory));
+	registry.register_sink(Box::new(McpTargetFactory));
 	registry
 }
 

@@ -6,6 +6,7 @@ use oversync_core::error::OversyncError;
 use oversync_core::traits::{Sink, TargetFactory};
 
 use crate::http_sink::HttpSink;
+use crate::mcp_sink::{McpSink, McpSinkConfig};
 use oversync_core::model::AuthConfig;
 use crate::kafka::KafkaSink;
 use crate::stdout::StdoutSink;
@@ -97,6 +98,25 @@ impl TargetFactory for SurrealDbTargetFactory {
 		Ok(Box::new(
 			SurrealDbSink::new(name, url, namespace, database, table, username, password).await?,
 		))
+	}
+}
+
+pub struct McpTargetFactory;
+
+#[async_trait]
+impl TargetFactory for McpTargetFactory {
+	fn sink_type(&self) -> &str {
+		"mcp"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn Sink>, OversyncError> {
+		let mcp_config: McpSinkConfig = serde_json::from_value(config.clone())
+			.map_err(|e| OversyncError::Config(format!("mcp sink: {e}")))?;
+		Ok(Box::new(McpSink::new(name, mcp_config)))
 	}
 }
 
