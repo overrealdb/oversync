@@ -23,6 +23,7 @@ members = [
 	"crates/oversync-links",
 	"crates/oversync-sinks",
 	"crates/oversync-api",
+	"crates/oversync-transforms",
 ]
 
 [workspace.package]
@@ -38,6 +39,7 @@ oversync-delta = { path = "crates/oversync-delta" }
 oversync-links = { path = "crates/oversync-links" }
 oversync-sinks = { path = "crates/oversync-sinks" }
 oversync-api = { path = "crates/oversync-api" }
+oversync-transforms = { path = "crates/oversync-transforms" }
 
 overshift = "0.1"
 surql-parser = { version = "0.1", features = ["build"] }
