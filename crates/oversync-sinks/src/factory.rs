@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{Sink, SinkFactory};
+use oversync_core::traits::{Sink, TargetFactory};
 
 use crate::http_sink::HttpSink;
 use oversync_core::model::AuthConfig;
@@ -11,10 +11,10 @@ use crate::kafka::KafkaSink;
 use crate::stdout::StdoutSink;
 use crate::surrealdb_sink::SurrealDbSink;
 
-pub struct StdoutSinkFactory;
+pub struct StdoutTargetFactory;
 
 #[async_trait]
-impl SinkFactory for StdoutSinkFactory {
+impl TargetFactory for StdoutTargetFactory {
 	fn sink_type(&self) -> &str {
 		"stdout"
 	}
@@ -32,10 +32,10 @@ impl SinkFactory for StdoutSinkFactory {
 	}
 }
 
-pub struct KafkaSinkFactory;
+pub struct KafkaTargetFactory;
 
 #[async_trait]
-impl SinkFactory for KafkaSinkFactory {
+impl TargetFactory for KafkaTargetFactory {
 	fn sink_type(&self) -> &str {
 		"kafka"
 	}
@@ -57,10 +57,10 @@ impl SinkFactory for KafkaSinkFactory {
 	}
 }
 
-pub struct SurrealDbSinkFactory;
+pub struct SurrealDbTargetFactory;
 
 #[async_trait]
-impl SinkFactory for SurrealDbSinkFactory {
+impl TargetFactory for SurrealDbTargetFactory {
 	fn sink_type(&self) -> &str {
 		"surrealdb"
 	}
@@ -100,10 +100,10 @@ impl SinkFactory for SurrealDbSinkFactory {
 	}
 }
 
-pub struct HttpSinkFactory;
+pub struct HttpTargetFactory;
 
 #[async_trait]
-impl SinkFactory for HttpSinkFactory {
+impl TargetFactory for HttpTargetFactory {
 	fn sink_type(&self) -> &str {
 		"http"
 	}

@@ -9,7 +9,7 @@ use oversync::EmbeddedSync;
 use oversync::config::{QueryDef, SourceDef};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
-use oversync_core::traits::{Sink, SourceConnector, SourceFactory, TransformHook};
+use oversync_core::traits::{Sink, OriginConnector, OriginFactory, TransformHook};
 
 // ── Test doubles ─────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ struct StaticConnector {
 }
 
 #[async_trait]
-impl SourceConnector for StaticConnector {
+impl OriginConnector for StaticConnector {
 	fn name(&self) -> &str {
 		"static"
 	}
@@ -32,12 +32,12 @@ impl SourceConnector for StaticConnector {
 	}
 }
 
-struct StaticSourceFactory {
+struct StaticOriginFactory {
 	rows: Vec<RawRow>,
 }
 
 #[async_trait]
-impl SourceFactory for StaticSourceFactory {
+impl OriginFactory for StaticOriginFactory {
 	fn connector_type(&self) -> &str {
 		"static"
 	}
@@ -46,7 +46,7 @@ impl SourceFactory for StaticSourceFactory {
 		&self,
 		_name: &str,
 		_config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		Ok(Box::new(StaticConnector {
 			rows: self.rows.clone(),
 		}))
@@ -84,7 +84,7 @@ impl TransformHook for UppercaseTransform {
 		Ok(envelopes
 			.into_iter()
 			.map(|mut e| {
-				e.meta.source_id = e.meta.source_id.to_uppercase();
+				e.meta.origin_id = e.meta.origin_id.to_uppercase();
 				e
 			})
 			.collect())
@@ -165,7 +165,7 @@ async fn run_once_delivers_events_to_custom_sink() {
 		.skip_schema()
 		.add_source(test_source_def())
 		.add_sink("rec", sink)
-		.register_source(Box::new(StaticSourceFactory {
+		.register_source(Box::new(StaticOriginFactory {
 			rows: test_rows(),
 		}))
 		.build()
@@ -198,7 +198,7 @@ async fn run_once_second_cycle_detects_no_changes() {
 		.skip_schema()
 		.add_source(test_source_def())
 		.add_sink("rec", sink)
-		.register_source(Box::new(StaticSourceFactory {
+		.register_source(Box::new(StaticOriginFactory {
 			rows: test_rows(),
 		}))
 		.build()
@@ -240,7 +240,7 @@ async fn run_once_unknown_query_errors() {
 		.state_db(db)
 		.skip_schema()
 		.add_source(test_source_def())
-		.register_source(Box::new(StaticSourceFactory {
+		.register_source(Box::new(StaticOriginFactory {
 			rows: test_rows(),
 		}))
 		.build()
@@ -273,7 +273,7 @@ async fn transform_hook_modifies_events_before_sink() {
 		.add_source(source)
 		.add_sink("rec", sink)
 		.add_transform("uppercase", Arc::new(UppercaseTransform))
-		.register_source(Box::new(StaticSourceFactory {
+		.register_source(Box::new(StaticOriginFactory {
 			rows: test_rows(),
 		}))
 		.build()
@@ -285,7 +285,7 @@ async fn transform_hook_modifies_events_before_sink() {
 	let recorded = events.lock().unwrap();
 	assert_eq!(recorded.len(), 2);
 	for event in recorded.iter() {
-		assert_eq!(event.meta.source_id, "TEST-SRC");
+		assert_eq!(event.meta.origin_id, "TEST-SRC");
 	}
 }
 
@@ -309,7 +309,7 @@ async fn start_spawns_polling_shutdown_stops() {
 		.skip_schema()
 		.add_source(source)
 		.add_sink("rec", sink)
-		.register_source(Box::new(StaticSourceFactory {
+		.register_source(Box::new(StaticOriginFactory {
 			rows: test_rows(),
 		}))
 		.build()
@@ -361,7 +361,7 @@ async fn transform_hook_ignored_when_query_has_no_transform() {
 		.add_source(test_source_def()) // query.transform = None
 		.add_sink("rec", sink)
 		.add_transform("uppercase", Arc::new(UppercaseTransform))
-		.register_source(Box::new(StaticSourceFactory {
+		.register_source(Box::new(StaticOriginFactory {
 			rows: test_rows(),
 		}))
 		.build()
@@ -372,9 +372,9 @@ async fn transform_hook_ignored_when_query_has_no_transform() {
 
 	let recorded = events.lock().unwrap();
 	assert_eq!(recorded.len(), 2);
-	// source_id should NOT be uppercased — hook was not applied
+	// origin_id should NOT be uppercased — hook was not applied
 	for event in recorded.iter() {
-		assert_eq!(event.meta.source_id, "test-src");
+		assert_eq!(event.meta.origin_id, "test-src");
 	}
 }
 

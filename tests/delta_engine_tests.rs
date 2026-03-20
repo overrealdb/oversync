@@ -345,7 +345,7 @@ async fn cycle_log_records_status() {
 	// Verify via raw query
 	let mut res = t
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'src'")
+		.query("SELECT * FROM cycle_log WHERE origin_id = 'src'")
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -419,7 +419,7 @@ async fn db_delta_detects_update() {
 	let mut res = t
 		.client
 		.query(
-			"SELECT row_key, row_hash, prev_hash, cycle_id FROM snapshot WHERE source_id = 'src'",
+			"SELECT row_key, row_hash, prev_hash, cycle_id FROM snapshot WHERE origin_id = 'src'",
 		)
 		.await
 		.unwrap();

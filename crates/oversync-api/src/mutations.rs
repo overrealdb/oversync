@@ -116,7 +116,7 @@ pub async fn delete_source(
 		.await
 		.map_err(db_err)?;
 
-	db.query("DELETE query_config WHERE source_id = $name")
+	db.query("DELETE query_config WHERE origin_id = $name")
 		.bind(("name", name.clone()))
 		.await
 		.map_err(db_err)?;

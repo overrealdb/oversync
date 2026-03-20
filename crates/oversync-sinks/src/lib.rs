@@ -6,7 +6,7 @@ pub mod kafka;
 pub mod stdout;
 pub mod surrealdb_sink;
 
-pub use factory::{HttpSinkFactory, KafkaSinkFactory, StdoutSinkFactory, SurrealDbSinkFactory};
+pub use factory::{HttpTargetFactory, KafkaTargetFactory, StdoutTargetFactory, SurrealDbTargetFactory};
 pub use http_sink::HttpSink;
 pub use kafka::KafkaSink;
 pub use oversync_core::traits::Sink;

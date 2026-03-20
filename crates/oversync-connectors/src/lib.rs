@@ -1,6 +1,6 @@
 //! Source connector implementations for oversync.
 //!
-//! Each connector implements [`SourceConnector`] to fetch rows from an external source.
+//! Each connector implements [`OriginConnector`] to fetch rows from an external source.
 
 pub mod clickhouse;
 pub mod factory;
@@ -14,13 +14,13 @@ pub mod trino;
 
 pub use clickhouse::ClickHouseConnector;
 pub use factory::{
-	ClickHouseSourceFactory, FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory,
-	MysqlSourceFactory, PostgresSourceFactory, TrinoSourceFactory,
+	ClickHouseOriginFactory, FlightSqlOriginFactory, GraphqlOriginFactory, HttpOriginFactory,
+	MysqlOriginFactory, PostgresOriginFactory, TrinoOriginFactory,
 };
 pub use graphql::GraphqlConnector;
 pub use http_source::HttpSource;
 pub use mysql::MysqlConnector;
-pub use oversync_core::traits::SourceConnector;
+pub use oversync_core::traits::OriginConnector;
 pub use postgres::PostgresConnector;
 pub use trino::TrinoConnector;
 pub use flight_sql::FlightSqlConnector;

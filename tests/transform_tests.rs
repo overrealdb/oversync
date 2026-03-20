@@ -14,7 +14,7 @@ use common::surreal::TestSurrealContainer;
 
 fn cycle_config(schema: &str, transform: Option<&str>) -> CycleConfig {
 	CycleConfig {
-		source_id: "pg-test".into(),
+		origin_id: "pg-test".into(),
 		query_id: "items".into(),
 		sql: format!("SELECT id, name, value FROM {schema}.items"),
 		key_column: "id".into(),
@@ -154,7 +154,7 @@ async fn apply_transform_identity_roundtrip() {
 	let envelope = EventEnvelope {
 		meta: oversync_core::model::EventMeta {
 			op: oversync_core::model::OpType::Created,
-			source_id: "src".into(),
+			origin_id: "src".into(),
 			query_id: "q".into(),
 			key: "k1".into(),
 			hash: "h1".into(),

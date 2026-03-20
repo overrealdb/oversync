@@ -93,7 +93,7 @@ async fn count_snapshot(
 	let mut res = surreal
 		.client
 		.query(
-			"SELECT count() AS c FROM snapshot WHERE source_id = $src AND query_id = $qid GROUP ALL",
+			"SELECT count() AS c FROM snapshot WHERE origin_id = $src AND query_id = $qid GROUP ALL",
 		)
 		.bind(("src", source.to_string()))
 		.bind(("qid", query.to_string()))
@@ -105,7 +105,7 @@ async fn count_snapshot(
 
 fn make_config(schema: &str, threshold: f64) -> CycleConfig {
 	CycleConfig {
-		source_id: "stress".into(),
+		origin_id: "stress".into(),
 		query_id: "product_catalog".into(),
 		sql: format!(
 			"SELECT p.id, p.name, p.price::text AS price, p.metadata, c.name AS category_name \
@@ -305,21 +305,21 @@ async fn stress_two_tables_join_full_lifecycle() {
 	// Debug: check prev_hash on a sample of "new" rows
 	let sample_new_id = format!("p{:07}", n + 1); // first new row
 	let mut dbg = surreal.client.query(
-		"SELECT row_key, prev_hash, cycle_id FROM snapshot WHERE source_id = 'stress' AND row_key = $key"
+		"SELECT row_key, prev_hash, cycle_id FROM snapshot WHERE origin_id = 'stress' AND row_key = $key"
 	).bind(("key", sample_new_id.clone())).await.unwrap();
 	let dbg_rows: Vec<serde_json::Value> = dbg.take(0).unwrap();
 	eprintln!("  sample new row {sample_new_id}: {:?}", dbg_rows);
 
 	// Count rows with prev_hash IS NONE
 	let mut cnt = surreal.client.query(
-		"SELECT count() AS c FROM snapshot WHERE source_id = 'stress' AND query_id = 'product_catalog' AND prev_hash IS NONE GROUP ALL"
+		"SELECT count() AS c FROM snapshot WHERE origin_id = 'stress' AND query_id = 'product_catalog' AND prev_hash IS NONE GROUP ALL"
 	).await.unwrap();
 	let cnt_rows: Vec<serde_json::Value> = cnt.take(0).unwrap();
 	eprintln!("  rows with prev_hash IS NONE: {:?}", cnt_rows);
 
 	// Direct find_created test without pagination
 	let mut direct = surreal.client.query(
-		"SELECT row_key FROM snapshot WHERE source_id = 'stress' AND query_id = 'product_catalog' AND cycle_id = 2 AND prev_hash IS NONE LIMIT 10"
+		"SELECT row_key FROM snapshot WHERE origin_id = 'stress' AND query_id = 'product_catalog' AND cycle_id = 2 AND prev_hash IS NONE LIMIT 10"
 	).await.unwrap();
 	let direct_rows: Vec<serde_json::Value> = direct.take(0).unwrap();
 	eprintln!(
@@ -329,8 +329,8 @@ async fn stress_two_tables_join_full_lifecycle() {
 
 	// Test with bound params like paginated_query uses
 	let mut bound = surreal.client.query(
-		"SELECT row_key FROM snapshot WHERE source_id = $source_id AND query_id = $query_id AND cycle_id = $cycle_id AND prev_hash IS NONE LIMIT $page_size START $offset"
-	).bind(("source_id", "stress".to_string()))
+		"SELECT row_key FROM snapshot WHERE origin_id = $origin_id AND query_id = $query_id AND cycle_id = $cycle_id AND prev_hash IS NONE LIMIT $page_size START $offset"
+	).bind(("origin_id", "stress".to_string()))
 	.bind(("query_id", "product_catalog".to_string()))
 	.bind(("cycle_id", 2i64))
 	.bind(("page_size", 5000i64))
@@ -467,7 +467,7 @@ async fn stress_two_tables_join_full_lifecycle() {
 	// ── Phase 7: Verify cycle_log audit trail ───────────────
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'stress' ORDER BY cycle_id")
+		.query("SELECT * FROM cycle_log WHERE origin_id = 'stress' ORDER BY cycle_id")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();

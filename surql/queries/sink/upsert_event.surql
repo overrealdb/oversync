@@ -1,7 +1,7 @@
 UPSERT type::record($table, $key) SET
 	data = $data,
 	_meta = {
-		source_id: $source_id,
+		origin_id: $origin_id,
 		query_id: $query_id,
 		op: $op,
 		hash: $hash,

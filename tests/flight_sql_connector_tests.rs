@@ -7,7 +7,7 @@
 mod common;
 
 use oversync_connectors::FlightSqlConnector;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 #[tokio::test]
 #[ignore = "requires Flight SQL server — no testcontainers image available"]

@@ -8,8 +8,8 @@ use tokio::net::TcpListener;
 
 use oversync_connectors::graphql::{GraphqlConfig, GraphqlConnector, GraphqlPagination};
 use oversync_connectors::http_common::AuthConfig;
-use oversync_connectors::GraphqlSourceFactory;
-use oversync_core::traits::{SourceConnector, SourceFactory};
+use oversync_connectors::GraphqlOriginFactory;
+use oversync_core::traits::{OriginConnector, OriginFactory};
 
 async fn start_server(app: Router) -> String {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -356,7 +356,7 @@ async fn factory_creates_graphql_connector() {
 	);
 	let base = start_server(app).await;
 
-	let factory = GraphqlSourceFactory;
+	let factory = GraphqlOriginFactory;
 	assert_eq!(factory.connector_type(), "graphql");
 	let config = serde_json::json!({
 		"dsn": format!("{base}/graphql"),

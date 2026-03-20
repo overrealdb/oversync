@@ -8,7 +8,7 @@ use tracing::debug;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 pub use crate::http_common::AuthConfig;
 use crate::http_common::{extract_cursor, extract_items, items_to_rows};
@@ -130,7 +130,7 @@ impl HttpSource {
 }
 
 #[async_trait]
-impl SourceConnector for HttpSource {
+impl OriginConnector for HttpSource {
 	fn name(&self) -> &str {
 		&self.name
 	}

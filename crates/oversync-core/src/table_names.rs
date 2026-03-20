@@ -38,7 +38,7 @@ impl TableNames {
 	pub fn create_ddl(&self) -> String {
 		format!(
 			"DEFINE TABLE IF NOT EXISTS {snap} SCHEMAFULL;\
-			 DEFINE FIELD IF NOT EXISTS source_id  ON {snap} TYPE string;\
+			 DEFINE FIELD IF NOT EXISTS origin_id  ON {snap} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS query_id   ON {snap} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS row_key    ON {snap} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS row_data   ON {snap} TYPE object FLEXIBLE;\
@@ -46,10 +46,10 @@ impl TableNames {
 			 DEFINE FIELD IF NOT EXISTS cycle_id   ON {snap} TYPE int;\
 			 DEFINE FIELD IF NOT EXISTS updated_at ON {snap} TYPE datetime DEFAULT time::now();\
 			 DEFINE FIELD IF NOT EXISTS prev_hash  ON {snap} TYPE option<string>;\
-			 DEFINE INDEX IF NOT EXISTS idx_{snap}_key   ON {snap} FIELDS source_id, query_id, row_key UNIQUE;\
-			 DEFINE INDEX IF NOT EXISTS idx_{snap}_cycle ON {snap} FIELDS source_id, query_id, cycle_id;\
+			 DEFINE INDEX IF NOT EXISTS idx_{snap}_key   ON {snap} FIELDS origin_id, query_id, row_key UNIQUE;\
+			 DEFINE INDEX IF NOT EXISTS idx_{snap}_cycle ON {snap} FIELDS origin_id, query_id, cycle_id;\
 			 DEFINE TABLE IF NOT EXISTS {cl} SCHEMAFULL;\
-			 DEFINE FIELD IF NOT EXISTS source_id    ON {cl} TYPE string;\
+			 DEFINE FIELD IF NOT EXISTS origin_id    ON {cl} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS query_id     ON {cl} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS cycle_id     ON {cl} TYPE int;\
 			 DEFINE FIELD IF NOT EXISTS started_at   ON {cl} TYPE datetime;\
@@ -59,14 +59,14 @@ impl TableNames {
 			 DEFINE FIELD IF NOT EXISTS rows_created ON {cl} TYPE int DEFAULT 0;\
 			 DEFINE FIELD IF NOT EXISTS rows_updated ON {cl} TYPE int DEFAULT 0;\
 			 DEFINE FIELD IF NOT EXISTS rows_deleted ON {cl} TYPE int DEFAULT 0;\
-			 DEFINE INDEX IF NOT EXISTS idx_{cl}_source ON {cl} FIELDS source_id, query_id, cycle_id UNIQUE;\
+			 DEFINE INDEX IF NOT EXISTS idx_{cl}_source ON {cl} FIELDS origin_id, query_id, cycle_id UNIQUE;\
 			 DEFINE TABLE IF NOT EXISTS {pe} SCHEMAFULL;\
-			 DEFINE FIELD IF NOT EXISTS source_id   ON {pe} TYPE string;\
+			 DEFINE FIELD IF NOT EXISTS origin_id   ON {pe} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS query_id    ON {pe} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS cycle_id    ON {pe} TYPE int;\
 			 DEFINE FIELD IF NOT EXISTS events_json ON {pe} TYPE string;\
 			 DEFINE FIELD IF NOT EXISTS created_at  ON {pe} TYPE datetime DEFAULT time::now();\
-			 DEFINE INDEX IF NOT EXISTS idx_{pe}_source ON {pe} FIELDS source_id, query_id;",
+			 DEFINE INDEX IF NOT EXISTS idx_{pe}_source ON {pe} FIELDS origin_id, query_id;",
 			snap = self.snapshot,
 			cl = self.cycle_log,
 			pe = self.pending_event,
@@ -129,7 +129,7 @@ mod tests {
 	#[test]
 	fn resolve_sql_replaces_all() {
 		let t = TableNames::for_source("pg");
-		let sql = "SELECT * FROM {snapshot} WHERE source_id = $s; DELETE {pending_event}; UPDATE {cycle_log}";
+		let sql = "SELECT * FROM {snapshot} WHERE origin_id = $s; DELETE {pending_event}; UPDATE {cycle_log}";
 		let resolved = t.resolve_sql(sql);
 		assert!(resolved.contains("sync_pg_snapshot"));
 		assert!(resolved.contains("sync_pg_pending"));

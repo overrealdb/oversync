@@ -22,7 +22,7 @@ async fn declarative_schema_overwrites_field_definition() {
 	// After reapply, row_hash should be back to string — verify by inserting string value
 	t.client
 		.query(
-			"CREATE snapshot SET source_id = 'test', query_id = 'q', \
+			"CREATE snapshot SET origin_id = 'test', query_id = 'q', \
 			 row_key = 'overwrite_test', row_data = {}, row_hash = 'hash_string', cycle_id = 1",
 		)
 		.await
@@ -88,7 +88,7 @@ async fn snapshot_table_exists() {
 	let t = TestSurrealContainer::new().await;
 	t.client
 		.query(
-			"CREATE snapshot SET source_id = 'src', query_id = 'q', \
+			"CREATE snapshot SET origin_id = 'src', query_id = 'q', \
 			 row_key = 'k', row_data = {}, row_hash = 'h', cycle_id = 1",
 		)
 		.await
@@ -100,7 +100,7 @@ async fn cycle_log_table_exists() {
 	let t = TestSurrealContainer::new().await;
 	t.client
 		.query(
-			"CREATE cycle_log SET source_id = 'src', query_id = 'q', \
+			"CREATE cycle_log SET origin_id = 'src', query_id = 'q', \
 			 cycle_id = 1, started_at = time::now()",
 		)
 		.await
@@ -121,7 +121,7 @@ async fn query_config_table_exists() {
 	let t = TestSurrealContainer::new().await;
 	t.client
 		.query(
-			"CREATE query_config SET source_id = 'pg-prod', name = 'users', \
+			"CREATE query_config SET origin_id = 'pg-prod', name = 'users', \
 			 query = 'SELECT * FROM users', key_column = 'id'",
 		)
 		.await
@@ -169,7 +169,7 @@ async fn pending_event_table_exists() {
 	let t = TestSurrealContainer::new().await;
 	t.client
 		.query(
-			"CREATE pending_event SET source_id = 'src', query_id = 'q', \
+			"CREATE pending_event SET origin_id = 'src', query_id = 'q', \
 			 cycle_id = 1, events_json = '[]'",
 		)
 		.await
@@ -181,7 +181,7 @@ async fn snapshot_unique_index_enforced() {
 	let t = TestSurrealContainer::new().await;
 	t.client
 		.query(
-			"CREATE snapshot SET source_id = 'src', query_id = 'q', \
+			"CREATE snapshot SET origin_id = 'src', query_id = 'q', \
 			 row_key = 'k1', row_data = {}, row_hash = 'h1', cycle_id = 1",
 		)
 		.await
@@ -190,7 +190,7 @@ async fn snapshot_unique_index_enforced() {
 	let mut res = t
 		.client
 		.query(
-			"CREATE snapshot SET source_id = 'src', query_id = 'q', \
+			"CREATE snapshot SET origin_id = 'src', query_id = 'q', \
 			 row_key = 'k1', row_data = {}, row_hash = 'h2', cycle_id = 2",
 		)
 		.await

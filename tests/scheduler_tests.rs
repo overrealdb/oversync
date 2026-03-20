@@ -3,17 +3,17 @@ mod common;
 use oversync::config::{QueryDef, SourceDef, SurrealDbDef, SyncConfig};
 use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
-use oversync_connectors::PostgresSourceFactory;
+use oversync_connectors::PostgresOriginFactory;
 use oversync_delta::DeltaEngine;
-use oversync_sinks::StdoutSinkFactory;
+use oversync_sinks::StdoutTargetFactory;
 
 use common::postgres::TestPostgres;
 use common::surreal::TestSurrealContainer;
 
 fn test_registry() -> PluginRegistry {
 	let mut r = PluginRegistry::new();
-	r.register_source(Box::new(PostgresSourceFactory));
-	r.register_sink(Box::new(StdoutSinkFactory));
+	r.register_source(Box::new(PostgresOriginFactory));
+	r.register_sink(Box::new(StdoutTargetFactory));
 	r
 }
 
@@ -83,7 +83,7 @@ async fn scheduler_runs_first_cycle_immediately() {
 	// Verify: cycle_log should have at least one entry
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_test_cycle_log WHERE source_id = 'pg-test'")
+		.query("SELECT * FROM sync_pg_test_cycle_log WHERE origin_id = 'pg-test'")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -119,7 +119,7 @@ async fn scheduler_runs_multiple_cycles() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_test_cycle_log WHERE source_id = 'pg-test' ORDER BY cycle_id")
+		.query("SELECT * FROM sync_pg_test_cycle_log WHERE origin_id = 'pg-test' ORDER BY cycle_id")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -267,7 +267,7 @@ async fn scheduler_detects_data_changes() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_test_cycle_log WHERE source_id = 'pg-test' ORDER BY cycle_id")
+		.query("SELECT * FROM sync_pg_test_cycle_log WHERE origin_id = 'pg-test' ORDER BY cycle_id")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -358,7 +358,7 @@ async fn scheduler_multiple_queries() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE source_id = 'pg-multi-q' AND query_id = 'items'")
+		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE origin_id = 'pg-multi-q' AND query_id = 'items'")
 		.await
 		.unwrap();
 	let items_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -369,7 +369,7 @@ async fn scheduler_multiple_queries() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE source_id = 'pg-multi-q' AND query_id = 'users'")
+		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE origin_id = 'pg-multi-q' AND query_id = 'users'")
 		.await
 		.unwrap();
 	let users_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -460,23 +460,23 @@ async fn scheduler_multiple_sources() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_source_alpha_cycle_log WHERE source_id = 'source-alpha'")
+		.query("SELECT * FROM sync_source_alpha_cycle_log WHERE origin_id = 'source-alpha'")
 		.await
 		.unwrap();
 	let alpha_logs: Vec<serde_json::Value> = res.take(0).unwrap();
 	assert!(
 		!alpha_logs.is_empty(),
-		"expected cycle_log entries for source_id 'source-alpha'"
+		"expected cycle_log entries for origin_id 'source-alpha'"
 	);
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_source_beta_cycle_log WHERE source_id = 'source-beta'")
+		.query("SELECT * FROM sync_source_beta_cycle_log WHERE origin_id = 'source-beta'")
 		.await
 		.unwrap();
 	let beta_logs: Vec<serde_json::Value> = res.take(0).unwrap();
 	assert!(
 		!beta_logs.is_empty(),
-		"expected cycle_log entries for source_id 'source-beta'"
+		"expected cycle_log entries for origin_id 'source-beta'"
 	);
 }

@@ -5,11 +5,11 @@ use oversync::config::{SinkDef, SourceDef, SurrealDbDef, SyncConfig};
 use oversync::lifecycle::LifecycleManager;
 use oversync::registry::PluginRegistry;
 use oversync_delta::DeltaEngine;
-use oversync_sinks::StdoutSinkFactory;
+use oversync_sinks::StdoutTargetFactory;
 
 fn test_registry() -> PluginRegistry {
 	let mut r = PluginRegistry::new();
-	r.register_sink(Box::new(StdoutSinkFactory));
+	r.register_sink(Box::new(StdoutTargetFactory));
 	r
 }
 

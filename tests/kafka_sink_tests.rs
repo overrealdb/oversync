@@ -8,8 +8,8 @@ use rdkafka::consumer::{Consumer, StreamConsumer};
 use tokio_stream::StreamExt;
 
 use oversync_core::model::{EventEnvelope, EventMeta, OpType};
-use oversync_core::traits::{Sink, SinkFactory};
-use oversync_sinks::{KafkaSink, KafkaSinkFactory};
+use oversync_core::traits::{Sink, TargetFactory};
+use oversync_sinks::{KafkaSink, KafkaTargetFactory};
 
 use common::kafka::TestKafka;
 
@@ -17,7 +17,7 @@ fn make_envelope(key: &str, op: OpType) -> EventEnvelope {
 	EventEnvelope {
 		meta: EventMeta {
 			op,
-			source_id: "test-src".into(),
+			origin_id: "test-src".into(),
 			query_id: "test-q".into(),
 			key: key.into(),
 			hash: format!("hash_{key}"),
@@ -63,7 +63,7 @@ async fn kafka_sink_produces_single_event() {
 
 	assert_eq!(received.meta.key, "row_1");
 	assert_eq!(received.meta.op, OpType::Created);
-	assert_eq!(received.meta.source_id, "test-src");
+	assert_eq!(received.meta.origin_id, "test-src");
 	assert_eq!(received.data["key"], "row_1");
 
 	let key = std::str::from_utf8(msg.key().unwrap()).unwrap();
@@ -133,7 +133,7 @@ async fn kafka_sink_envelope_format() {
 	assert!(json.get("data").is_some(), "must have data");
 	assert_eq!(json["meta"]["op"], "updated");
 	assert_eq!(json["meta"]["key"], "x");
-	assert_eq!(json["meta"]["source_id"], "test-src");
+	assert_eq!(json["meta"]["origin_id"], "test-src");
 	assert_eq!(json["data"]["key"], "x");
 }
 
@@ -190,7 +190,7 @@ async fn kafka_factory_creates_working_sink() {
 	let kf = TestKafka::new().await;
 	let topic = "test_factory";
 
-	let factory = KafkaSinkFactory;
+	let factory = KafkaTargetFactory;
 	assert_eq!(factory.sink_type(), "kafka");
 
 	let config = serde_json::json!({"brokers": kf.broker, "topic": topic});
@@ -214,7 +214,7 @@ async fn kafka_factory_creates_working_sink() {
 
 #[tokio::test]
 async fn kafka_factory_missing_brokers_errors() {
-	let factory = KafkaSinkFactory;
+	let factory = KafkaTargetFactory;
 	let config = serde_json::json!({"topic": "t"});
 	let result = factory.create("x", &config).await;
 	let err = result.err().expect("should error");
@@ -223,7 +223,7 @@ async fn kafka_factory_missing_brokers_errors() {
 
 #[tokio::test]
 async fn kafka_factory_missing_topic_errors() {
-	let factory = KafkaSinkFactory;
+	let factory = KafkaTargetFactory;
 	let config = serde_json::json!({"brokers": "localhost:9092"});
 	let result = factory.create("x", &config).await;
 	let err = result.err().expect("should error");

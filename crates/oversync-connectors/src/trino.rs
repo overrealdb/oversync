@@ -9,7 +9,7 @@ use tracing::{Instrument, debug, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 // ── Config ──────────────────────────────────────────────────
 
@@ -449,7 +449,7 @@ fn value_to_string(v: &serde_json::Value) -> String {
 	}
 }
 
-// ── TrinoConnector (SourceConnector) ────────────────────────
+// ── TrinoConnector (OriginConnector) ────────────────────────
 
 pub struct TrinoConnector {
 	client: TrinoClient,
@@ -467,7 +467,7 @@ impl TrinoConnector {
 }
 
 #[async_trait]
-impl SourceConnector for TrinoConnector {
+impl OriginConnector for TrinoConnector {
 	fn name(&self) -> &str {
 		&self.source_name
 	}

@@ -17,14 +17,14 @@ use oversync::EmbeddedSync;
 use oversync::config::{QueryDef, SourceDef};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
-use oversync_core::traits::{Sink, SourceConnector, SourceFactory};
+use oversync_core::traits::{Sink, OriginConnector, OriginFactory};
 
 struct InMemoryConnector {
 	rows: Vec<RawRow>,
 }
 
 #[async_trait]
-impl SourceConnector for InMemoryConnector {
+impl OriginConnector for InMemoryConnector {
 	fn name(&self) -> &str {
 		"in-memory"
 	}
@@ -42,10 +42,10 @@ impl SourceConnector for InMemoryConnector {
 	}
 }
 
-struct InMemorySourceFactory;
+struct InMemoryOriginFactory;
 
 #[async_trait]
-impl SourceFactory for InMemorySourceFactory {
+impl OriginFactory for InMemoryOriginFactory {
 	fn connector_type(&self) -> &str {
 		"in-memory"
 	}
@@ -54,7 +54,7 @@ impl SourceFactory for InMemorySourceFactory {
 		&self,
 		_name: &str,
 		_config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		Ok(Box::new(InMemoryConnector {
 			rows: vec![
 				RawRow {
@@ -83,7 +83,7 @@ impl Sink for PrintSink {
 	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError> {
 		println!(
 			"  {} {} key={}",
-			envelope.meta.op, envelope.meta.source_id, envelope.meta.key
+			envelope.meta.op, envelope.meta.origin_id, envelope.meta.key
 		);
 		self.received.lock().unwrap().push(envelope.clone());
 		Ok(())
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	// Apply minimal schema (snapshot, cycle_log, pending_event tables)
 	db.query(
 		"DEFINE TABLE snapshot SCHEMAFULL;
-		 DEFINE FIELD source_id  ON snapshot TYPE string;
+		 DEFINE FIELD origin_id  ON snapshot TYPE string;
 		 DEFINE FIELD query_id   ON snapshot TYPE string;
 		 DEFINE FIELD row_key    ON snapshot TYPE string;
 		 DEFINE FIELD row_data   ON snapshot TYPE object FLEXIBLE;
@@ -113,10 +113,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		 DEFINE FIELD cycle_id   ON snapshot TYPE int;
 		 DEFINE FIELD updated_at ON snapshot TYPE datetime DEFAULT time::now();
 		 DEFINE FIELD prev_hash  ON snapshot TYPE option<string>;
-		 DEFINE INDEX idx_snapshot_key ON snapshot FIELDS source_id, query_id, row_key UNIQUE;
-		 DEFINE INDEX idx_snapshot_cycle ON snapshot FIELDS source_id, query_id, cycle_id;
+		 DEFINE INDEX idx_snapshot_key ON snapshot FIELDS origin_id, query_id, row_key UNIQUE;
+		 DEFINE INDEX idx_snapshot_cycle ON snapshot FIELDS origin_id, query_id, cycle_id;
 		 DEFINE TABLE cycle_log SCHEMAFULL;
-		 DEFINE FIELD source_id    ON cycle_log TYPE string;
+		 DEFINE FIELD origin_id    ON cycle_log TYPE string;
 		 DEFINE FIELD query_id     ON cycle_log TYPE string;
 		 DEFINE FIELD cycle_id     ON cycle_log TYPE int;
 		 DEFINE FIELD started_at   ON cycle_log TYPE datetime;
@@ -126,14 +126,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		 DEFINE FIELD rows_created ON cycle_log TYPE int DEFAULT 0;
 		 DEFINE FIELD rows_updated ON cycle_log TYPE int DEFAULT 0;
 		 DEFINE FIELD rows_deleted ON cycle_log TYPE int DEFAULT 0;
-		 DEFINE INDEX idx_cycle_source ON cycle_log FIELDS source_id, query_id, cycle_id UNIQUE;
+		 DEFINE INDEX idx_cycle_source ON cycle_log FIELDS origin_id, query_id, cycle_id UNIQUE;
 		 DEFINE TABLE pending_event SCHEMAFULL;
-		 DEFINE FIELD source_id   ON pending_event TYPE string;
+		 DEFINE FIELD origin_id   ON pending_event TYPE string;
 		 DEFINE FIELD query_id    ON pending_event TYPE string;
 		 DEFINE FIELD cycle_id    ON pending_event TYPE int;
 		 DEFINE FIELD events_json ON pending_event TYPE string;
 		 DEFINE FIELD created_at  ON pending_event TYPE datetime DEFAULT time::now();
-		 DEFINE INDEX idx_pending_source ON pending_event FIELDS source_id, query_id;",
+		 DEFINE INDEX idx_pending_source ON pending_event FIELDS origin_id, query_id;",
 	)
 	.await?;
 
@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.state_db(db.clone())
 		.snapshot_db(db)
 		.skip_schema()
-		.register_source(Box::new(InMemorySourceFactory))
+		.register_source(Box::new(InMemoryOriginFactory))
 		.add_source(SourceDef {
 			name: "demo".into(),
 			connector: "in-memory".into(),

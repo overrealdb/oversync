@@ -436,7 +436,7 @@ async fn update_query_changes_db() {
 	// Verify
 	let mut resp = container
 		.client
-		.query("SELECT * FROM query_config WHERE source_id = 'pg' AND name = 'q1'")
+		.query("SELECT * FROM query_config WHERE origin_id = 'pg' AND name = 'q1'")
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
@@ -472,7 +472,7 @@ async fn delete_query_removes_from_db() {
 
 	let mut resp = container
 		.client
-		.query("SELECT * FROM query_config WHERE source_id = 'pg' AND name = 'to-del'")
+		.query("SELECT * FROM query_config WHERE origin_id = 'pg' AND name = 'to-del'")
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();

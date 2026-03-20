@@ -64,7 +64,7 @@ async fn load_sources(client: &Surreal<Any>) -> Result<Vec<SourceDef>, OversyncE
 		let mut queries = Vec::new();
 		for q in query_rows
 			.iter()
-			.filter(|q| q.get("source_id").and_then(|v| v.as_str()) == Some(&name))
+			.filter(|q| q.get("origin_id").and_then(|v| v.as_str()) == Some(&name))
 		{
 			let sinks = q
 				.get("sinks")

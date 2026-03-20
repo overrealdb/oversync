@@ -5,6 +5,6 @@ UPDATE {cycle_log} SET
 	rows_created = $rows_created,
 	rows_updated = $rows_updated,
 	rows_deleted = $rows_deleted
-WHERE source_id = $source_id
+WHERE origin_id = $origin_id
 	AND query_id = $query_id
 	AND cycle_id = $cycle_id

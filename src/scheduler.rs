@@ -7,7 +7,7 @@ use tokio::time::MissedTickBehavior;
 use tracing::{error, info, warn};
 
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{Sink, SourceConnector};
+use oversync_core::traits::{Sink, OriginConnector};
 use oversync_delta::DeltaEngine;
 
 use crate::config::{QueryDef, SourceDef, SyncConfig};
@@ -166,6 +166,7 @@ async fn run_source_query(
 		error!(source = %source.name, error = %e, "failed to create pipeline tables");
 		return;
 	}
+
 	let source_engine = Arc::new(source_engine);
 
 	let interval = Duration::from_secs(source.interval_secs);
@@ -215,7 +216,7 @@ async fn run_source_query(
 
 async fn run_timed_cycle(
 	engine: &DeltaEngine,
-	connector: &dyn SourceConnector,
+	connector: &dyn OriginConnector,
 	sinks: &[Arc<dyn Sink>],
 	source: &SourceDef,
 	query: &QueryDef,
@@ -239,13 +240,13 @@ async fn run_timed_cycle(
 
 async fn run_with_retry(
 	engine: &DeltaEngine,
-	connector: &dyn SourceConnector,
+	connector: &dyn OriginConnector,
 	sinks: &[Arc<dyn Sink>],
 	source: &SourceDef,
 	query: &QueryDef,
 ) {
 	let cycle_config = CycleConfig {
-		source_id: source.name.clone(),
+		origin_id: source.name.clone(),
 		query_id: query.id.clone(),
 		sql: query.sql.clone(),
 		key_column: query.key_column.clone(),

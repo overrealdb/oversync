@@ -13,7 +13,7 @@ use common::surreal::TestSurrealContainer;
 
 fn cycle_config(schema: &str) -> CycleConfig {
 	CycleConfig {
-		source_id: "pg-test".into(),
+		origin_id: "pg-test".into(),
 		query_id: "items".into(),
 		sql: format!("SELECT id, name, value FROM {schema}.items"),
 		key_column: "id".into(),

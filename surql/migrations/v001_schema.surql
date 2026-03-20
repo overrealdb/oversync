@@ -2,18 +2,18 @@
 
 -- snapshot: stores the latest known state of each row
 DEFINE TABLE IF NOT EXISTS snapshot SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS source_id  ON snapshot TYPE string ASSERT $value != NONE;
+DEFINE FIELD IF NOT EXISTS origin_id  ON snapshot TYPE string ASSERT $value != NONE;
 DEFINE FIELD IF NOT EXISTS query_id   ON snapshot TYPE string ASSERT $value != NONE;
 DEFINE FIELD IF NOT EXISTS row_key    ON snapshot TYPE string ASSERT $value != NONE;
 DEFINE FIELD IF NOT EXISTS row_data   ON snapshot TYPE object FLEXIBLE;
 DEFINE FIELD IF NOT EXISTS row_hash   ON snapshot TYPE string;
 DEFINE FIELD IF NOT EXISTS cycle_id   ON snapshot TYPE int;
 DEFINE FIELD IF NOT EXISTS updated_at ON snapshot TYPE datetime DEFAULT time::now();
-DEFINE INDEX IF NOT EXISTS idx_snapshot_key ON snapshot FIELDS source_id, query_id, row_key UNIQUE;
+DEFINE INDEX IF NOT EXISTS idx_snapshot_key ON snapshot FIELDS origin_id, query_id, row_key UNIQUE;
 
 -- cycle_log: one record per sync cycle
 DEFINE TABLE IF NOT EXISTS cycle_log SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS source_id    ON cycle_log TYPE string;
+DEFINE FIELD IF NOT EXISTS origin_id    ON cycle_log TYPE string;
 DEFINE FIELD IF NOT EXISTS query_id     ON cycle_log TYPE string;
 DEFINE FIELD IF NOT EXISTS cycle_id     ON cycle_log TYPE int;
 DEFINE FIELD IF NOT EXISTS started_at   ON cycle_log TYPE datetime;
@@ -23,7 +23,7 @@ DEFINE FIELD IF NOT EXISTS rows_fetched ON cycle_log TYPE int DEFAULT 0;
 DEFINE FIELD IF NOT EXISTS rows_created ON cycle_log TYPE int DEFAULT 0;
 DEFINE FIELD IF NOT EXISTS rows_updated ON cycle_log TYPE int DEFAULT 0;
 DEFINE FIELD IF NOT EXISTS rows_deleted ON cycle_log TYPE int DEFAULT 0;
-DEFINE INDEX IF NOT EXISTS idx_cycle_source ON cycle_log FIELDS source_id, query_id, cycle_id UNIQUE;
+DEFINE INDEX IF NOT EXISTS idx_cycle_source ON cycle_log FIELDS origin_id, query_id, cycle_id UNIQUE;
 
 -- source_config: registered source connectors
 DEFINE TABLE IF NOT EXISTS source_config SCHEMAFULL;
@@ -37,7 +37,7 @@ DEFINE INDEX IF NOT EXISTS idx_source_name ON source_config FIELDS name UNIQUE;
 
 -- query_config: queries within a source
 DEFINE TABLE IF NOT EXISTS query_config SCHEMAFULL;
-DEFINE FIELD IF NOT EXISTS source_id  ON query_config TYPE string ASSERT $value != NONE;
+DEFINE FIELD IF NOT EXISTS origin_id  ON query_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD IF NOT EXISTS name       ON query_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD IF NOT EXISTS query      ON query_config TYPE string;
 DEFINE FIELD IF NOT EXISTS key_column ON query_config TYPE string;
@@ -45,7 +45,7 @@ DEFINE FIELD IF NOT EXISTS schedule   ON query_config TYPE option<string>;
 DEFINE FIELD IF NOT EXISTS sinks      ON query_config TYPE option<array>;
 DEFINE FIELD IF NOT EXISTS enabled    ON query_config TYPE bool DEFAULT true;
 DEFINE FIELD IF NOT EXISTS created_at ON query_config TYPE datetime DEFAULT time::now();
-DEFINE INDEX IF NOT EXISTS idx_query_source ON query_config FIELDS source_id, name UNIQUE;
+DEFINE INDEX IF NOT EXISTS idx_query_source ON query_config FIELDS origin_id, name UNIQUE;
 
 -- sink_config: registered sinks
 DEFINE TABLE IF NOT EXISTS sink_config SCHEMAFULL;

@@ -13,7 +13,7 @@ use tracing::debug;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 pub struct FlightSqlConnector {
 	endpoint: String,
@@ -89,7 +89,7 @@ impl FlightSqlConnector {
 }
 
 #[async_trait]
-impl SourceConnector for FlightSqlConnector {
+impl OriginConnector for FlightSqlConnector {
 	fn name(&self) -> &str {
 		&self.source_name
 	}

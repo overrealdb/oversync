@@ -6,13 +6,13 @@ use surrealdb::engine::any::Any;
 use tracing::info;
 
 use oversync_connectors::{
-	ClickHouseSourceFactory, FlightSqlSourceFactory, GraphqlSourceFactory, HttpSourceFactory,
-	MysqlSourceFactory, PostgresSourceFactory, TrinoSourceFactory,
+	ClickHouseOriginFactory, FlightSqlOriginFactory, GraphqlOriginFactory, HttpOriginFactory,
+	MysqlOriginFactory, PostgresOriginFactory, TrinoOriginFactory,
 };
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{SinkFactory, SourceFactory};
+use oversync_core::traits::{TargetFactory, OriginFactory};
 use oversync_delta::DeltaEngine;
-use oversync_sinks::{HttpSinkFactory, KafkaSinkFactory, StdoutSinkFactory, SurrealDbSinkFactory};
+use oversync_sinks::{HttpTargetFactory, KafkaTargetFactory, StdoutTargetFactory, SurrealDbTargetFactory};
 
 use crate::config::{SurrealDbDef, SyncConfig};
 use crate::lifecycle::LifecycleManager;
@@ -33,8 +33,8 @@ pub struct OversyncEngineBuilder {
 	snapshot_db: Option<String>,
 	snapshot_username: Option<String>,
 	snapshot_password: Option<String>,
-	extra_sources: Vec<Box<dyn SourceFactory>>,
-	extra_sinks: Vec<Box<dyn SinkFactory>>,
+	extra_sources: Vec<Box<dyn OriginFactory>>,
+	extra_sinks: Vec<Box<dyn TargetFactory>>,
 	skip_defaults: bool,
 	skip_schema: bool,
 	api_key: Option<String>,
@@ -217,13 +217,13 @@ impl OversyncEngineBuilder {
 	}
 
 	/// Register an additional source connector factory (on top of built-in ones).
-	pub fn register_source(mut self, factory: Box<dyn SourceFactory>) -> Self {
+	pub fn register_source(mut self, factory: Box<dyn OriginFactory>) -> Self {
 		self.extra_sources.push(factory);
 		self
 	}
 
 	/// Register an additional sink factory (on top of built-in ones).
-	pub fn register_sink(mut self, factory: Box<dyn SinkFactory>) -> Self {
+	pub fn register_sink(mut self, factory: Box<dyn TargetFactory>) -> Self {
 		self.extra_sinks.push(factory);
 		self
 	}
@@ -371,17 +371,17 @@ impl OversyncEngineBuilder {
 
 pub(crate) fn default_registry() -> PluginRegistry {
 	let mut registry = PluginRegistry::new();
-	registry.register_source(Box::new(PostgresSourceFactory));
-	registry.register_source(Box::new(HttpSourceFactory));
-	registry.register_source(Box::new(MysqlSourceFactory));
-	registry.register_source(Box::new(FlightSqlSourceFactory));
-	registry.register_source(Box::new(TrinoSourceFactory));
-	registry.register_source(Box::new(GraphqlSourceFactory));
-	registry.register_source(Box::new(ClickHouseSourceFactory));
-	registry.register_sink(Box::new(StdoutSinkFactory));
-	registry.register_sink(Box::new(KafkaSinkFactory));
-	registry.register_sink(Box::new(SurrealDbSinkFactory));
-	registry.register_sink(Box::new(HttpSinkFactory));
+	registry.register_source(Box::new(PostgresOriginFactory));
+	registry.register_source(Box::new(HttpOriginFactory));
+	registry.register_source(Box::new(MysqlOriginFactory));
+	registry.register_source(Box::new(FlightSqlOriginFactory));
+	registry.register_source(Box::new(TrinoOriginFactory));
+	registry.register_source(Box::new(GraphqlOriginFactory));
+	registry.register_source(Box::new(ClickHouseOriginFactory));
+	registry.register_sink(Box::new(StdoutTargetFactory));
+	registry.register_sink(Box::new(KafkaTargetFactory));
+	registry.register_sink(Box::new(SurrealDbTargetFactory));
+	registry.register_sink(Box::new(HttpTargetFactory));
 	registry
 }
 

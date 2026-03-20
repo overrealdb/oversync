@@ -15,10 +15,23 @@ pub trait TransformHook: Send + Sync {
 	) -> Result<Vec<EventEnvelope>, OversyncError>;
 }
 
+/// An origin connector fetches rows from an external data source.
+///
+/// Implementations exist for PostgreSQL, MySQL, Trino, ClickHouse, HTTP APIs,
+/// GraphQL, and Apache Arrow Flight SQL. Each connector is created via an
+/// [`OriginFactory`] from a JSON config object.
+///
+/// # Lifecycle
+///
+/// 1. Factory creates the connector (connection pool established)
+/// 2. [`fetch_all`] or [`fetch_into`] called once per cycle
+/// 3. Connector is reused across cycles (connection pooling)
 #[async_trait]
-pub trait SourceConnector: Send + Sync {
+pub trait OriginConnector: Send + Sync {
+	/// Human-readable name of this connector instance.
 	fn name(&self) -> &str;
 
+	/// Fetch all rows matching the query. Returns the full result set in memory.
 	async fn fetch_all(&self, sql: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError>;
 
 	/// Stream rows in batches into a channel. Memory bounded by batch_size * channel buffer.
@@ -43,10 +56,22 @@ pub trait SourceConnector: Send + Sync {
 	async fn test_connection(&self) -> Result<(), OversyncError>;
 }
 
+/// A target connector delivers delta events to a destination.
+///
+/// Built-in implementations: stdout, HTTP webhook, Kafka, SurrealDB.
+/// Custom sinks implement this trait for application-specific delivery
+/// (e.g., DatacatSink transforms events into catalog entities).
+///
+/// # Batching
+///
+/// The default [`send_batch`] iterates and calls [`send_event`] per item.
+/// Override for targets that support native batching (e.g., Kafka produce).
 #[async_trait]
 pub trait Sink: Send + Sync {
+	/// Human-readable name of this target instance.
 	fn name(&self) -> &str;
 
+	/// Deliver a single event to the target.
 	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError>;
 
 	/// Send a batch of envelopes. Default: iterates and calls send_event.
@@ -61,21 +86,24 @@ pub trait Sink: Send + Sync {
 	async fn test_connection(&self) -> Result<(), OversyncError>;
 }
 
-/// Factory for creating SourceConnectors from config.
+/// Factory for creating [`OriginConnector`]s from a JSON config object.
+///
+/// Registered in the [`PluginRegistry`] by connector type name (e.g., `"postgres"`).
+/// The factory is called once per source to create a connector instance.
 #[async_trait]
-pub trait SourceFactory: Send + Sync {
+pub trait OriginFactory: Send + Sync {
 	fn connector_type(&self) -> &str;
 
 	async fn create(
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError>;
+	) -> Result<Box<dyn OriginConnector>, OversyncError>;
 }
 
-/// Factory for creating Sinks from config.
+/// Factory for creating [`Sink`] target connectors from a JSON config object.
 #[async_trait]
-pub trait SinkFactory: Send + Sync {
+pub trait TargetFactory: Send + Sync {
 	fn sink_type(&self) -> &str;
 
 	async fn create(
@@ -135,7 +163,7 @@ mod tests {
 		EventEnvelope {
 			meta: EventMeta {
 				op: OpType::Created,
-				source_id: "s".into(),
+				origin_id: "s".into(),
 				query_id: "q".into(),
 				key: "k".into(),
 				hash: "h".into(),
@@ -207,7 +235,7 @@ mod tests {
 				Ok(envelopes
 					.into_iter()
 					.map(|mut e| {
-						e.meta.source_id.push_str(self.0);
+						e.meta.origin_id.push_str(self.0);
 						e
 					})
 					.collect())
@@ -219,7 +247,7 @@ mod tests {
 			std::sync::Arc::new(AppendSuffix("_b")),
 		]);
 		let output = pipeline.transform(vec![test_envelope()]).await.unwrap();
-		assert_eq!(output[0].meta.source_id, "s_a_b");
+		assert_eq!(output[0].meta.origin_id, "s_a_b");
 	}
 
 	#[tokio::test]

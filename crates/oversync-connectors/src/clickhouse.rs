@@ -7,7 +7,7 @@ use tracing::{Instrument, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClickHouseConfig {
@@ -138,7 +138,7 @@ fn parse_jsonl(body: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncErro
 }
 
 #[async_trait]
-impl SourceConnector for ClickHouseConnector {
+impl OriginConnector for ClickHouseConnector {
 	fn name(&self) -> &str {
 		&self.source_name
 	}

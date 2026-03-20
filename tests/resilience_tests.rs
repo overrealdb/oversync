@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
-use oversync_core::traits::{Sink, SourceConnector};
+use oversync_core::traits::{Sink, OriginConnector};
 use oversync_delta::DeltaEngine;
 
 use common::surreal::TestSurrealContainer;
@@ -28,7 +28,7 @@ impl FailingConnector {
 }
 
 #[async_trait::async_trait]
-impl SourceConnector for FailingConnector {
+impl OriginConnector for FailingConnector {
 	fn name(&self) -> &str {
 		"failing-connector"
 	}
@@ -131,7 +131,7 @@ fn test_rows(n: usize) -> Vec<RawRow> {
 
 fn cycle_config() -> CycleConfig {
 	CycleConfig {
-		source_id: "test".into(),
+		origin_id: "test".into(),
 		query_id: "q".into(),
 		sql: "unused".into(),
 		key_column: "id".into(),
@@ -289,7 +289,7 @@ async fn outbox_save_read_delete_roundtrip() {
 	let events = vec![EventEnvelope {
 		meta: oversync_core::model::EventMeta {
 			op: oversync_core::model::OpType::Created,
-			source_id: "s".into(),
+			origin_id: "s".into(),
 			query_id: "q".into(),
 			key: "k".into(),
 			hash: "h".into(),
@@ -324,7 +324,7 @@ async fn outbox_multiple_cycles_accumulate() {
 	let e1 = vec![EventEnvelope {
 		meta: oversync_core::model::EventMeta {
 			op: oversync_core::model::OpType::Created,
-			source_id: "s".into(),
+			origin_id: "s".into(),
 			query_id: "q".into(),
 			key: "a".into(),
 			hash: "h1".into(),
@@ -336,7 +336,7 @@ async fn outbox_multiple_cycles_accumulate() {
 	let e2 = vec![EventEnvelope {
 		meta: oversync_core::model::EventMeta {
 			op: oversync_core::model::OpType::Updated,
-			source_id: "s".into(),
+			origin_id: "s".into(),
 			query_id: "q".into(),
 			key: "b".into(),
 			hash: "h2".into(),
@@ -369,7 +369,7 @@ async fn outbox_isolation_between_sources() {
 	let event = vec![EventEnvelope {
 		meta: oversync_core::model::EventMeta {
 			op: oversync_core::model::OpType::Created,
-			source_id: "s".into(),
+			origin_id: "s".into(),
 			query_id: "q".into(),
 			key: "k".into(),
 			hash: "h".into(),
@@ -507,7 +507,7 @@ async fn cycle_log_tracks_failed_status() {
 
 	let mut res = t
 		.client
-		.query("SELECT status FROM cycle_log WHERE source_id = 'test'")
+		.query("SELECT status FROM cycle_log WHERE origin_id = 'test'")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();

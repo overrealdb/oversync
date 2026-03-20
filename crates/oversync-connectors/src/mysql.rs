@@ -7,7 +7,7 @@ use tracing::debug;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 pub struct MysqlConnector {
 	pool: MySqlPool,
@@ -37,7 +37,7 @@ impl MysqlConnector {
 }
 
 #[async_trait]
-impl SourceConnector for MysqlConnector {
+impl OriginConnector for MysqlConnector {
 	fn name(&self) -> &str {
 		&self.source_name
 	}

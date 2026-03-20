@@ -12,7 +12,7 @@ DEFINE INDEX OVERWRITE idx_source_name ON source_config FIELDS name UNIQUE;
 
 -- query_config: queries within a source
 DEFINE TABLE OVERWRITE query_config SCHEMAFULL;
-DEFINE FIELD OVERWRITE source_id  ON query_config TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE origin_id  ON query_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD OVERWRITE name       ON query_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD OVERWRITE query      ON query_config TYPE string;
 DEFINE FIELD OVERWRITE key_column ON query_config TYPE string;
@@ -20,7 +20,7 @@ DEFINE FIELD OVERWRITE schedule   ON query_config TYPE option<string>;
 DEFINE FIELD OVERWRITE sinks      ON query_config TYPE option<array>;
 DEFINE FIELD OVERWRITE enabled    ON query_config TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE created_at ON query_config TYPE datetime DEFAULT time::now();
-DEFINE INDEX OVERWRITE idx_query_source ON query_config FIELDS source_id, name UNIQUE;
+DEFINE INDEX OVERWRITE idx_query_source ON query_config FIELDS origin_id, name UNIQUE;
 
 -- sink_config: registered sinks
 DEFINE TABLE OVERWRITE sink_config SCHEMAFULL;

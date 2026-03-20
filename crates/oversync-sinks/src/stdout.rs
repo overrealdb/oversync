@@ -58,7 +58,7 @@ mod tests {
 		EventEnvelope {
 			meta: EventMeta {
 				op: OpType::Created,
-				source_id: "src".into(),
+				origin_id: "src".into(),
 				query_id: "q".into(),
 				key: key.into(),
 				hash: "h".into(),

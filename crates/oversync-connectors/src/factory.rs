@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{SourceConnector, SourceFactory};
+use oversync_core::traits::{OriginConnector, OriginFactory};
 
 use crate::flight_sql::FlightSqlConnector;
 use crate::graphql::{GraphqlConfig, GraphqlConnector};
@@ -11,10 +11,10 @@ use crate::clickhouse::{ClickHouseConfig, ClickHouseConnector};
 use crate::trino::{TrinoConfig, TrinoConnector};
 use crate::PostgresConnector;
 
-pub struct PostgresSourceFactory;
+pub struct PostgresOriginFactory;
 
 #[async_trait]
-impl SourceFactory for PostgresSourceFactory {
+impl OriginFactory for PostgresOriginFactory {
 	fn connector_type(&self) -> &str {
 		"postgres"
 	}
@@ -23,7 +23,7 @@ impl SourceFactory for PostgresSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let dsn = config
 			.get("dsn")
 			.and_then(|v| v.as_str())
@@ -34,10 +34,10 @@ impl SourceFactory for PostgresSourceFactory {
 	}
 }
 
-pub struct HttpSourceFactory;
+pub struct HttpOriginFactory;
 
 #[async_trait]
-impl SourceFactory for HttpSourceFactory {
+impl OriginFactory for HttpOriginFactory {
 	fn connector_type(&self) -> &str {
 		"http"
 	}
@@ -46,17 +46,17 @@ impl SourceFactory for HttpSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let http_config: HttpSourceConfig = serde_json::from_value(config.clone())
 			.map_err(|e| OversyncError::Config(format!("http source: {e}")))?;
 		Ok(Box::new(HttpSource::new(name, http_config)?))
 	}
 }
 
-pub struct MysqlSourceFactory;
+pub struct MysqlOriginFactory;
 
 #[async_trait]
-impl SourceFactory for MysqlSourceFactory {
+impl OriginFactory for MysqlOriginFactory {
 	fn connector_type(&self) -> &str {
 		"mysql"
 	}
@@ -65,7 +65,7 @@ impl SourceFactory for MysqlSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let dsn = config
 			.get("dsn")
 			.and_then(|v| v.as_str())
@@ -76,10 +76,10 @@ impl SourceFactory for MysqlSourceFactory {
 	}
 }
 
-pub struct FlightSqlSourceFactory;
+pub struct FlightSqlOriginFactory;
 
 #[async_trait]
-impl SourceFactory for FlightSqlSourceFactory {
+impl OriginFactory for FlightSqlOriginFactory {
 	fn connector_type(&self) -> &str {
 		"flight-sql"
 	}
@@ -88,7 +88,7 @@ impl SourceFactory for FlightSqlSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let dsn = config
 			.get("dsn")
 			.and_then(|v| v.as_str())
@@ -99,10 +99,10 @@ impl SourceFactory for FlightSqlSourceFactory {
 	}
 }
 
-pub struct TrinoSourceFactory;
+pub struct TrinoOriginFactory;
 
 #[async_trait]
-impl SourceFactory for TrinoSourceFactory {
+impl OriginFactory for TrinoOriginFactory {
 	fn connector_type(&self) -> &str {
 		"trino"
 	}
@@ -111,7 +111,7 @@ impl SourceFactory for TrinoSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let trino_config: TrinoConfig = serde_json::from_value(config.clone())
 			.map_err(|e| OversyncError::Config(format!("trino: {e}")))?;
 		let connector = TrinoConnector::new(name, trino_config)?;
@@ -119,10 +119,10 @@ impl SourceFactory for TrinoSourceFactory {
 	}
 }
 
-pub struct ClickHouseSourceFactory;
+pub struct ClickHouseOriginFactory;
 
 #[async_trait]
-impl SourceFactory for ClickHouseSourceFactory {
+impl OriginFactory for ClickHouseOriginFactory {
 	fn connector_type(&self) -> &str {
 		"clickhouse"
 	}
@@ -131,7 +131,7 @@ impl SourceFactory for ClickHouseSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let ch_config: ClickHouseConfig = serde_json::from_value(config.clone())
 			.map_err(|e| OversyncError::Config(format!("clickhouse: {e}")))?;
 		let connector = ClickHouseConnector::new(name, ch_config)?;
@@ -139,10 +139,10 @@ impl SourceFactory for ClickHouseSourceFactory {
 	}
 }
 
-pub struct GraphqlSourceFactory;
+pub struct GraphqlOriginFactory;
 
 #[async_trait]
-impl SourceFactory for GraphqlSourceFactory {
+impl OriginFactory for GraphqlOriginFactory {
 	fn connector_type(&self) -> &str {
 		"graphql"
 	}
@@ -151,7 +151,7 @@ impl SourceFactory for GraphqlSourceFactory {
 		&self,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let gql_config: GraphqlConfig = serde_json::from_value(config.clone())
 			.map_err(|e| OversyncError::Config(format!("graphql: {e}")))?;
 		let connector = GraphqlConnector::new(name, gql_config)?;

@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{Sink, SinkFactory, SourceConnector, SourceFactory};
+use oversync_core::traits::{Sink, TargetFactory, OriginConnector, OriginFactory};
 
 #[derive(Clone)]
 pub struct PluginRegistry {
-	sources: HashMap<String, Arc<dyn SourceFactory>>,
-	sinks: HashMap<String, Arc<dyn SinkFactory>>,
+	sources: HashMap<String, Arc<dyn OriginFactory>>,
+	sinks: HashMap<String, Arc<dyn TargetFactory>>,
 }
 
 impl PluginRegistry {
@@ -18,12 +18,12 @@ impl PluginRegistry {
 		}
 	}
 
-	pub fn register_source(&mut self, factory: Box<dyn SourceFactory>) {
+	pub fn register_source(&mut self, factory: Box<dyn OriginFactory>) {
 		self.sources
 			.insert(factory.connector_type().to_string(), Arc::from(factory));
 	}
 
-	pub fn register_sink(&mut self, factory: Box<dyn SinkFactory>) {
+	pub fn register_sink(&mut self, factory: Box<dyn TargetFactory>) {
 		self.sinks
 			.insert(factory.sink_type().to_string(), Arc::from(factory));
 	}
@@ -33,7 +33,7 @@ impl PluginRegistry {
 		connector_type: &str,
 		name: &str,
 		config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		let factory = self.sources.get(connector_type).ok_or_else(|| {
 			OversyncError::Plugin(format!("unknown source type: {connector_type}"))
 		})?;
@@ -69,7 +69,7 @@ mod tests {
 	struct MockConnector;
 
 	#[async_trait]
-	impl SourceConnector for MockConnector {
+	impl OriginConnector for MockConnector {
 		fn name(&self) -> &str {
 			"mock"
 		}
@@ -81,10 +81,10 @@ mod tests {
 		}
 	}
 
-	struct MockSourceFactory;
+	struct MockOriginFactory;
 
 	#[async_trait]
-	impl SourceFactory for MockSourceFactory {
+	impl OriginFactory for MockOriginFactory {
 		fn connector_type(&self) -> &str {
 			"mock"
 		}
@@ -92,7 +92,7 @@ mod tests {
 			&self,
 			_name: &str,
 			_config: &serde_json::Value,
-		) -> Result<Box<dyn SourceConnector>, OversyncError> {
+		) -> Result<Box<dyn OriginConnector>, OversyncError> {
 			Ok(Box::new(MockConnector))
 		}
 	}
@@ -112,10 +112,10 @@ mod tests {
 		}
 	}
 
-	struct MockSinkFactory;
+	struct MockTargetFactory;
 
 	#[async_trait]
-	impl SinkFactory for MockSinkFactory {
+	impl TargetFactory for MockTargetFactory {
 		fn sink_type(&self) -> &str {
 			"mock"
 		}
@@ -131,7 +131,7 @@ mod tests {
 	#[tokio::test]
 	async fn registry_creates_registered_source() {
 		let mut r = PluginRegistry::new();
-		r.register_source(Box::new(MockSourceFactory));
+		r.register_source(Box::new(MockOriginFactory));
 		let src = r
 			.create_source("mock", "test", &serde_json::json!({}))
 			.await;
@@ -142,7 +142,7 @@ mod tests {
 	#[tokio::test]
 	async fn registry_creates_registered_sink() {
 		let mut r = PluginRegistry::new();
-		r.register_sink(Box::new(MockSinkFactory));
+		r.register_sink(Box::new(MockTargetFactory));
 		let sink = r.create_sink("mock", "test", &serde_json::json!({})).await;
 		assert!(sink.is_ok());
 		assert_eq!(sink.unwrap().name(), "mock");
@@ -181,7 +181,7 @@ mod tests {
 	#[tokio::test]
 	async fn registry_is_cloneable() {
 		let mut r = PluginRegistry::new();
-		r.register_source(Box::new(MockSourceFactory));
+		r.register_source(Box::new(MockOriginFactory));
 		let r2 = r.clone();
 		let src = r2
 			.create_source("mock", "test", &serde_json::json!({}))

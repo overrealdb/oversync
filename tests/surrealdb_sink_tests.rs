@@ -10,7 +10,7 @@ fn make_envelope(key: &str, op: OpType, data: serde_json::Value) -> EventEnvelop
 	EventEnvelope {
 		meta: EventMeta {
 			op,
-			source_id: "test-src".into(),
+			origin_id: "test-src".into(),
 			query_id: "test-q".into(),
 			key: key.into(),
 			hash: format!("hash_{key}"),
@@ -39,7 +39,7 @@ async fn surrealdb_sink_upserts_created_event() {
 	assert_eq!(rows[0]["data"]["name"], "alpha");
 	assert_eq!(rows[0]["data"]["val"], 42);
 	assert_eq!(rows[0]["_meta"]["op"], "created");
-	assert_eq!(rows[0]["_meta"]["source_id"], "test-src");
+	assert_eq!(rows[0]["_meta"]["origin_id"], "test-src");
 }
 
 #[tokio::test]

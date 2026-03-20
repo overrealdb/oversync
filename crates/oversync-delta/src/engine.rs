@@ -94,13 +94,13 @@ impl DeltaEngine {
 
 	pub async fn next_cycle_id(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 	) -> Result<i64, OversyncError> {
 		let mut response = self
 			.state_client
 			.query(&self.sql(NEXT_CYCLE_ID_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("next_cycle_id: {e}")))?;
@@ -120,13 +120,13 @@ impl DeltaEngine {
 
 	pub async fn read_snapshot_keys(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 	) -> Result<HashMap<String, String>, OversyncError> {
 		let mut response = self
 			.snapshot_client
 			.query(&self.sql(READ_SNAPSHOT_KEYS_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("read_snapshot_keys: {e}")))?;
@@ -156,7 +156,7 @@ impl DeltaEngine {
 	/// Returns HashMap<row_key, row_hash> for in-memory diff.
 	pub async fn read_snapshot_keys_paged(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 	) -> Result<HashMap<String, String>, OversyncError> {
 		const PAGE: usize = 50000;
@@ -169,7 +169,7 @@ impl DeltaEngine {
 			let mut resp = self
 				.snapshot_client
 				.query(&sql)
-				.bind(("source_id", source_id.to_string()))
+				.bind(("origin_id", origin_id.to_string()))
 				.bind(("query_id", query_id.to_string()))
 				.await
 				.map_err(|e| OversyncError::SurrealDb(format!("read_keys_paged: {e}")))?;
@@ -206,12 +206,12 @@ impl DeltaEngine {
 	/// on all existing rows so we can detect created vs updated after upsert.
 	pub async fn prep_prev_hash(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 	) -> Result<(), OversyncError> {
 		self.snapshot_client
 			.query(&self.sql(PREP_PREV_HASH_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("prep_prev_hash: {e}")))?;
@@ -221,20 +221,20 @@ impl DeltaEngine {
 
 	pub async fn upsert_batch(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 		rows: &[RawRow],
 	) -> Result<usize, OversyncError> {
-		self.prep_prev_hash(source_id, query_id).await?;
-		self.upsert_batch_raw(source_id, query_id, cycle_id, rows)
+		self.prep_prev_hash(origin_id, query_id).await?;
+		self.upsert_batch_raw(origin_id, query_id, cycle_id, rows)
 			.await
 	}
 
 	/// Upsert without calling prep_prev_hash (caller is responsible).
 	pub async fn upsert_batch_raw(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 		rows: &[RawRow],
@@ -246,7 +246,7 @@ impl DeltaEngine {
 				.iter()
 				.map(|row| {
 					serde_json::json!({
-						"source_id": source_id,
+						"origin_id": origin_id,
 						"query_id": query_id,
 						"row_key": row.row_key,
 						"row_data": row.row_data,
@@ -277,13 +277,13 @@ impl DeltaEngine {
 
 	pub async fn delete_stale(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.snapshot_client
 			.query(&self.sql(DELETE_STALE_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
 			.await
@@ -298,7 +298,7 @@ impl DeltaEngine {
 	/// For larger datasets, upserts are chunked and the delete runs at the end.
 	pub async fn commit_cycle(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 		rows: &[RawRow],
@@ -308,7 +308,7 @@ impl DeltaEngine {
 				.iter()
 				.map(|row| {
 					serde_json::json!({
-						"source_id": source_id,
+						"origin_id": origin_id,
 						"query_id": query_id,
 						"row_key": row.row_key,
 						"row_data": row.row_data,
@@ -326,7 +326,7 @@ impl DeltaEngine {
 				.snapshot_client
 				.query(&txn_query)
 				.bind(("rows", batch))
-				.bind(("source_id", source_id.to_string()))
+				.bind(("origin_id", origin_id.to_string()))
 				.bind(("query_id", query_id.to_string()))
 				.bind(("cycle_id", cycle_id))
 				.await
@@ -342,9 +342,9 @@ impl DeltaEngine {
 			Ok(rows.len())
 		} else {
 			let count = self
-				.upsert_batch(source_id, query_id, cycle_id, rows)
+				.upsert_batch(origin_id, query_id, cycle_id, rows)
 				.await?;
-			self.delete_stale(source_id, query_id, cycle_id).await?;
+			self.delete_stale(origin_id, query_id, cycle_id).await?;
 			info!(rows = count, "committed cycle in chunked batches");
 			Ok(count)
 		}
@@ -354,17 +354,17 @@ impl DeltaEngine {
 	/// to distinguish created/updated/deleted. Paginates to handle large datasets.
 	pub async fn compute_delta_from_db(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 	) -> Result<DeltaResult, OversyncError> {
 		let now = chrono::Utc::now();
-		let src = source_id.to_string();
+		let src = origin_id.to_string();
 		let qid = query_id.to_string();
 
 		let to_event = |row: &serde_json::Value, op: OpType| DeltaEvent {
 			op,
-			source_id: src.clone(),
+			origin_id: src.clone(),
 			query_id: qid.clone(),
 			row_key: row
 				.get("row_key")
@@ -419,7 +419,7 @@ impl DeltaEngine {
 	async fn paginated_query(
 		&self,
 		base_sql: &str,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 		map_fn: impl Fn(&serde_json::Value) -> DeltaEvent,
@@ -434,7 +434,7 @@ impl DeltaEngine {
 			let mut resp = self
 				.snapshot_client
 				.query(&sql)
-				.bind(("source_id", source_id.to_string()))
+				.bind(("origin_id", origin_id.to_string()))
 				.bind(("query_id", query_id.to_string()))
 				.bind(("cycle_id", cycle_id))
 				.await
@@ -466,7 +466,7 @@ impl DeltaEngine {
 
 	pub async fn save_pending_events(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 		events: &[EventEnvelope],
@@ -475,7 +475,7 @@ impl DeltaEngine {
 			.map_err(|e| OversyncError::Internal(format!("serialize events: {e}")))?;
 		self.state_client
 			.query(&self.sql(SAVE_PENDING_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
 			.bind(("events_json", events_json))
@@ -487,13 +487,13 @@ impl DeltaEngine {
 
 	pub async fn read_pending_events(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 	) -> Result<Vec<(i64, Vec<EventEnvelope>)>, OversyncError> {
 		let mut response = self
 			.state_client
 			.query(&self.sql(READ_PENDING_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("read_pending: {e}")))?;
@@ -519,13 +519,13 @@ impl DeltaEngine {
 
 	pub async fn delete_pending_events(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		up_to_cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
 			.query(&self.sql(DELETE_PENDING_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", up_to_cycle_id))
 			.await
@@ -535,13 +535,13 @@ impl DeltaEngine {
 
 	pub async fn log_cycle_start(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
 			.query(&self.sql(LOG_CYCLE_START_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
 			.await
@@ -551,7 +551,7 @@ impl DeltaEngine {
 
 	pub async fn log_cycle_finish(
 		&self,
-		source_id: &str,
+		origin_id: &str,
 		query_id: &str,
 		cycle_id: i64,
 		status: CycleStatus,
@@ -562,7 +562,7 @@ impl DeltaEngine {
 	) -> Result<(), OversyncError> {
 		self.state_client
 			.query(&self.sql(LOG_CYCLE_FINISH_SQL))
-			.bind(("source_id", source_id.to_string()))
+			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
 			.bind(("status", status.to_string()))

@@ -37,7 +37,7 @@ pub struct EventEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EventMeta {
 	pub op: OpType,
-	pub source_id: String,
+	pub origin_id: String,
 	pub query_id: String,
 	pub key: String,
 	pub hash: String,
@@ -50,7 +50,7 @@ impl From<&DeltaEvent> for EventEnvelope {
 		Self {
 			meta: EventMeta {
 				op: e.op,
-				source_id: e.source_id.clone(),
+				origin_id: e.origin_id.clone(),
 				query_id: e.query_id.clone(),
 				key: e.row_key.clone(),
 				hash: e.row_hash.clone(),
@@ -85,7 +85,7 @@ impl std::fmt::Display for CycleStatus {
 pub fn compute_diff(
 	previous: &HashMap<String, String>,
 	current: &[RawRow],
-	source_id: &str,
+	origin_id: &str,
 	query_id: &str,
 	cycle_id: u64,
 ) -> DeltaResult {
@@ -101,7 +101,7 @@ pub fn compute_diff(
 			None => {
 				result.created.push(DeltaEvent {
 					op: OpType::Created,
-					source_id: source_id.into(),
+					origin_id: origin_id.into(),
 					query_id: query_id.into(),
 					row_key: row.row_key.clone(),
 					row_data: row.row_data.clone(),
@@ -113,7 +113,7 @@ pub fn compute_diff(
 			Some(prev_hash) if *prev_hash != row_hash => {
 				result.updated.push(DeltaEvent {
 					op: OpType::Updated,
-					source_id: source_id.into(),
+					origin_id: origin_id.into(),
 					query_id: query_id.into(),
 					row_key: row.row_key.clone(),
 					row_data: row.row_data.clone(),
@@ -130,7 +130,7 @@ pub fn compute_diff(
 		if !seen_keys.contains(key) {
 			result.deleted.push(DeltaEvent {
 				op: OpType::Deleted,
-				source_id: source_id.into(),
+				origin_id: origin_id.into(),
 				query_id: query_id.into(),
 				row_key: key.clone(),
 				row_data: serde_json::Value::Null,
@@ -155,7 +155,7 @@ pub enum OpType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DeltaEvent {
 	pub op: OpType,
-	pub source_id: String,
+	pub origin_id: String,
 	pub query_id: String,
 	pub row_key: String,
 	pub row_data: serde_json::Value,
@@ -235,7 +235,7 @@ mod tests {
 	fn delta_event_roundtrip_json() {
 		let evt = DeltaEvent {
 			op: OpType::Created,
-			source_id: "pg-prod".into(),
+			origin_id: "pg-prod".into(),
 			query_id: "q1".into(),
 			row_key: "pk-1".into(),
 			row_data: serde_json::json!({"x": 1}),
@@ -271,7 +271,7 @@ mod tests {
 	fn delta_result_total_counts_all() {
 		let evt = || DeltaEvent {
 			op: OpType::Created,
-			source_id: "s".into(),
+			origin_id: "s".into(),
 			query_id: "q".into(),
 			row_key: "k".into(),
 			row_data: serde_json::json!({}),
@@ -409,7 +409,7 @@ mod tests {
 			row_data: serde_json::json!({}),
 		}];
 		let r = compute_diff(&HashMap::new(), &rows, "my-src", "my-q", 7);
-		assert_eq!(r.created[0].source_id, "my-src");
+		assert_eq!(r.created[0].origin_id, "my-src");
 		assert_eq!(r.created[0].query_id, "my-q");
 		assert_eq!(r.created[0].cycle_id, 7);
 	}

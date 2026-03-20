@@ -8,7 +8,7 @@ use tracing::debug;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 use crate::http_common::{apply_auth, extract_items, items_to_rows, navigate_path, AuthConfig};
 
@@ -173,7 +173,7 @@ impl GraphqlConnector {
 }
 
 #[async_trait]
-impl SourceConnector for GraphqlConnector {
+impl OriginConnector for GraphqlConnector {
 	fn name(&self) -> &str {
 		&self.name
 	}

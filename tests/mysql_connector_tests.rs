@@ -1,7 +1,7 @@
 mod common;
 
 use oversync_connectors::MysqlConnector;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 use common::mysql::TestMysql;
 

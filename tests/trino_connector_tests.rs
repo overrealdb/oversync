@@ -1,7 +1,7 @@
 mod common;
 
 use oversync_connectors::trino::{TrinoConfig, TrinoConnector};
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 use common::trino::TestTrino;
 
@@ -346,11 +346,11 @@ async fn bad_key_column_errors() {
 
 #[tokio::test]
 async fn factory_creates_connector() {
-	use oversync_connectors::TrinoSourceFactory;
-	use oversync_core::traits::SourceFactory;
+	use oversync_connectors::TrinoOriginFactory;
+	use oversync_core::traits::OriginFactory;
 
 	let trino = TestTrino::new().await;
-	let factory = TrinoSourceFactory;
+	let factory = TrinoOriginFactory;
 	assert_eq!(factory.connector_type(), "trino");
 
 	let source = factory.create("my-trino", &trino.config()).await.unwrap();

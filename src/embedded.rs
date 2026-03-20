@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::DeltaResult;
-use oversync_core::traits::{Sink, SinkFactory, SourceFactory, TransformHook};
+use oversync_core::traits::{Sink, TargetFactory, OriginFactory, TransformHook};
 use oversync_delta::DeltaEngine;
 
 use crate::config::SourceDef;
@@ -33,8 +33,8 @@ pub struct EmbeddedSyncBuilder {
 	sources: Vec<SourceDef>,
 	sinks: HashMap<String, Arc<dyn Sink>>,
 	transform_hooks: HashMap<String, Arc<dyn TransformHook>>,
-	extra_sources: Vec<Box<dyn SourceFactory>>,
-	extra_sinks: Vec<Box<dyn SinkFactory>>,
+	extra_sources: Vec<Box<dyn OriginFactory>>,
+	extra_sinks: Vec<Box<dyn TargetFactory>>,
 }
 
 pub struct EmbeddedSync {
@@ -104,7 +104,7 @@ impl EmbeddedSync {
 		let query_sinks = self.resolve_sinks(&query.sinks)?;
 
 		let cycle_config = CycleConfig {
-			source_id: source.name.clone(),
+			origin_id: source.name.clone(),
 			query_id: query.id.clone(),
 			sql: query.sql.clone(),
 			key_column: query.key_column.clone(),
@@ -211,12 +211,12 @@ impl EmbeddedSyncBuilder {
 		self
 	}
 
-	pub fn register_source(mut self, factory: Box<dyn SourceFactory>) -> Self {
+	pub fn register_source(mut self, factory: Box<dyn OriginFactory>) -> Self {
 		self.extra_sources.push(factory);
 		self
 	}
 
-	pub fn register_sink(mut self, factory: Box<dyn SinkFactory>) -> Self {
+	pub fn register_sink(mut self, factory: Box<dyn TargetFactory>) -> Self {
 		self.extra_sinks.push(factory);
 		self
 	}
@@ -414,7 +414,7 @@ async fn run_embedded_query(
 
 async fn run_timed_embedded_cycle(
 	engine: &DeltaEngine,
-	connector: &dyn oversync_core::traits::SourceConnector,
+	connector: &dyn oversync_core::traits::OriginConnector,
 	sinks: &[Arc<dyn Sink>],
 	source: &SourceDef,
 	query: &crate::config::QueryDef,
@@ -439,14 +439,14 @@ async fn run_timed_embedded_cycle(
 
 async fn run_embedded_cycle(
 	engine: &DeltaEngine,
-	connector: &dyn oversync_core::traits::SourceConnector,
+	connector: &dyn oversync_core::traits::OriginConnector,
 	sinks: &[Arc<dyn Sink>],
 	source: &SourceDef,
 	query: &crate::config::QueryDef,
 	transform_hooks: &HashMap<String, Arc<dyn TransformHook>>,
 ) {
 	let cycle_config = CycleConfig {
-		source_id: source.name.clone(),
+		origin_id: source.name.clone(),
 		query_id: query.id.clone(),
 		sql: query.sql.clone(),
 		key_column: query.key_column.clone(),

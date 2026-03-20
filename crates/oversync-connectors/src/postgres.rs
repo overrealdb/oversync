@@ -7,7 +7,7 @@ use tracing::debug;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 pub struct PostgresConnector {
 	pool: PgPool,
@@ -37,7 +37,7 @@ impl PostgresConnector {
 }
 
 #[async_trait]
-impl SourceConnector for PostgresConnector {
+impl OriginConnector for PostgresConnector {
 	fn name(&self) -> &str {
 		&self.source_name
 	}

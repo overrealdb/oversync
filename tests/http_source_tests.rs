@@ -10,7 +10,7 @@ use tokio::net::TcpListener;
 
 use oversync_connectors::http_source::{AuthConfig, HttpSourceConfig, PaginationConfig};
 use oversync_connectors::HttpSource;
-use oversync_core::traits::SourceConnector;
+use oversync_core::traits::OriginConnector;
 
 async fn start_server(app: Router) -> String {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -306,8 +306,8 @@ async fn http_500_returns_error() {
 
 #[tokio::test]
 async fn factory_creates_http_source() {
-	use oversync_connectors::HttpSourceFactory;
-	use oversync_core::traits::SourceFactory;
+	use oversync_connectors::HttpOriginFactory;
+	use oversync_core::traits::OriginFactory;
 
 	let app = Router::new().route(
 		"/test",
@@ -315,7 +315,7 @@ async fn factory_creates_http_source() {
 	);
 	let base = start_server(app).await;
 
-	let factory = HttpSourceFactory;
+	let factory = HttpOriginFactory;
 	assert_eq!(factory.connector_type(), "http");
 	let config = serde_json::json!({"dsn": base});
 	let source = factory.create("test-http", &config).await.unwrap();

@@ -38,7 +38,7 @@ pub async fn list_queries(
 	let db = require_db(&state)?;
 
 	let mut resp = db
-		.query("SELECT * FROM query_config WHERE source_id = $source")
+		.query("SELECT * FROM query_config WHERE origin_id = $source")
 		.bind(("source", source))
 		.await
 		.map_err(db_err)?;
@@ -81,13 +81,13 @@ pub async fn create_query(
 ) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
 	let db = require_db(&state)?;
 
-	db.query("DELETE query_config WHERE source_id = $source AND name = $name")
+	db.query("DELETE query_config WHERE origin_id = $source AND name = $name")
 		.bind(("source", source.clone()))
 		.bind(("name", req.name.clone()))
 		.await
 		.map_err(db_err)?;
 
-	let mut query_str = "CREATE query_config SET source_id = $source, name = $name, query = $query, key_column = $key_column, enabled = true".to_string();
+	let mut query_str = "CREATE query_config SET origin_id = $source, name = $name, query = $query, key_column = $key_column, enabled = true".to_string();
 
 	let sinks_val = req.sinks.map(|s| {
 		serde_json::Value::Array(s.into_iter().map(serde_json::Value::String).collect())
@@ -138,7 +138,7 @@ pub async fn update_query(
 	let db = require_db(&state)?;
 
 	if let Some(query) = req.query {
-		db.query("UPDATE query_config SET query = $query WHERE source_id = $source AND name = $name")
+		db.query("UPDATE query_config SET query = $query WHERE origin_id = $source AND name = $name")
 			.bind(("source", source.clone()))
 			.bind(("name", name.clone()))
 			.bind(("query", query))
@@ -147,7 +147,7 @@ pub async fn update_query(
 	}
 
 	if let Some(key_column) = req.key_column {
-		db.query("UPDATE query_config SET key_column = $key_column WHERE source_id = $source AND name = $name")
+		db.query("UPDATE query_config SET key_column = $key_column WHERE origin_id = $source AND name = $name")
 			.bind(("source", source.clone()))
 			.bind(("name", name.clone()))
 			.bind(("key_column", key_column))
@@ -159,7 +159,7 @@ pub async fn update_query(
 		let sinks_val = serde_json::Value::Array(
 			sinks.into_iter().map(serde_json::Value::String).collect(),
 		);
-		db.query("UPDATE query_config SET sinks = $sinks WHERE source_id = $source AND name = $name")
+		db.query("UPDATE query_config SET sinks = $sinks WHERE origin_id = $source AND name = $name")
 			.bind(("source", source.clone()))
 			.bind(("name", name.clone()))
 			.bind(("sinks", sinks_val))
@@ -168,7 +168,7 @@ pub async fn update_query(
 	}
 
 	if let Some(enabled) = req.enabled {
-		db.query("UPDATE query_config SET enabled = $enabled WHERE source_id = $source AND name = $name")
+		db.query("UPDATE query_config SET enabled = $enabled WHERE origin_id = $source AND name = $name")
 			.bind(("source", source.clone()))
 			.bind(("name", name.clone()))
 			.bind(("enabled", enabled))
@@ -202,7 +202,7 @@ pub async fn delete_query(
 ) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
 	let db = require_db(&state)?;
 
-	db.query("DELETE query_config WHERE source_id = $source AND name = $name")
+	db.query("DELETE query_config WHERE origin_id = $source AND name = $name")
 		.bind(("source", source.clone()))
 		.bind(("name", name.clone()))
 		.await

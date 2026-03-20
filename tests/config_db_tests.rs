@@ -42,7 +42,7 @@ async fn load_sources_from_db() {
 	container
 		.client
 		.query(
-			"CREATE query_config SET source_id = 'pg-main', name = 'users', query = 'SELECT id, name FROM users', key_column = 'id', enabled = true",
+			"CREATE query_config SET origin_id = 'pg-main', name = 'users', query = 'SELECT id, name FROM users', key_column = 'id', enabled = true",
 		)
 		.await
 		.unwrap();
@@ -133,18 +133,18 @@ async fn multiple_queries_per_source() {
 		.unwrap();
 	container
 		.client
-		.query("CREATE query_config SET source_id = 'pg', name = 'q1', query = 'SELECT 1 AS id', key_column = 'id', enabled = true")
+		.query("CREATE query_config SET origin_id = 'pg', name = 'q1', query = 'SELECT 1 AS id', key_column = 'id', enabled = true")
 		.await
 		.unwrap();
 	container
 		.client
-		.query("CREATE query_config SET source_id = 'pg', name = 'q2', query = 'SELECT 2 AS id', key_column = 'id', enabled = true")
+		.query("CREATE query_config SET origin_id = 'pg', name = 'q2', query = 'SELECT 2 AS id', key_column = 'id', enabled = true")
 		.await
 		.unwrap();
 	// Disabled query should be excluded
 	container
 		.client
-		.query("CREATE query_config SET source_id = 'pg', name = 'q3', query = 'SELECT 3 AS id', key_column = 'id', enabled = false")
+		.query("CREATE query_config SET origin_id = 'pg', name = 'q3', query = 'SELECT 3 AS id', key_column = 'id', enabled = false")
 		.await
 		.unwrap();
 

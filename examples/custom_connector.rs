@@ -10,14 +10,14 @@ use oversync::config::{QueryDef, SinkDef, SourceDef, SyncConfig, SurrealDbDef};
 use oversync::OversyncEngine;
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
-use oversync_core::traits::{SourceConnector, SourceFactory};
+use oversync_core::traits::{OriginConnector, OriginFactory};
 
 struct CsvConnector {
 	name: String,
 }
 
 #[async_trait]
-impl SourceConnector for CsvConnector {
+impl OriginConnector for CsvConnector {
 	fn name(&self) -> &str {
 		&self.name
 	}
@@ -42,10 +42,10 @@ impl SourceConnector for CsvConnector {
 	}
 }
 
-struct CsvSourceFactory;
+struct CsvOriginFactory;
 
 #[async_trait]
-impl SourceFactory for CsvSourceFactory {
+impl OriginFactory for CsvOriginFactory {
 	fn connector_type(&self) -> &str {
 		"csv"
 	}
@@ -54,7 +54,7 @@ impl SourceFactory for CsvSourceFactory {
 		&self,
 		name: &str,
 		_config: &serde_json::Value,
-	) -> Result<Box<dyn SourceConnector>, OversyncError> {
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
 		Ok(Box::new(CsvConnector {
 			name: name.to_string(),
 		}))
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let engine = OversyncEngine::builder("mem://")
 		.skip_schema(true)
-		.register_source(Box::new(CsvSourceFactory))
+		.register_source(Box::new(CsvOriginFactory))
 		.build()
 		.await?;
 

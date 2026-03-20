@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope};
-use oversync_core::traits::{Sink, SourceConnector, TransformHook};
+use oversync_core::traits::{Sink, OriginConnector, TransformHook};
 use oversync_delta::{DeltaEngine, check_fail_safe};
 use tracing::{Instrument, error, info, warn};
 
 use crate::config::DiffMode;
 
 pub struct CycleConfig {
-	pub source_id: String,
+	pub origin_id: String,
 	pub query_id: String,
 	pub sql: String,
 	pub key_column: String,
@@ -20,7 +20,7 @@ pub struct CycleConfig {
 
 pub struct CycleRunner<'a> {
 	engine: &'a DeltaEngine,
-	connector: &'a dyn SourceConnector,
+	connector: &'a dyn OriginConnector,
 	sinks: &'a [Arc<dyn Sink>],
 	transform_hook: Option<Arc<dyn TransformHook>>,
 }
@@ -28,7 +28,7 @@ pub struct CycleRunner<'a> {
 impl<'a> CycleRunner<'a> {
 	pub fn new(
 		engine: &'a DeltaEngine,
-		connector: &'a dyn SourceConnector,
+		connector: &'a dyn OriginConnector,
 		sinks: &'a [Arc<dyn Sink>],
 	) -> Self {
 		Self {
@@ -44,24 +44,24 @@ impl<'a> CycleRunner<'a> {
 		self
 	}
 
-	#[tracing::instrument(skip(self, config), fields(source = %config.source_id, query = %config.query_id))]
+	#[tracing::instrument(skip(self, config), fields(source = %config.origin_id, query = %config.query_id))]
 	pub async fn run(&self, config: &CycleConfig) -> Result<DeltaResult, OversyncError> {
 		self.deliver_pending(config).await;
 
 		let cycle_id = self
 			.engine
-			.next_cycle_id(&config.source_id, &config.query_id)
+			.next_cycle_id(&config.origin_id, &config.query_id)
 			.await?;
 
 		info!(
-			source = %config.source_id,
+			source = %config.origin_id,
 			query = %config.query_id,
 			cycle = cycle_id,
 			"starting cycle"
 		);
 
 		self.engine
-			.log_cycle_start(&config.source_id, &config.query_id, cycle_id)
+			.log_cycle_start(&config.origin_id, &config.query_id, cycle_id)
 			.await?;
 
 		let result = self.run_inner(config, cycle_id).await;
@@ -70,7 +70,7 @@ impl<'a> CycleRunner<'a> {
 			Ok(diff) => {
 				self.engine
 					.log_cycle_finish(
-						&config.source_id,
+						&config.origin_id,
 						&config.query_id,
 						cycle_id,
 						CycleStatus::Success,
@@ -81,7 +81,7 @@ impl<'a> CycleRunner<'a> {
 					)
 					.await?;
 				info!(
-					source = %config.source_id,
+					source = %config.origin_id,
 					cycle = cycle_id,
 					created = diff.created.len(),
 					updated = diff.updated.len(),
@@ -98,7 +98,7 @@ impl<'a> CycleRunner<'a> {
 				let _ = self
 					.engine
 					.log_cycle_finish(
-						&config.source_id,
+						&config.origin_id,
 						&config.query_id,
 						cycle_id,
 						status,
@@ -108,7 +108,7 @@ impl<'a> CycleRunner<'a> {
 						0,
 					)
 					.await;
-				error!(source = %config.source_id, cycle = cycle_id, error = %e, "cycle failed");
+				error!(source = %config.origin_id, cycle = cycle_id, error = %e, "cycle failed");
 			}
 		}
 
@@ -132,7 +132,7 @@ impl<'a> CycleRunner<'a> {
 
 		if !check_fail_safe(previous_count, deleted_count, config.fail_safe_threshold) {
 			warn!(
-				source = %config.source_id,
+				source = %config.origin_id,
 				previous = previous_count,
 				deleted = deleted_count,
 				threshold = config.fail_safe_threshold,
@@ -149,7 +149,7 @@ impl<'a> CycleRunner<'a> {
 			let delete_pct = (deleted_count as f64 / previous_count as f64) * 100.0;
 			if delete_pct > config.fail_safe_threshold * 0.5 && deleted_count > 10 {
 				warn!(
-					source = %config.source_id,
+					source = %config.origin_id,
 					previous = previous_count,
 					deleted = deleted_count,
 					delete_pct = format!("{delete_pct:.1}"),
@@ -162,7 +162,7 @@ impl<'a> CycleRunner<'a> {
 		if previous_count > 0 && created_count > previous_count {
 			let growth_pct = (created_count as f64 / previous_count as f64) * 100.0;
 			warn!(
-				source = %config.source_id,
+				source = %config.origin_id,
 				previous = previous_count,
 				created = created_count,
 				growth_pct = format!("{growth_pct:.1}"),
@@ -186,7 +186,7 @@ impl<'a> CycleRunner<'a> {
 			}
 
 			let delivered = async { self.deliver_paged(config, cycle_id, &envelopes).await }
-				.instrument(tracing::info_span!("deliver", source = %config.source_id))
+				.instrument(tracing::info_span!("deliver", source = %config.origin_id))
 				.await?;
 
 			if !delivered {
@@ -198,10 +198,10 @@ impl<'a> CycleRunner<'a> {
 
 		async {
 			self.engine
-				.delete_stale(&config.source_id, &config.query_id, cycle_id)
+				.delete_stale(&config.origin_id, &config.query_id, cycle_id)
 				.await
 		}
-		.instrument(tracing::info_span!("cleanup", source = %config.source_id))
+		.instrument(tracing::info_span!("cleanup", source = %config.origin_id))
 		.await?;
 
 		Ok(diff)
@@ -215,17 +215,17 @@ impl<'a> CycleRunner<'a> {
 		cycle_id: i64,
 	) -> Result<(DeltaResult, usize), OversyncError> {
 		self.engine
-			.prep_prev_hash(&config.source_id, &config.query_id)
+			.prep_prev_hash(&config.origin_id, &config.query_id)
 			.await?;
 
 		let total = self.stream_and_upsert(config, cycle_id).await?;
 
 		let diff = async {
 			self.engine
-				.compute_delta_from_db(&config.source_id, &config.query_id, cycle_id)
+				.compute_delta_from_db(&config.origin_id, &config.query_id, cycle_id)
 				.await
 		}
-		.instrument(tracing::info_span!("compute_delta", source = %config.source_id))
+		.instrument(tracing::info_span!("compute_delta", source = %config.origin_id))
 		.await?;
 
 		Ok((diff, total))
@@ -240,14 +240,14 @@ impl<'a> CycleRunner<'a> {
 	) -> Result<(DeltaResult, usize), OversyncError> {
 		let previous = async {
 			self.engine
-				.read_snapshot_keys_paged(&config.source_id, &config.query_id)
+				.read_snapshot_keys_paged(&config.origin_id, &config.query_id)
 				.await
 		}
-		.instrument(tracing::info_span!("read_keys", source = %config.source_id))
+		.instrument(tracing::info_span!("read_keys", source = %config.origin_id))
 		.await?;
 
 		info!(
-			source = %config.source_id,
+			source = %config.origin_id,
 			keys = previous.len(),
 			"loaded snapshot keys for memory diff"
 		);
@@ -257,10 +257,10 @@ impl<'a> CycleRunner<'a> {
 		// Read current keys+hashes after upsert
 		let current = async {
 			self.engine
-				.read_snapshot_keys_paged(&config.source_id, &config.query_id)
+				.read_snapshot_keys_paged(&config.origin_id, &config.query_id)
 				.await
 		}
-		.instrument(tracing::info_span!("read_current", source = %config.source_id))
+		.instrument(tracing::info_span!("read_current", source = %config.origin_id))
 		.await?;
 
 		// Direct hash comparison (no re-hashing needed)
@@ -271,7 +271,7 @@ impl<'a> CycleRunner<'a> {
 			match previous.get(key) {
 				None => diff.created.push(DeltaEvent {
 					op: oversync_core::model::OpType::Created,
-					source_id: config.source_id.clone(),
+					origin_id: config.origin_id.clone(),
 					query_id: config.query_id.clone(),
 					row_key: key.clone(),
 					row_data: serde_json::Value::Null,
@@ -281,7 +281,7 @@ impl<'a> CycleRunner<'a> {
 				}),
 				Some(prev_hash) if prev_hash != hash => diff.updated.push(DeltaEvent {
 					op: oversync_core::model::OpType::Updated,
-					source_id: config.source_id.clone(),
+					origin_id: config.origin_id.clone(),
 					query_id: config.query_id.clone(),
 					row_key: key.clone(),
 					row_data: serde_json::Value::Null,
@@ -297,7 +297,7 @@ impl<'a> CycleRunner<'a> {
 			if !current.contains_key(key) {
 				diff.deleted.push(DeltaEvent {
 					op: oversync_core::model::OpType::Deleted,
-					source_id: config.source_id.clone(),
+					origin_id: config.origin_id.clone(),
 					query_id: config.query_id.clone(),
 					row_key: key.clone(),
 					row_data: serde_json::Value::Null,
@@ -309,7 +309,7 @@ impl<'a> CycleRunner<'a> {
 		}
 
 		info!(
-			source = %config.source_id,
+			source = %config.origin_id,
 			created = diff.created.len(),
 			updated = diff.updated.len(),
 			deleted = diff.deleted.len(),
@@ -327,14 +327,14 @@ impl<'a> CycleRunner<'a> {
 		let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<oversync_core::model::RawRow>>(4);
 
 		let engine = &self.engine;
-		let source_id = config.source_id.clone();
+		let origin_id = config.origin_id.clone();
 		let query_id = config.query_id.clone();
 		let sql = config.sql.clone();
 		let key_col = config.key_column.clone();
 		let connector = self.connector;
 
-		let fetch_span = tracing::info_span!("fetch", source = %config.source_id);
-		let upsert_span = tracing::info_span!("upsert", source = %config.source_id);
+		let fetch_span = tracing::info_span!("fetch", source = %config.origin_id);
+		let upsert_span = tracing::info_span!("upsert", source = %config.origin_id);
 
 		let producer =
 			async { connector.fetch_into(&sql, &key_col, 500, tx).await }.instrument(fetch_span);
@@ -344,7 +344,7 @@ impl<'a> CycleRunner<'a> {
 			while let Some(batch) = rx.recv().await {
 				let n = batch.len();
 				engine
-					.upsert_batch_raw(&source_id, &query_id, cycle_id, &batch)
+					.upsert_batch_raw(&origin_id, &query_id, cycle_id, &batch)
 					.await?;
 				total += n;
 			}
@@ -356,7 +356,7 @@ impl<'a> CycleRunner<'a> {
 		fetch_result?;
 		let total = upsert_result?;
 
-		info!(source = %config.source_id, fetched = total, "ingested rows");
+		info!(source = %config.origin_id, fetched = total, "ingested rows");
 		Ok(total)
 	}
 
@@ -376,13 +376,13 @@ impl<'a> CycleRunner<'a> {
 
 			// Save to outbox before delivery (crash-safe)
 			self.engine
-				.save_pending_events(&config.source_id, &config.query_id, page_id, &envelopes)
+				.save_pending_events(&config.origin_id, &config.query_id, page_id, &envelopes)
 				.await?;
 
 			// Deliver to all sinks
 			if !self.deliver_to_sinks(&envelopes).await {
 				warn!(
-					source = %config.source_id,
+					source = %config.origin_id,
 					page = i,
 					events = envelopes.len(),
 					"sink delivery failed, events in outbox"
@@ -392,7 +392,7 @@ impl<'a> CycleRunner<'a> {
 
 			// Clear outbox page
 			self.engine
-				.delete_pending_events(&config.source_id, &config.query_id, page_id)
+				.delete_pending_events(&config.origin_id, &config.query_id, page_id)
 				.await?;
 		}
 
@@ -412,7 +412,7 @@ impl<'a> CycleRunner<'a> {
 	async fn deliver_pending(&self, config: &CycleConfig) {
 		let pending = match self
 			.engine
-			.read_pending_events(&config.source_id, &config.query_id)
+			.read_pending_events(&config.origin_id, &config.query_id)
 			.await
 		{
 			Ok(p) => p,
@@ -427,7 +427,7 @@ impl<'a> CycleRunner<'a> {
 		}
 
 		info!(
-			source = %config.source_id,
+			source = %config.origin_id,
 			batches = pending.len(),
 			"retrying pending event delivery"
 		);
@@ -444,7 +444,7 @@ impl<'a> CycleRunner<'a> {
 		if max_delivered > 0 {
 			let _ = self
 				.engine
-				.delete_pending_events(&config.source_id, &config.query_id, max_delivered)
+				.delete_pending_events(&config.origin_id, &config.query_id, max_delivered)
 				.await;
 		}
 	}

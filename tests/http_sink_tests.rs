@@ -5,9 +5,9 @@ use axum::{Json, Router};
 use tokio::net::TcpListener;
 
 use oversync_core::model::{AuthConfig, EventEnvelope, EventMeta, OpType};
-use oversync_core::traits::{Sink, SinkFactory};
+use oversync_core::traits::{Sink, TargetFactory};
 use oversync_sinks::http_sink::HttpSink;
-use oversync_sinks::HttpSinkFactory;
+use oversync_sinks::HttpTargetFactory;
 
 async fn start_server(app: Router) -> String {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -22,7 +22,7 @@ fn test_envelope(key: &str) -> EventEnvelope {
 	EventEnvelope {
 		meta: EventMeta {
 			op: OpType::Created,
-			source_id: "test-src".into(),
+			origin_id: "test-src".into(),
 			query_id: "test-q".into(),
 			key: key.into(),
 			hash: "abc123".into(),
@@ -174,7 +174,7 @@ async fn factory_creates_http_sink() {
 	let app = Router::new().route("/webhook", any(|| async { axum::http::StatusCode::OK }));
 	let base = start_server(app).await;
 
-	let factory = HttpSinkFactory;
+	let factory = HttpTargetFactory;
 	assert_eq!(factory.sink_type(), "http");
 	let config = serde_json::json!({
 		"url": format!("{base}/webhook"),
@@ -186,7 +186,7 @@ async fn factory_creates_http_sink() {
 
 #[tokio::test]
 async fn factory_missing_url_errors() {
-	let factory = HttpSinkFactory;
+	let factory = HttpTargetFactory;
 	let result = factory.create("test", &serde_json::json!({})).await;
 	let err = result.err().expect("should be an error");
 	assert!(err.to_string().contains("url"));
@@ -197,7 +197,7 @@ async fn factory_with_put_method() {
 	let app = Router::new().route("/wh", put(|| async { axum::http::StatusCode::OK }));
 	let base = start_server(app).await;
 
-	let factory = HttpSinkFactory;
+	let factory = HttpTargetFactory;
 	let config = serde_json::json!({
 		"url": format!("{base}/wh"),
 		"method": "PUT",
@@ -228,7 +228,7 @@ async fn factory_with_auth_and_headers() {
 	);
 	let base = start_server(app).await;
 
-	let factory = HttpSinkFactory;
+	let factory = HttpTargetFactory;
 	let config = serde_json::json!({
 		"url": format!("{base}/wh"),
 		"auth": {"type": "bearer", "token": "tok"},

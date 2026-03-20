@@ -13,7 +13,7 @@ use common::surreal::TestSurrealContainer;
 
 fn cycle_config(schema: &str) -> CycleConfig {
 	CycleConfig {
-		source_id: "pg-test".into(),
+		origin_id: "pg-test".into(),
 		query_id: "items".into(),
 		sql: format!("SELECT id, name, value FROM {schema}.items"),
 		key_column: "id".into(),
@@ -49,7 +49,7 @@ async fn e2e_first_cycle_all_created() {
 	assert!(diff.deleted.is_empty());
 
 	// Verify events have correct source/query
-	assert!(diff.created.iter().all(|e| e.source_id == "pg-test"));
+	assert!(diff.created.iter().all(|e| e.origin_id == "pg-test"));
 	assert!(diff.created.iter().all(|e| e.query_id == "items"));
 
 	drop(sink);

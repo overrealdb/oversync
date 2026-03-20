@@ -75,7 +75,7 @@ impl Sink for SurrealDbSink {
 			.bind(("table", self.table.clone()))
 			.bind(("key", envelope.meta.key.clone()))
 			.bind(("data", envelope.data.clone()))
-			.bind(("source_id", envelope.meta.source_id.clone()))
+			.bind(("origin_id", envelope.meta.origin_id.clone()))
 			.bind(("query_id", envelope.meta.query_id.clone()))
 			.bind(("op", envelope.meta.op.to_string()))
 			.bind(("hash", envelope.meta.hash.clone()))
@@ -102,7 +102,7 @@ impl Sink for SurrealDbSink {
 					"table": self.table,
 					"key": e.meta.key,
 					"data": e.data,
-					"source_id": e.meta.source_id,
+					"origin_id": e.meta.origin_id,
 					"query_id": e.meta.query_id,
 					"op": e.meta.op.to_string(),
 					"hash": e.meta.hash,
