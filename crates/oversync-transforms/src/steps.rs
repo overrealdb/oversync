@@ -364,6 +364,47 @@ impl TransformStep for Coalesce {
 	}
 }
 
+/// Filter records by matching a field value against allow/deny regex patterns.
+///
+/// Evaluation order:
+/// 1. If `deny` patterns are set and any matches → drop
+/// 2. If `allow` patterns are set and none matches → drop
+/// 3. Otherwise → keep
+pub struct SchemaFilter {
+	pub field: String,
+	pub allow: Vec<regex::Regex>,
+	pub deny: Vec<regex::Regex>,
+}
+
+impl TransformStep for SchemaFilter {
+	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
+		let val_str = match data.as_object().and_then(|o| o.get(&self.field)) {
+			Some(serde_json::Value::String(s)) => s.clone(),
+			Some(v) => v.to_string(),
+			None => return Ok(self.allow.is_empty()),
+		};
+
+		for deny in &self.deny {
+			if deny.is_match(&val_str) {
+				return Ok(false);
+			}
+		}
+
+		if !self.allow.is_empty() {
+			let allowed = self.allow.iter().any(|r| r.is_match(&val_str));
+			if !allowed {
+				return Ok(false);
+			}
+		}
+
+		Ok(true)
+	}
+
+	fn step_name(&self) -> &str {
+		"schema_filter"
+	}
+}
+
 fn json_cmp(
 	a: &serde_json::Value,
 	b: &serde_json::Value,
@@ -656,5 +697,103 @@ mod tests {
 			.apply(&mut data)
 			.unwrap();
 		assert_eq!(data["out"], 42);
+	}
+
+	// ── SchemaFilter tests ──────────────────────────────────────
+
+	fn re(pattern: &str) -> regex::Regex {
+		regex::Regex::new(pattern).unwrap()
+	}
+
+	#[test]
+	fn schema_filter_allow_keeps_matching() {
+		let mut data = serde_json::json!({"table": "public.users"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![re("^public\\.")],
+			deny: vec![],
+		};
+		assert!(step.apply(&mut data).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_allow_drops_non_matching() {
+		let mut data = serde_json::json!({"table": "internal.secrets"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![re("^public\\.")],
+			deny: vec![],
+		};
+		assert!(!step.apply(&mut data).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_deny_drops_matching() {
+		let mut data = serde_json::json!({"table": "pg_catalog.pg_class"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![],
+			deny: vec![re("^pg_catalog"), re("^information_schema")],
+		};
+		assert!(!step.apply(&mut data).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_deny_keeps_non_matching() {
+		let mut data = serde_json::json!({"table": "public.users"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![],
+			deny: vec![re("^pg_catalog")],
+		};
+		assert!(step.apply(&mut data).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_deny_takes_precedence_over_allow() {
+		let mut data = serde_json::json!({"table": "public.pg_temp"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![re("^public\\.")],
+			deny: vec![re("pg_temp$")],
+		};
+		assert!(!step.apply(&mut data).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_multiple_allow_any_matches() {
+		let step = SchemaFilter {
+			field: "schema".into(),
+			allow: vec![re("^public$"), re("^analytics$")],
+			deny: vec![],
+		};
+		let mut d1 = serde_json::json!({"schema": "public"});
+		assert!(step.apply(&mut d1).unwrap());
+		let mut d2 = serde_json::json!({"schema": "analytics"});
+		assert!(step.apply(&mut d2).unwrap());
+		let mut d3 = serde_json::json!({"schema": "internal"});
+		assert!(!step.apply(&mut d3).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_missing_field_dropped_when_allow_set() {
+		let mut data = serde_json::json!({"other": "value"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![re(".*")],
+			deny: vec![],
+		};
+		assert!(!step.apply(&mut data).unwrap());
+	}
+
+	#[test]
+	fn schema_filter_missing_field_kept_when_deny_only() {
+		let mut data = serde_json::json!({"other": "value"});
+		let step = SchemaFilter {
+			field: "table".into(),
+			allow: vec![],
+			deny: vec![re("secret")],
+		};
+		assert!(step.apply(&mut data).unwrap());
 	}
 }

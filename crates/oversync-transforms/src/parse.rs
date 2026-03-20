@@ -135,6 +135,20 @@ pub fn parse_steps(defs: &[serde_json::Value]) -> Result<StepChain, OversyncErro
 				fields: req_str_array(obj, "fields", i)?,
 				into: req_str(obj, "into", i)?,
 			}),
+			"schema_filter" => {
+				let allow = parse_regex_array(obj, "allow", i)?;
+				let deny = parse_regex_array(obj, "deny", i)?;
+				if allow.is_empty() && deny.is_empty() {
+					return Err(OversyncError::Config(format!(
+						"transform step {i}: 'schema_filter' requires at least 'allow' or 'deny'"
+					)));
+				}
+				Box::new(SchemaFilter {
+					field: req_str(obj, "field", i)?,
+					allow,
+					deny,
+				})
+			}
 			other => {
 				return Err(OversyncError::Config(format!(
 					"transform step {i}: unknown type '{other}'"
@@ -188,6 +202,32 @@ fn req_str_array(
 				"transform step {idx}: missing '{key}' (string array)"
 			))
 		})
+}
+
+fn parse_regex_array(
+	obj: &serde_json::Map<String, serde_json::Value>,
+	key: &str,
+	idx: usize,
+) -> Result<Vec<regex::Regex>, OversyncError> {
+	let arr = match obj.get(key).and_then(|v| v.as_array()) {
+		Some(a) => a,
+		None => return Ok(vec![]),
+	};
+	arr.iter()
+		.enumerate()
+		.map(|(j, v)| {
+			let pattern = v.as_str().ok_or_else(|| {
+				OversyncError::Config(format!(
+					"transform step {idx}: '{key}[{j}]' must be a string"
+				))
+			})?;
+			regex::Regex::new(pattern).map_err(|e| {
+				OversyncError::Config(format!(
+					"transform step {idx}: invalid regex '{pattern}' in '{key}': {e}"
+				))
+			})
+		})
+		.collect()
 }
 
 #[cfg(test)]
@@ -343,8 +383,62 @@ mod tests {
 			serde_json::json!({"type": "flatten", "field": "x"}),
 			serde_json::json!({"type": "hash", "field": "x"}),
 			serde_json::json!({"type": "coalesce", "fields": ["a", "b"], "into": "c"}),
+			serde_json::json!({"type": "schema_filter", "field": "x", "allow": ["^public"]}),
 		];
 		let chain = parse_steps(&defs).unwrap();
-		assert_eq!(chain.len(), 14);
+		assert_eq!(chain.len(), 15);
+	}
+
+	#[test]
+	fn parse_schema_filter_allow() {
+		let defs = vec![serde_json::json!({
+			"type": "schema_filter",
+			"field": "schema",
+			"allow": ["^public$", "^analytics$"]
+		})];
+		let chain = parse_steps(&defs).unwrap();
+
+		let mut keep = serde_json::json!({"schema": "public"});
+		assert!(chain.apply_one(&mut keep).unwrap());
+
+		let mut drop = serde_json::json!({"schema": "internal"});
+		assert!(!chain.apply_one(&mut drop).unwrap());
+	}
+
+	#[test]
+	fn parse_schema_filter_deny() {
+		let defs = vec![serde_json::json!({
+			"type": "schema_filter",
+			"field": "table",
+			"deny": ["^pg_catalog", "^information_schema"]
+		})];
+		let chain = parse_steps(&defs).unwrap();
+
+		let mut keep = serde_json::json!({"table": "public.users"});
+		assert!(chain.apply_one(&mut keep).unwrap());
+
+		let mut drop = serde_json::json!({"table": "pg_catalog.pg_class"});
+		assert!(!chain.apply_one(&mut drop).unwrap());
+	}
+
+	#[test]
+	fn parse_schema_filter_requires_allow_or_deny() {
+		let defs = vec![serde_json::json!({
+			"type": "schema_filter",
+			"field": "x"
+		})];
+		let err = parse_steps(&defs).unwrap_err();
+		assert!(err.to_string().contains("requires at least"));
+	}
+
+	#[test]
+	fn parse_schema_filter_invalid_regex_errors() {
+		let defs = vec![serde_json::json!({
+			"type": "schema_filter",
+			"field": "x",
+			"allow": ["[invalid"]
+		})];
+		let err = parse_steps(&defs).unwrap_err();
+		assert!(err.to_string().contains("invalid regex"));
 	}
 }
