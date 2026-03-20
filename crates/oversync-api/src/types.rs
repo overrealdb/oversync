@@ -192,3 +192,30 @@ pub struct UpdatePipeRequest {
 	pub retry: Option<serde_json::Value>,
 	pub enabled: Option<bool>,
 }
+
+// ── Credential types ────────────────────────────────────────
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CredentialListResponse {
+	pub credentials: Vec<CredentialInfo>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CredentialInfo {
+	pub name: String,
+	pub credential_type: String,
+	pub created_at: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateCredentialRequest {
+	pub name: String,
+	pub credential_type: String,
+	pub secret: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdateCredentialRequest {
+	pub secret: Option<String>,
+	pub credential_type: Option<String>,
+}

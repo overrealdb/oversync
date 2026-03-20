@@ -203,6 +203,7 @@ mod tests {
 			origin: OriginDef {
 				connector: "mock".into(),
 				dsn: "mock://".into(),
+				credential: None,
 				config: serde_json::Value::Null,
 			},
 			targets: vec![],

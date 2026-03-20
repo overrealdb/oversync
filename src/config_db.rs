@@ -143,6 +143,7 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 			origin: OriginDef {
 				connector: str_field(row, "origin_connector")?,
 				dsn: str_field(row, "origin_dsn")?,
+				credential: row.get("origin_credential").and_then(|v| v.as_str()).map(String::from),
 				config: origin_config,
 			},
 			targets,

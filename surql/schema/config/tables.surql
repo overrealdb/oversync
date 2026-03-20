@@ -37,6 +37,15 @@ DEFINE FIELD OVERWRITE created_at         ON pipe_config TYPE datetime DEFAULT t
 DEFINE FIELD OVERWRITE updated_at         ON pipe_config TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_pipe_name ON pipe_config FIELDS name UNIQUE;
 
+-- credential: encrypted secrets referenced by origin/target
+DEFINE TABLE OVERWRITE credential SCHEMAFULL;
+DEFINE FIELD OVERWRITE name            ON credential TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE credential_type ON credential TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE encrypted       ON credential TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE created_at      ON credential TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at      ON credential TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE idx_credential_name ON credential FIELDS name UNIQUE;
+
 -- sink_config: registered sinks
 DEFINE TABLE OVERWRITE sink_config SCHEMAFULL;
 DEFINE FIELD OVERWRITE name       ON sink_config TYPE string ASSERT $value != NONE;

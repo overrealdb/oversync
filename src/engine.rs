@@ -175,9 +175,33 @@ impl OversyncEngine {
 
 		let registry = crate::engine::default_registry();
 		let dry_run_state = Arc::new(DryRunState { registry });
+
+		let cred_key = match std::env::var("OVERSYNC_CREDENTIAL_KEY") {
+			Ok(key) => key,
+			Err(_) => {
+				tracing::warn!("OVERSYNC_CREDENTIAL_KEY not set, using insecure dev key — do NOT use in production");
+				"oversync-dev-key".into()
+			}
+		};
+		let credential_store = crate::credential::AesGcmStore::from_passphrase(&cred_key);
+		let cred_state = Arc::new(CredentialState {
+			store: credential_store,
+			db: self.state_client.clone(),
+		});
+
 		base.route(
 			"/pipes/dry-run",
 			axum::routing::post(dry_run_handler).with_state(dry_run_state),
+		)
+		.route(
+			"/credentials",
+			axum::routing::get(list_credentials)
+				.post(create_credential)
+				.with_state(cred_state.clone()),
+		)
+		.route(
+			"/credentials/{name}",
+			axum::routing::delete(delete_credential).with_state(cred_state),
 		)
 	}
 }
@@ -212,6 +236,85 @@ async fn dry_run_handler(
 			})
 		})?;
 	Ok(axum::Json(result))
+}
+
+#[cfg(feature = "api")]
+struct CredentialState {
+	store: crate::credential::AesGcmStore,
+	db: surrealdb::Surreal<surrealdb::engine::any::Any>,
+}
+
+#[cfg(feature = "api")]
+async fn create_credential(
+	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
+	axum::Json(req): axum::Json<oversync_api::types::CreateCredentialRequest>,
+) -> Result<axum::Json<oversync_api::types::MutationResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+	let encrypted = state.store.encrypt(&req.secret).map_err(|e| {
+		axum::Json(oversync_api::types::ErrorResponse { error: e.to_string() })
+	})?;
+
+	state.db
+		.query("DELETE credential WHERE name = $name")
+		.bind(("name", req.name.clone()))
+		.await
+		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+
+	state.db
+		.query("CREATE credential SET name = $name, credential_type = $ctype, encrypted = $enc, updated_at = time::now()")
+		.bind(("name", req.name.clone()))
+		.bind(("ctype", req.credential_type))
+		.bind(("enc", encrypted))
+		.await
+		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+
+	Ok(axum::Json(oversync_api::types::MutationResponse {
+		ok: true,
+		message: format!("credential '{}' created", req.name),
+	}))
+}
+
+#[cfg(feature = "api")]
+async fn list_credentials(
+	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
+) -> Result<axum::Json<oversync_api::types::CredentialListResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+	let mut resp = state.db
+		.query("SELECT name, credential_type, created_at FROM credential ORDER BY name")
+		.await
+		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+
+	let rows: Vec<serde_json::Value> = resp
+		.take(0)
+		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+
+	let credentials = rows
+		.iter()
+		.filter_map(|r| {
+			Some(oversync_api::types::CredentialInfo {
+				name: r.get("name")?.as_str()?.to_string(),
+				credential_type: r.get("credential_type")?.as_str()?.to_string(),
+				created_at: r.get("created_at")?.as_str()?.to_string(),
+			})
+		})
+		.collect();
+
+	Ok(axum::Json(oversync_api::types::CredentialListResponse { credentials }))
+}
+
+#[cfg(feature = "api")]
+async fn delete_credential(
+	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
+	axum::extract::Path(name): axum::extract::Path<String>,
+) -> Result<axum::Json<oversync_api::types::MutationResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+	state.db
+		.query("DELETE credential WHERE name = $name")
+		.bind(("name", name.clone()))
+		.await
+		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+
+	Ok(axum::Json(oversync_api::types::MutationResponse {
+		ok: true,
+		message: format!("credential '{name}' deleted"),
+	}))
 }
 
 impl OversyncEngineBuilder {

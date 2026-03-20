@@ -164,6 +164,8 @@ pub struct OriginDef {
 	pub connector: String,
 	pub dsn: String,
 	#[serde(default)]
+	pub credential: Option<String>,
+	#[serde(default)]
 	pub config: serde_json::Value,
 }
 
@@ -228,6 +230,7 @@ impl From<&SourceDef> for PipeConfig {
 			origin: OriginDef {
 				connector: src.connector.clone(),
 				dsn: src.dsn.clone(),
+				credential: None,
 				config: src.config.clone(),
 			},
 			targets: vec![],
