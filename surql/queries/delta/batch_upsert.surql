@@ -1,5 +1,5 @@
 FOR $row IN $rows {
-	UPSERT type::record('snapshot', [$row.source_id, $row.query_id, $row.row_key]) SET
+	UPSERT type::record('{snapshot}', [$row.source_id, $row.query_id, $row.row_key]) SET
 		source_id = $row.source_id,
 		query_id = $row.query_id,
 		row_key = $row.row_key,

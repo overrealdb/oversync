@@ -121,7 +121,7 @@ async fn engine_http_source_to_stdout_produces_cycle() {
 
 	let mut resp = state_db
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'mock-http'")
+		.query("SELECT * FROM sync_mock_http_cycle_log WHERE source_id = 'mock-http'")
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
@@ -273,7 +273,7 @@ async fn engine_graphql_source_produces_cycle() {
 
 	let mut resp = state_db
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'gql-src'")
+		.query("SELECT * FROM sync_gql_src_cycle_log WHERE source_id = 'gql-src'")
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
@@ -338,7 +338,7 @@ async fn engine_second_cycle_detects_no_changes() {
 
 	let mut resp = state_db
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'stable-src' ORDER BY cycle_id ASC")
+		.query("SELECT * FROM sync_stable_src_cycle_log WHERE source_id = 'stable-src' ORDER BY cycle_id ASC")
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();

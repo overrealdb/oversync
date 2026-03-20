@@ -113,8 +113,10 @@ impl EmbeddedSync {
 			transform: query.transform.clone(),
 		};
 
+		let source_engine = self.delta_engine.for_source(source_name);
+		source_engine.ensure_tables().await?;
 		let mut runner =
-			CycleRunner::new(&self.delta_engine, connector.as_ref(), &query_sinks);
+			CycleRunner::new(&source_engine, connector.as_ref(), &query_sinks);
 
 		if let Some(ref transform_name) = query.transform {
 			if let Some(hook) = self.transform_hooks.get(transform_name) {
@@ -350,17 +352,24 @@ async fn run_embedded_query(
 		}
 	};
 
+	let source_engine = engine.for_source(&source.name);
+	if let Err(e) = source_engine.ensure_tables().await {
+		error!(source = %source.name, error = %e, "failed to create pipeline tables");
+		return;
+	}
+
 	let interval = Duration::from_secs(source.interval_secs);
 
 	info!(
 		source = %source.name,
 		query = %query.id,
 		interval_secs = source.interval_secs,
+		tables = ?source_engine.tables(),
 		"embedded polling task started"
 	);
 
 	run_timed_embedded_cycle(
-		&engine,
+		&source_engine,
 		connector.as_ref(),
 		&query_sinks,
 		&source,
@@ -386,7 +395,7 @@ async fn run_embedded_query(
 		tokio::select! {
 			_ = ticker.tick() => {
 				run_timed_embedded_cycle(
-					&engine,
+					&source_engine,
 					connector.as_ref(),
 					&query_sinks,
 					&source,

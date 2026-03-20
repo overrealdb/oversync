@@ -6,6 +6,7 @@
 pub mod config;
 pub mod error;
 pub mod model;
+pub mod table_names;
 pub mod traits;
 
 pub use config::OversyncConfig;
@@ -14,4 +15,5 @@ pub use model::{
 	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, OpType, RawRow,
 	compute_diff,
 };
+pub use table_names::TableNames;
 pub use traits::{Sink, SinkFactory, SourceConnector, SourceFactory, TransformHook, TransformPipeline};

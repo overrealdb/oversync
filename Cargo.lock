@@ -3584,6 +3584,7 @@ dependencies = [
  "oversync-core",
  "serde_json",
  "surrealdb",
+ "tokio",
  "tracing",
 ]
 

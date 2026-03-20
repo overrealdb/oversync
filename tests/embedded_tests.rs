@@ -152,7 +152,7 @@ async fn builder_with_skip_schema_builds_ok() {
 
 #[tokio::test]
 async fn run_once_delivers_events_to_custom_sink() {
-	let container = TestSurrealContainer::new().await;
+	let container = TestSurrealContainer::new_raw().await;
 
 	let events: Arc<Mutex<Vec<EventEnvelope>>> = Arc::new(Mutex::new(vec![]));
 	let sink = Arc::new(RecordingSink {
@@ -185,7 +185,7 @@ async fn run_once_delivers_events_to_custom_sink() {
 
 #[tokio::test]
 async fn run_once_second_cycle_detects_no_changes() {
-	let container = TestSurrealContainer::new().await;
+	let container = TestSurrealContainer::new_raw().await;
 
 	let events: Arc<Mutex<Vec<EventEnvelope>>> = Arc::new(Mutex::new(vec![]));
 	let sink = Arc::new(RecordingSink {
@@ -256,7 +256,7 @@ async fn run_once_unknown_query_errors() {
 
 #[tokio::test]
 async fn transform_hook_modifies_events_before_sink() {
-	let container = TestSurrealContainer::new().await;
+	let container = TestSurrealContainer::new_raw().await;
 
 	let events: Arc<Mutex<Vec<EventEnvelope>>> = Arc::new(Mutex::new(vec![]));
 	let sink = Arc::new(RecordingSink {
@@ -293,7 +293,7 @@ async fn transform_hook_modifies_events_before_sink() {
 
 #[tokio::test]
 async fn start_spawns_polling_shutdown_stops() {
-	let container = TestSurrealContainer::new().await;
+	let container = TestSurrealContainer::new_raw().await;
 
 	let events: Arc<Mutex<Vec<EventEnvelope>>> = Arc::new(Mutex::new(vec![]));
 	let sink = Arc::new(RecordingSink {
@@ -346,7 +346,7 @@ async fn shutdown_when_not_started_is_safe() {
 
 #[tokio::test]
 async fn transform_hook_ignored_when_query_has_no_transform() {
-	let container = TestSurrealContainer::new().await;
+	let container = TestSurrealContainer::new_raw().await;
 
 	let events: Arc<Mutex<Vec<EventEnvelope>>> = Arc::new(Mutex::new(vec![]));
 	let sink = Arc::new(RecordingSink {

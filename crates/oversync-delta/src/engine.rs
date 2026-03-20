@@ -8,6 +8,7 @@ use oversync_core::error::OversyncError;
 use oversync_core::model::{
 	CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, OpType, RawRow, hash_row_data,
 };
+use oversync_core::table_names::TableNames;
 
 const READ_SNAPSHOT_KEYS_SQL: &str =
 	include_str!("../../../surql/queries/delta/read_snapshot_keys.surql");
@@ -33,6 +34,7 @@ const LOG_CYCLE_FINISH_SQL: &str =
 pub struct DeltaEngine {
 	state_client: Surreal<Any>,
 	snapshot_client: Surreal<Any>,
+	tables: TableNames,
 }
 
 impl DeltaEngine {
@@ -40,6 +42,7 @@ impl DeltaEngine {
 		Self {
 			state_client,
 			snapshot_client,
+			tables: TableNames::default_shared(),
 		}
 	}
 
@@ -47,7 +50,46 @@ impl DeltaEngine {
 		Self {
 			state_client: client.clone(),
 			snapshot_client: client,
+			tables: TableNames::default_shared(),
 		}
+	}
+
+	pub fn with_tables(mut self, tables: TableNames) -> Self {
+		self.tables = tables;
+		self
+	}
+
+	/// Create a new engine sharing the same DB connections but with different table names.
+	pub fn for_source(&self, source_name: &str) -> Self {
+		Self {
+			state_client: self.state_client.clone(),
+			snapshot_client: self.snapshot_client.clone(),
+			tables: TableNames::for_source(source_name),
+		}
+	}
+
+	pub fn tables(&self) -> &TableNames {
+		&self.tables
+	}
+
+	/// Ensure the per-pipeline tables exist in SurrealDB (idempotent).
+	pub async fn ensure_tables(&self) -> Result<(), OversyncError> {
+		let ddl = self.tables.create_ddl();
+		self.state_client
+			.query(&ddl)
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("ensure tables: {e}")))?;
+		// Also ensure on snapshot client (may be a separate DB).
+		self.snapshot_client
+			.query(&ddl)
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("ensure snapshot tables: {e}")))?;
+		debug!("ensured tables: {:?}", self.tables);
+		Ok(())
+	}
+
+	fn sql(&self, template: &str) -> String {
+		self.tables.resolve_sql(template)
 	}
 
 	pub async fn next_cycle_id(
@@ -57,7 +99,7 @@ impl DeltaEngine {
 	) -> Result<i64, OversyncError> {
 		let mut response = self
 			.state_client
-			.query(NEXT_CYCLE_ID_SQL)
+			.query(&self.sql(NEXT_CYCLE_ID_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -83,7 +125,7 @@ impl DeltaEngine {
 	) -> Result<HashMap<String, String>, OversyncError> {
 		let mut response = self
 			.snapshot_client
-			.query(READ_SNAPSHOT_KEYS_SQL)
+			.query(&self.sql(READ_SNAPSHOT_KEYS_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -122,7 +164,8 @@ impl DeltaEngine {
 		let mut offset: usize = 0;
 
 		loop {
-			let sql = format!("{READ_SNAPSHOT_KEYS_PAGED_SQL}\nLIMIT {PAGE} START {offset}");
+			let base = self.sql(READ_SNAPSHOT_KEYS_PAGED_SQL);
+			let sql = format!("{base}\nLIMIT {PAGE} START {offset}");
 			let mut resp = self
 				.snapshot_client
 				.query(&sql)
@@ -167,7 +210,7 @@ impl DeltaEngine {
 		query_id: &str,
 	) -> Result<(), OversyncError> {
 		self.snapshot_client
-			.query(PREP_PREV_HASH_SQL)
+			.query(&self.sql(PREP_PREV_HASH_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -215,7 +258,7 @@ impl DeltaEngine {
 
 			let response = self
 				.snapshot_client
-				.query(BATCH_UPSERT_SQL)
+				.query(&self.sql(BATCH_UPSERT_SQL))
 				.bind(("rows", batch))
 				.await
 				.map_err(|e| OversyncError::SurrealDb(format!("batch upsert: {e}")))?;
@@ -239,7 +282,7 @@ impl DeltaEngine {
 		cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.snapshot_client
-			.query(DELETE_STALE_SQL)
+			.query(&self.sql(DELETE_STALE_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -275,13 +318,13 @@ impl DeltaEngine {
 				})
 				.collect();
 
-			let txn_query = format!(
+			let txn_query = self.sql(&format!(
 				"BEGIN TRANSACTION;\n{PREP_PREV_HASH_SQL};\n{BATCH_UPSERT_SQL};\n{DELETE_STALE_SQL};\nCOMMIT TRANSACTION;"
-			);
+			));
 
 			let response = self
 				.snapshot_client
-				.query(txn_query)
+				.query(&txn_query)
 				.bind(("rows", batch))
 				.bind(("source_id", source_id.to_string()))
 				.bind(("query_id", query_id.to_string()))
@@ -342,17 +385,17 @@ impl DeltaEngine {
 		};
 
 		let created = self
-			.paginated_query(FIND_CREATED_SQL, &src, &qid, cycle_id, |r| {
+			.paginated_query(&self.sql(FIND_CREATED_SQL), &src, &qid, cycle_id, |r| {
 				to_event(r, OpType::Created)
 			})
 			.await?;
 		let updated = self
-			.paginated_query(FIND_UPDATED_SQL, &src, &qid, cycle_id, |r| {
+			.paginated_query(&self.sql(FIND_UPDATED_SQL), &src, &qid, cycle_id, |r| {
 				to_event(r, OpType::Updated)
 			})
 			.await?;
 		let deleted = self
-			.paginated_query(FIND_DELETED_SQL, &src, &qid, cycle_id, |r| {
+			.paginated_query(&self.sql(FIND_DELETED_SQL), &src, &qid, cycle_id, |r| {
 				to_event(r, OpType::Deleted)
 			})
 			.await?;
@@ -431,7 +474,7 @@ impl DeltaEngine {
 		let events_json = serde_json::to_string(events)
 			.map_err(|e| OversyncError::Internal(format!("serialize events: {e}")))?;
 		self.state_client
-			.query(SAVE_PENDING_SQL)
+			.query(&self.sql(SAVE_PENDING_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -449,7 +492,7 @@ impl DeltaEngine {
 	) -> Result<Vec<(i64, Vec<EventEnvelope>)>, OversyncError> {
 		let mut response = self
 			.state_client
-			.query(READ_PENDING_SQL)
+			.query(&self.sql(READ_PENDING_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -481,7 +524,7 @@ impl DeltaEngine {
 		up_to_cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
-			.query(DELETE_PENDING_SQL)
+			.query(&self.sql(DELETE_PENDING_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", up_to_cycle_id))
@@ -497,7 +540,7 @@ impl DeltaEngine {
 		cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
-			.query(LOG_CYCLE_START_SQL)
+			.query(&self.sql(LOG_CYCLE_START_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -518,7 +561,7 @@ impl DeltaEngine {
 		rows_deleted: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
-			.query(LOG_CYCLE_FINISH_SQL)
+			.query(&self.sql(LOG_CYCLE_FINISH_SQL))
 			.bind(("source_id", source_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -633,5 +676,68 @@ mod tests {
 	#[test]
 	fn fail_safe_rejects_all_deleted() {
 		assert!(!check_fail_safe(10, 10, 30.0));
+	}
+
+	#[tokio::test]
+	async fn per_source_table_upsert_and_read() {
+		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
+		db.use_ns("t").use_db("t").await.unwrap();
+
+		let engine = DeltaEngine::new(db.clone(), db)
+			.with_tables(TableNames::for_source("my-src"));
+		engine.ensure_tables().await.unwrap();
+
+		let rows = vec![
+			RawRow { row_key: "k1".into(), row_data: serde_json::json!({"v": 1}) },
+			RawRow { row_key: "k2".into(), row_data: serde_json::json!({"v": 2}) },
+		];
+		engine.upsert_batch_raw("s", "q", 1, &rows).await.unwrap();
+
+		let keys = engine.read_snapshot_keys("s", "q").await.unwrap();
+		assert_eq!(keys.len(), 2, "expected 2 keys, got: {keys:?}");
+	}
+
+	#[tokio::test]
+	async fn for_source_creates_isolated_engine() {
+		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
+		db.use_ns("t").use_db("t").await.unwrap();
+
+		let base = DeltaEngine::new(db.clone(), db);
+		let eng_a = base.for_source("source-a");
+		let eng_b = base.for_source("source-b");
+		eng_a.ensure_tables().await.unwrap();
+		eng_b.ensure_tables().await.unwrap();
+
+		let rows = vec![RawRow { row_key: "k1".into(), row_data: serde_json::json!({"v": 1}) }];
+		eng_a.upsert_batch_raw("source-a", "q", 1, &rows).await.unwrap();
+
+		let keys_a = eng_a.read_snapshot_keys("source-a", "q").await.unwrap();
+		let keys_b = eng_b.read_snapshot_keys("source-b", "q").await.unwrap();
+		assert_eq!(keys_a.len(), 1);
+		assert_eq!(keys_b.len(), 0, "source-b should be isolated");
+	}
+
+	#[tokio::test]
+	async fn full_cycle_with_per_source_tables() {
+		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
+		db.use_ns("t").use_db("t").await.unwrap();
+
+		let engine = DeltaEngine::new(db.clone(), db)
+			.with_tables(TableNames::for_source("test-src"));
+		engine.ensure_tables().await.unwrap();
+
+		// Cycle 1: create rows
+		let cycle_id = engine.next_cycle_id("test-src", "q").await.unwrap();
+		assert_eq!(cycle_id, 1);
+		engine.log_cycle_start("test-src", "q", cycle_id).await.unwrap();
+
+		let rows = vec![
+			RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
+			RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+		];
+		engine.upsert_batch_raw("test-src", "q", cycle_id, &rows).await.unwrap();
+
+		let keys = engine.read_snapshot_keys_paged("test-src", "q").await.unwrap();
+		assert_eq!(keys.len(), 2, "should have 2 keys after upsert");
 	}
 }

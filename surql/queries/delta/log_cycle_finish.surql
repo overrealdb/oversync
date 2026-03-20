@@ -1,4 +1,4 @@
-UPDATE cycle_log SET
+UPDATE {cycle_log} SET
 	finished_at = time::now(),
 	status = $status,
 	rows_fetched = $rows_fetched,

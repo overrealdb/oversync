@@ -83,7 +83,7 @@ async fn scheduler_runs_first_cycle_immediately() {
 	// Verify: cycle_log should have at least one entry
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'pg-test'")
+		.query("SELECT * FROM sync_pg_test_cycle_log WHERE source_id = 'pg-test'")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -119,7 +119,7 @@ async fn scheduler_runs_multiple_cycles() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'pg-test' ORDER BY cycle_id")
+		.query("SELECT * FROM sync_pg_test_cycle_log WHERE source_id = 'pg-test' ORDER BY cycle_id")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -267,7 +267,7 @@ async fn scheduler_detects_data_changes() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'pg-test' ORDER BY cycle_id")
+		.query("SELECT * FROM sync_pg_test_cycle_log WHERE source_id = 'pg-test' ORDER BY cycle_id")
 		.await
 		.unwrap();
 	let logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -358,7 +358,7 @@ async fn scheduler_multiple_queries() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'pg-multi-q' AND query_id = 'items'")
+		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE source_id = 'pg-multi-q' AND query_id = 'items'")
 		.await
 		.unwrap();
 	let items_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -369,7 +369,7 @@ async fn scheduler_multiple_queries() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'pg-multi-q' AND query_id = 'users'")
+		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE source_id = 'pg-multi-q' AND query_id = 'users'")
 		.await
 		.unwrap();
 	let users_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -460,7 +460,7 @@ async fn scheduler_multiple_sources() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'source-alpha'")
+		.query("SELECT * FROM sync_source_alpha_cycle_log WHERE source_id = 'source-alpha'")
 		.await
 		.unwrap();
 	let alpha_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -471,7 +471,7 @@ async fn scheduler_multiple_sources() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM cycle_log WHERE source_id = 'source-beta'")
+		.query("SELECT * FROM sync_source_beta_cycle_log WHERE source_id = 'source-beta'")
 		.await
 		.unwrap();
 	let beta_logs: Vec<serde_json::Value> = res.take(0).unwrap();

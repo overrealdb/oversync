@@ -160,6 +160,14 @@ async fn run_source_query(
 		}
 	};
 
+	// Per-source delta engine with isolated tables.
+	let source_engine = engine.for_source(&source.name);
+	if let Err(e) = source_engine.ensure_tables().await {
+		error!(source = %source.name, error = %e, "failed to create pipeline tables");
+		return;
+	}
+	let source_engine = Arc::new(source_engine);
+
 	let interval = Duration::from_secs(source.interval_secs);
 
 	info!(
@@ -167,10 +175,11 @@ async fn run_source_query(
 		query = %query.id,
 		interval_secs = source.interval_secs,
 		max_retries = source.max_retries,
+		tables = ?source_engine.tables(),
 		"polling task started"
 	);
 
-	run_timed_cycle(&engine, connector.as_ref(), &sinks, &source, &query, interval).await;
+	run_timed_cycle(&source_engine, connector.as_ref(), &sinks, &source, &query, interval).await;
 
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
@@ -188,7 +197,7 @@ async fn run_source_query(
 		tokio::select! {
 			_ = ticker.tick() => {
 				run_timed_cycle(
-					&engine,
+					&source_engine,
 					connector.as_ref(),
 					&sinks,
 					&source,
