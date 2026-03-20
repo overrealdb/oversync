@@ -117,6 +117,11 @@ impl EmbeddedSync {
 		let mut runner =
 			CycleRunner::new(&pipe_engine, connector.as_ref(), &query_sinks);
 
+		if !pipe.filters.is_empty() {
+			let chain = oversync_transforms::parse_steps(&pipe.filters)?;
+			runner = runner.with_pre_filter(Arc::new(chain));
+		}
+
 		if !pipe.transforms.is_empty() {
 			let chain = oversync_transforms::parse_steps(&pipe.transforms)?;
 			runner = runner.with_transform(Arc::new(chain));
@@ -487,6 +492,18 @@ async fn run_embedded_cycle(
 	};
 
 	let mut runner = CycleRunner::new(engine, connector, sinks);
+
+	if !pipe.filters.is_empty() {
+		match oversync_transforms::parse_steps(&pipe.filters) {
+			Ok(chain) => {
+				runner = runner.with_pre_filter(Arc::new(chain));
+			}
+			Err(e) => {
+				error!(pipe = %pipe.name, error = %e, "failed to parse filters");
+				return;
+			}
+		}
+	}
 
 	// Pipe-level transforms (from config)
 	if !pipe.transforms.is_empty() {

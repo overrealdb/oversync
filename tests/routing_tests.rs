@@ -104,6 +104,7 @@ async fn routing_resolve_pipe_query_sinks_filters() {
 		schedule: ScheduleDef::default(),
 		delta: DeltaDef::default(),
 		retry: RetryDef::default(),
+		filters: vec![],
 		transforms: vec![],
 		enabled: true,
 	};

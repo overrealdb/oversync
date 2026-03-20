@@ -155,6 +155,8 @@ pub struct PipeConfig {
 	#[serde(default)]
 	pub retry: RetryDef,
 	#[serde(default)]
+	pub filters: Vec<serde_json::Value>,
+	#[serde(default)]
 	pub transforms: Vec<serde_json::Value>,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
@@ -249,6 +251,7 @@ impl From<&SourceDef> for PipeConfig {
 				max_retries: src.max_retries,
 				retry_base_delay_secs: src.retry_base_delay_secs,
 			},
+			filters: vec![],
 			transforms: vec![],
 			enabled: true,
 		}

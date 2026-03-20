@@ -57,6 +57,21 @@ impl StepChain {
 	pub fn is_empty(&self) -> bool {
 		self.steps.is_empty()
 	}
+
+	/// Filter rows pre-delta: applies steps to each RawRow.row_data,
+	/// keeping only rows where all steps return true.
+	pub fn filter_rows(
+		&self,
+		rows: Vec<oversync_core::model::RawRow>,
+	) -> Result<Vec<oversync_core::model::RawRow>, OversyncError> {
+		let mut kept = Vec::with_capacity(rows.len());
+		for mut row in rows {
+			if self.apply_one(&mut row.row_data)? {
+				kept.push(row);
+			}
+		}
+		Ok(kept)
+	}
 }
 
 #[async_trait]

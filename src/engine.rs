@@ -244,7 +244,7 @@ async fn dry_run_handler(
 			Some(std::sync::Arc::new(chain))
 		};
 
-	let result = crate::dry_run::execute_dry_run(&req, &state.registry, transform_hook)
+	let result = crate::dry_run::execute_dry_run(&req, &state.registry, transform_hook, None)
 		.await
 		.map_err(|e| {
 			axum::Json(oversync_api::types::ErrorResponse {

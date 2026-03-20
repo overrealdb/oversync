@@ -34,6 +34,9 @@ pub struct DryRunRequest {
 	pub row_limit: usize,
 	#[serde(default)]
 	pub transforms: Vec<serde_json::Value>,
+	/// When true, diff against current SurrealDB state instead of empty.
+	#[serde(default)]
+	pub use_existing_state: bool,
 }
 
 fn default_mode() -> DryRunMode {
@@ -72,10 +75,14 @@ pub struct DryRunStats {
 }
 
 /// Execute a dry-run: fetch → diff → transform, without writing to targets or state.
+///
+/// When `state_db` is provided and `use_existing_state` is true, diffs against
+/// the current snapshot in SurrealDB. Otherwise diffs against empty state.
 pub async fn execute_dry_run(
 	req: &DryRunRequest,
 	registry: &PluginRegistry,
 	transform_hook: Option<Arc<dyn TransformHook>>,
+	state_db: Option<&oversync_delta::DeltaEngine>,
 ) -> Result<DryRunResult, OversyncError> {
 	let query = req
 		.pipe
@@ -102,11 +109,10 @@ pub async fn execute_dry_run(
 		}
 		DryRunMode::Live => {
 			let connector = create_connector(&req.pipe, registry).await?;
-			let all = connector
-				.fetch_all(&query.sql, &query.key_column)
-				.await?;
-			let limit = req.row_limit.min(all.len());
-			all[..limit].to_vec()
+			let limited_sql = format!("{} LIMIT {}", query.sql.trim().trim_end_matches(';'), req.row_limit);
+			connector
+				.fetch_all(&limited_sql, &query.key_column)
+				.await?
 		}
 	};
 
@@ -125,8 +131,20 @@ pub async fn execute_dry_run(
 		"dry-run: fetched rows"
 	);
 
-	// 2. Compute diff against empty state (simulates first run)
-	let previous: HashMap<String, String> = HashMap::new();
+	// 2. Compute diff
+	let previous: HashMap<String, String> = if req.use_existing_state {
+		if let Some(engine) = state_db {
+			let pipe_engine = engine.for_source(&req.pipe.name);
+			pipe_engine
+				.read_snapshot_keys_paged(&req.pipe.name, &req.query_id)
+				.await
+				.unwrap_or_default()
+		} else {
+			HashMap::new()
+		}
+	} else {
+		HashMap::new()
+	};
 	let diff = compute_diff(&previous, &rows, &req.pipe.name, &req.query_id, 0);
 
 	let changes = DryRunChanges {
@@ -217,6 +235,7 @@ mod tests {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			filters: vec![],
 			transforms: vec![],
 			enabled: true,
 		}
@@ -248,10 +267,11 @@ mod tests {
 			mock_data: mock_rows(),
 			row_limit: 100,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let result = execute_dry_run(&req, &registry, None).await.unwrap();
+		let result = execute_dry_run(&req, &registry, None, None).await.unwrap();
 
 		assert_eq!(result.input_rows, 3);
 		assert_eq!(result.input_sample.len(), 3);
@@ -274,10 +294,11 @@ mod tests {
 			mock_data: mock_rows(),
 			row_limit: 2,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let result = execute_dry_run(&req, &registry, None).await.unwrap();
+		let result = execute_dry_run(&req, &registry, None, None).await.unwrap();
 
 		assert_eq!(result.input_rows, 2);
 		assert_eq!(result.changes.created, 2);
@@ -302,10 +323,11 @@ mod tests {
 			mock_data: mock_rows(),
 			row_limit: 100,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let result = execute_dry_run(&req, &registry, Some(Arc::new(chain)))
+		let result = execute_dry_run(&req, &registry, Some(Arc::new(chain)), None)
 			.await
 			.unwrap();
 
@@ -331,10 +353,11 @@ mod tests {
 			mock_data: mock_rows(),
 			row_limit: 100,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let result = execute_dry_run(&req, &registry, Some(Arc::new(chain)))
+		let result = execute_dry_run(&req, &registry, Some(Arc::new(chain)), None)
 			.await
 			.unwrap();
 
@@ -353,10 +376,11 @@ mod tests {
 			mock_data: vec![],
 			row_limit: 100,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let err = execute_dry_run(&req, &registry, None).await.unwrap_err();
+		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
 		assert!(err.to_string().contains("mock_data"));
 	}
 
@@ -369,10 +393,11 @@ mod tests {
 			mock_data: mock_rows(),
 			row_limit: 100,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let err = execute_dry_run(&req, &registry, None).await.unwrap_err();
+		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
 		assert!(err.to_string().contains("nonexistent"));
 	}
 
@@ -392,10 +417,11 @@ mod tests {
 			mock_data: big_data,
 			row_limit: 25,
 			transforms: vec![],
+			use_existing_state: false,
 		};
 
 		let registry = PluginRegistry::new();
-		let result = execute_dry_run(&req, &registry, None).await.unwrap();
+		let result = execute_dry_run(&req, &registry, None, None).await.unwrap();
 
 		assert_eq!(result.input_rows, 25);
 		assert_eq!(result.input_sample.len(), 10);

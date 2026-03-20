@@ -23,6 +23,7 @@ pub struct CycleRunner<'a> {
 	connector: &'a dyn OriginConnector,
 	sinks: &'a [Arc<dyn Sink>],
 	transform_hook: Option<Arc<dyn TransformHook>>,
+	pre_filter: Option<Arc<oversync_transforms::StepChain>>,
 }
 
 impl<'a> CycleRunner<'a> {
@@ -36,11 +37,17 @@ impl<'a> CycleRunner<'a> {
 			connector,
 			sinks,
 			transform_hook: None,
+			pre_filter: None,
 		}
 	}
 
 	pub fn with_transform(mut self, hook: Arc<dyn TransformHook>) -> Self {
 		self.transform_hook = Some(hook);
+		self
+	}
+
+	pub fn with_pre_filter(mut self, filter: Arc<oversync_transforms::StepChain>) -> Self {
+		self.pre_filter = Some(filter);
 		self
 	}
 
@@ -339,13 +346,20 @@ impl<'a> CycleRunner<'a> {
 		let producer =
 			async { connector.fetch_into(&sql, &key_col, 500, tx).await }.instrument(fetch_span);
 
+		let pre_filter = &self.pre_filter;
 		let consumer = async {
 			let mut total: usize = 0;
 			while let Some(batch) = rx.recv().await {
+				let batch = match pre_filter {
+					Some(filter) => filter.filter_rows(batch)?,
+					None => batch,
+				};
 				let n = batch.len();
-				engine
-					.upsert_batch_raw(&origin_id, &query_id, cycle_id, &batch)
-					.await?;
+				if n > 0 {
+					engine
+						.upsert_batch_raw(&origin_id, &query_id, cycle_id, &batch)
+						.await?;
+				}
 				total += n;
 			}
 			Ok::<usize, OversyncError>(total)

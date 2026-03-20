@@ -273,6 +273,18 @@ async fn run_with_retry(
 
 	let mut runner = CycleRunner::new(engine, connector, sinks);
 
+	if !pipe.filters.is_empty() {
+		match oversync_transforms::parse_steps(&pipe.filters) {
+			Ok(chain) => {
+				runner = runner.with_pre_filter(Arc::new(chain));
+			}
+			Err(e) => {
+				error!(pipe = %pipe.name, error = %e, "failed to parse filters");
+				return;
+			}
+		}
+	}
+
 	if !pipe.transforms.is_empty() {
 		match oversync_transforms::parse_steps(&pipe.transforms) {
 			Ok(chain) => {
