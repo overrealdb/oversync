@@ -117,7 +117,10 @@ impl EmbeddedSync {
 		let mut runner =
 			CycleRunner::new(&pipe_engine, connector.as_ref(), &query_sinks);
 
-		if let Some(ref transform_name) = query.transform {
+		if !pipe.transforms.is_empty() {
+			let chain = oversync_transforms::parse_steps(&pipe.transforms)?;
+			runner = runner.with_transform(Arc::new(chain));
+		} else if let Some(ref transform_name) = query.transform {
 			if let Some(hook) = self.transform_hooks.get(transform_name) {
 				runner = runner.with_transform(Arc::clone(hook));
 			}
@@ -385,7 +388,8 @@ async fn run_embedded_pipe_query(
 		return;
 	}
 
-	let interval = Duration::from_secs(pipe.schedule.interval_secs);
+	let interval_secs = pipe.schedule.interval_secs.max(1);
+	let interval = Duration::from_secs(interval_secs);
 
 	info!(
 		pipe = %pipe.name,
@@ -484,7 +488,19 @@ async fn run_embedded_cycle(
 
 	let mut runner = CycleRunner::new(engine, connector, sinks);
 
-	if let Some(ref transform_name) = query.transform {
+	// Pipe-level transforms (from config)
+	if !pipe.transforms.is_empty() {
+		match oversync_transforms::parse_steps(&pipe.transforms) {
+			Ok(chain) => {
+				runner = runner.with_transform(Arc::new(chain));
+			}
+			Err(e) => {
+				error!(pipe = %pipe.name, error = %e, "failed to parse transforms");
+				return;
+			}
+		}
+	} else if let Some(ref transform_name) = query.transform {
+		// Legacy: query-level named transform hook
 		if let Some(hook) = transform_hooks.get(transform_name) {
 			runner = runner.with_transform(Arc::clone(hook));
 		}

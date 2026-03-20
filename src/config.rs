@@ -154,6 +154,8 @@ pub struct PipeConfig {
 	pub delta: DeltaDef,
 	#[serde(default)]
 	pub retry: RetryDef,
+	#[serde(default)]
+	pub transforms: Vec<serde_json::Value>,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
 }
@@ -247,6 +249,7 @@ impl From<&SourceDef> for PipeConfig {
 				max_retries: src.max_retries,
 				retry_base_delay_secs: src.retry_base_delay_secs,
 			},
+			transforms: vec![],
 			enabled: true,
 		}
 	}
@@ -1090,6 +1093,39 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert!(!config.pipes[0].enabled);
+	}
+
+	#[test]
+	fn parse_pipe_with_transforms() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p1"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[pipes.transforms]]
+type = "rename"
+from = "old_name"
+to = "new_name"
+
+[[pipes.transforms]]
+type = "upper"
+field = "name"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		assert_eq!(config.pipes[0].transforms.len(), 2);
+		assert_eq!(config.pipes[0].transforms[0]["type"], "rename");
+		assert_eq!(config.pipes[0].transforms[1]["type"], "upper");
+
+		let chain = oversync_transforms::parse_steps(&config.pipes[0].transforms).unwrap();
+		let mut data = serde_json::json!({"old_name": "alice", "name": "bob"});
+		chain.apply_one(&mut data).unwrap();
+		assert_eq!(data, serde_json::json!({"new_name": "alice", "name": "BOB"}));
 	}
 
 	// ── Env var expansion tests ──────────────────────────────────

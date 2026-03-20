@@ -217,6 +217,7 @@ mod tests {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			transforms: vec![],
 			enabled: true,
 		}
 	}

@@ -184,12 +184,13 @@ async fn run_pipe_query(
 
 	let pipe_engine = Arc::new(pipe_engine);
 
-	let interval = Duration::from_secs(pipe.schedule.interval_secs);
+	let interval_secs = pipe.schedule.interval_secs.max(1);
+	let interval = Duration::from_secs(interval_secs);
 
 	info!(
 		pipe = %pipe.name,
 		query = %query.id,
-		interval_secs = pipe.schedule.interval_secs,
+		interval_secs = interval_secs,
 		max_retries = pipe.retry.max_retries,
 		tables = ?pipe_engine.tables(),
 		"polling task started"
@@ -270,7 +271,19 @@ async fn run_with_retry(
 		transform: query.transform.clone(),
 	};
 
-	let runner = CycleRunner::new(engine, connector, sinks);
+	let mut runner = CycleRunner::new(engine, connector, sinks);
+
+	if !pipe.transforms.is_empty() {
+		match oversync_transforms::parse_steps(&pipe.transforms) {
+			Ok(chain) => {
+				runner = runner.with_transform(Arc::new(chain));
+			}
+			Err(e) => {
+				error!(pipe = %pipe.name, error = %e, "failed to parse transforms");
+				return;
+			}
+		}
+	}
 
 	for attempt in 0..=pipe.retry.max_retries {
 		match runner.run(&cycle_config).await {

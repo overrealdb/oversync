@@ -96,6 +96,7 @@ async fn routing_resolve_pipe_query_sinks_filters() {
 		origin: OriginDef {
 			connector: "postgres".into(),
 			dsn: "postgres://localhost/db".into(),
+			credential: None,
 			config: serde_json::Value::Null,
 		},
 		targets,
@@ -103,6 +104,7 @@ async fn routing_resolve_pipe_query_sinks_filters() {
 		schedule: ScheduleDef::default(),
 		delta: DeltaDef::default(),
 		retry: RetryDef::default(),
+		transforms: vec![],
 		enabled: true,
 	};
 

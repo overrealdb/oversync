@@ -172,6 +172,7 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 					.and_then(|v| v.as_u64())
 					.unwrap_or(5),
 			},
+			transforms: vec![],
 			enabled,
 		});
 	}
