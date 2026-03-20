@@ -154,6 +154,10 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 					.and_then(|v| v.as_u64())
 					.unwrap_or(300),
 				missed_tick_policy,
+				max_requests_per_minute: schedule
+					.get("max_requests_per_minute")
+					.and_then(|v| v.as_u64())
+					.map(|v| v as u32),
 			},
 			delta: DeltaDef {
 				diff_mode,

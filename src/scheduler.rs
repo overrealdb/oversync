@@ -196,6 +196,14 @@ async fn run_pipe_query(
 		"polling task started"
 	);
 
+	let mut rate_limiter = pipe
+		.schedule
+		.max_requests_per_minute
+		.map(crate::rate_limit::RateLimiter::per_minute);
+
+	if let Some(ref mut rl) = rate_limiter {
+		rl.acquire().await;
+	}
 	run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
 
 	let mut ticker = tokio::time::interval(interval);
@@ -213,6 +221,9 @@ async fn run_pipe_query(
 	loop {
 		tokio::select! {
 			_ = ticker.tick() => {
+				if let Some(ref mut rl) = rate_limiter {
+					rl.acquire().await;
+				}
 				run_timed_cycle(
 					&pipe_engine,
 					connector.as_ref(),

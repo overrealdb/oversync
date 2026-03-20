@@ -18,12 +18,14 @@
 
 pub mod config;
 pub mod config_db;
+pub mod config_version;
 pub mod credential;
 pub mod cycle;
 pub mod dry_run;
 pub mod embedded;
 pub mod engine;
 pub mod lifecycle;
+pub mod rate_limit;
 pub mod registry;
 pub mod scheduler;
 

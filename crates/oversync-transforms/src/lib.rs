@@ -1,5 +1,7 @@
 mod parse;
 pub mod steps;
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 use async_trait::async_trait;
 use oversync_core::error::OversyncError;

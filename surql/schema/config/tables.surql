@@ -46,6 +46,14 @@ DEFINE FIELD OVERWRITE created_at      ON credential TYPE datetime DEFAULT time:
 DEFINE FIELD OVERWRITE updated_at      ON credential TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_credential_name ON credential FIELDS name UNIQUE;
 
+-- config_version: versioned config snapshots for rollback
+DEFINE TABLE OVERWRITE config_version SCHEMAFULL;
+DEFINE FIELD OVERWRITE version     ON config_version TYPE int ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE config_json ON config_version TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE description ON config_version TYPE string DEFAULT '';
+DEFINE FIELD OVERWRITE created_at  ON config_version TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE idx_config_version ON config_version FIELDS version UNIQUE;
+
 -- sink_config: registered sinks
 DEFINE TABLE OVERWRITE sink_config SCHEMAFULL;
 DEFINE FIELD OVERWRITE name       ON sink_config TYPE string ASSERT $value != NONE;

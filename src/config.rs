@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use oversync_core::error::OversyncError;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConfig {
 	pub surrealdb: SurrealDbDef,
 	#[serde(default)]
@@ -15,7 +15,7 @@ pub struct SyncConfig {
 	pub pipes: Vec<PipeConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SurrealDbDef {
 	pub url: String,
 	#[serde(default = "default_user")]
@@ -30,7 +30,7 @@ pub struct SurrealDbDef {
 	pub snapshot: Option<SnapshotDbDef>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotDbDef {
 	pub url: String,
 	#[serde(default = "default_user")]
@@ -56,7 +56,7 @@ fn default_db() -> String {
 	"sync".into()
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceDef {
 	pub name: String,
 	pub connector: String,
@@ -80,7 +80,7 @@ pub struct SourceDef {
 }
 
 /// What to do when a cycle takes longer than the polling interval.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MissedTickPolicy {
 	/// Drop missed ticks — wait for the next interval boundary after the cycle finishes.
@@ -90,7 +90,7 @@ pub enum MissedTickPolicy {
 	Burst,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SinkDef {
 	pub name: String,
 	#[serde(rename = "type")]
@@ -99,7 +99,7 @@ pub struct SinkDef {
 	pub config: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffMode {
 	/// Compute diff via SurrealQL queries (prev_hash, paginated). Slower but low memory.
@@ -125,7 +125,7 @@ fn default_true() -> bool {
 	true
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryDef {
 	pub id: String,
 	pub sql: String,
@@ -140,7 +140,7 @@ pub struct QueryDef {
 ///
 /// Replaces the flat `SourceDef` with structured sub-configs for origin,
 /// schedule, delta, and retry. Targets are references to named sinks.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipeConfig {
 	pub name: String,
 	pub origin: OriginDef,
@@ -163,7 +163,7 @@ pub struct PipeConfig {
 }
 
 /// Origin connector configuration within a pipe.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OriginDef {
 	pub connector: String,
 	pub dsn: String,
@@ -174,12 +174,14 @@ pub struct OriginDef {
 }
 
 /// Polling schedule for a pipe.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleDef {
 	#[serde(default = "default_interval")]
 	pub interval_secs: u64,
 	#[serde(default)]
 	pub missed_tick_policy: MissedTickPolicy,
+	#[serde(default)]
+	pub max_requests_per_minute: Option<u32>,
 }
 
 impl Default for ScheduleDef {
@@ -187,12 +189,13 @@ impl Default for ScheduleDef {
 		Self {
 			interval_secs: default_interval(),
 			missed_tick_policy: MissedTickPolicy::default(),
+			max_requests_per_minute: None,
 		}
 	}
 }
 
 /// Delta detection settings for a pipe.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaDef {
 	#[serde(default)]
 	pub diff_mode: DiffMode,
@@ -210,7 +213,7 @@ impl Default for DeltaDef {
 }
 
 /// Retry policy for failed cycles.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryDef {
 	#[serde(default = "default_max_retries")]
 	pub max_retries: u32,
@@ -242,6 +245,7 @@ impl From<&SourceDef> for PipeConfig {
 			schedule: ScheduleDef {
 				interval_secs: src.interval_secs,
 				missed_tick_policy: src.missed_tick_policy.clone(),
+				max_requests_per_minute: None,
 			},
 			delta: DeltaDef {
 				diff_mode: src.diff_mode.clone(),
