@@ -1,5 +1,6 @@
-use serde::Deserialize;
 use std::path::Path;
+
+use serde::Deserialize;
 
 use oversync_core::error::OversyncError;
 
@@ -248,15 +249,176 @@ impl From<&SourceDef> for PipeConfig {
 	}
 }
 
+/// Severity of a config validation issue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Severity {
+	Error,
+	Warning,
+}
+
+/// A single config validation issue.
+#[derive(Debug, Clone)]
+pub struct ConfigIssue {
+	pub severity: Severity,
+	pub message: String,
+}
+
+/// Validate a parsed config for common issues.
+///
+/// Returns a list of warnings and errors. An empty list means the config is valid.
+pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
+	let mut issues = Vec::new();
+
+	let pipes = config.effective_pipes();
+
+	let sink_names: std::collections::HashSet<&str> =
+		config.sinks.iter().map(|s| s.name.as_str()).collect();
+
+	for pipe in &pipes {
+		if pipe.queries.is_empty() {
+			issues.push(ConfigIssue {
+				severity: Severity::Warning,
+				message: format!("pipe '{}': no queries defined", pipe.name),
+			});
+		}
+
+		if pipe.schedule.interval_secs == 0 {
+			issues.push(ConfigIssue {
+				severity: Severity::Error,
+				message: format!(
+					"pipe '{}': interval_secs is 0 (would busy-loop)",
+					pipe.name
+				),
+			});
+		}
+
+		for target in &pipe.targets {
+			if !sink_names.contains(target.as_str()) {
+				issues.push(ConfigIssue {
+					severity: Severity::Error,
+					message: format!(
+						"pipe '{}': target '{}' not found in sinks",
+						pipe.name, target
+					),
+				});
+			}
+		}
+
+		for query in &pipe.queries {
+			if let Some(ref qs) = query.sinks {
+				for s in qs {
+					if !sink_names.contains(s.as_str()) {
+						issues.push(ConfigIssue {
+							severity: Severity::Error,
+							message: format!(
+								"pipe '{}' query '{}': sink '{}' not found",
+								pipe.name, query.id, s
+							),
+						});
+					}
+				}
+			}
+		}
+
+		if pipe.origin.dsn.is_empty() {
+			issues.push(ConfigIssue {
+				severity: Severity::Error,
+				message: format!("pipe '{}': origin dsn is empty", pipe.name),
+			});
+		}
+	}
+
+	issues
+}
+
+/// Expand `${VAR}` and `${VAR:-default}` references in a string.
+///
+/// - `${VAR}` → value of env var `VAR`, error if unset
+/// - `${VAR:-fallback}` → value of `VAR` if set, otherwise `fallback`
+/// - Literal `$$` is escaped to `$`
+pub fn expand_env_vars(input: &str) -> Result<String, OversyncError> {
+	let mut result = String::with_capacity(input.len());
+	let mut chars = input.chars().peekable();
+
+	while let Some(ch) = chars.next() {
+		if ch != '$' {
+			result.push(ch);
+			continue;
+		}
+
+		match chars.peek() {
+			Some('$') => {
+				chars.next();
+				result.push('$');
+			}
+			Some('{') => {
+				chars.next(); // consume '{'
+				let mut var_expr = String::new();
+				let mut found_close = false;
+				for c in chars.by_ref() {
+					if c == '}' {
+						found_close = true;
+						break;
+					}
+					var_expr.push(c);
+				}
+				if !found_close {
+					return Err(OversyncError::Config(
+						"unclosed ${...} in config".into(),
+					));
+				}
+
+				let (var_name, default_val) = if let Some(pos) = var_expr.find(":-") {
+					(&var_expr[..pos], Some(&var_expr[pos + 2..]))
+				} else {
+					(var_expr.as_str(), None)
+				};
+
+				if var_name.is_empty() {
+					return Err(OversyncError::Config(
+						"empty variable name in ${...}".into(),
+					));
+				}
+
+				match std::env::var(var_name) {
+					Ok(val) => result.push_str(&val),
+					Err(_) => match default_val {
+						Some(d) => result.push_str(d),
+						None => {
+							return Err(OversyncError::Config(format!(
+								"env var '{var_name}' is not set (use ${{VAR:-default}} for fallback)"
+							)));
+						}
+					},
+				}
+			}
+			_ => {
+				result.push('$');
+			}
+		}
+	}
+
+	Ok(result)
+}
+
 impl SyncConfig {
+	/// Load config from a TOML file with `${VAR}` env var expansion.
 	pub fn from_file(path: &Path) -> Result<Self, OversyncError> {
 		let content = std::fs::read_to_string(path)
 			.map_err(|e| OversyncError::Config(format!("read {}: {e}", path.display())))?;
-		Self::from_str(&content)
+		let expanded = expand_env_vars(&content)?;
+		toml::from_str(&expanded).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
 
+	/// Parse config from a TOML string (no env var expansion).
 	pub fn from_str(toml_str: &str) -> Result<Self, OversyncError> {
 		toml::from_str(toml_str).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
+	}
+
+	/// Parse config from a TOML string with `${VAR}` env var expansion.
+	pub fn from_str_with_env(toml_str: &str) -> Result<Self, OversyncError> {
+		let expanded = expand_env_vars(toml_str)?;
+		toml::from_str(&expanded).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
 
 	/// Returns all pipes: explicit `[[pipes]]` entries plus auto-converted `[[sources]]`.
@@ -925,5 +1087,228 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert!(!config.pipes[0].enabled);
+	}
+
+	// ── Env var expansion tests ──────────────────────────────────
+
+	#[test]
+	fn env_expand_basic() {
+		unsafe { std::env::set_var("OVERSYNC_TEST_URL", "http://db:8000") };
+		let result = expand_env_vars("url = \"${OVERSYNC_TEST_URL}\"").unwrap();
+		assert_eq!(result, "url = \"http://db:8000\"");
+		unsafe { std::env::remove_var("OVERSYNC_TEST_URL") };
+	}
+
+	#[test]
+	fn env_expand_with_default() {
+		unsafe { std::env::remove_var("OVERSYNC_MISSING_VAR") };
+		let result = expand_env_vars("port = \"${OVERSYNC_MISSING_VAR:-5432}\"").unwrap();
+		assert_eq!(result, "port = \"5432\"");
+	}
+
+	#[test]
+	fn env_expand_default_not_used_when_set() {
+		unsafe { std::env::set_var("OVERSYNC_TEST_PORT", "9999") };
+		let result = expand_env_vars("port = \"${OVERSYNC_TEST_PORT:-5432}\"").unwrap();
+		assert_eq!(result, "port = \"9999\"");
+		unsafe { std::env::remove_var("OVERSYNC_TEST_PORT") };
+	}
+
+	#[test]
+	fn env_expand_missing_var_errors() {
+		unsafe { std::env::remove_var("OVERSYNC_UNSET_XYZ") };
+		let err = expand_env_vars("dsn = \"${OVERSYNC_UNSET_XYZ}\"").unwrap_err();
+		assert!(err.to_string().contains("OVERSYNC_UNSET_XYZ"));
+		assert!(err.to_string().contains("not set"));
+	}
+
+	#[test]
+	fn env_expand_escaped_dollar() {
+		let result = expand_env_vars("price = \"$$100\"").unwrap();
+		assert_eq!(result, "price = \"$100\"");
+	}
+
+	#[test]
+	fn env_expand_no_vars_passthrough() {
+		let input = "url = \"http://localhost:8000\"";
+		assert_eq!(expand_env_vars(input).unwrap(), input);
+	}
+
+	#[test]
+	fn env_expand_unclosed_brace_errors() {
+		let err = expand_env_vars("x = \"${UNCLOSED\"").unwrap_err();
+		assert!(err.to_string().contains("unclosed"));
+	}
+
+	#[test]
+	fn env_expand_empty_var_name_errors() {
+		let err = expand_env_vars("x = \"${:-default}\"").unwrap_err();
+		assert!(err.to_string().contains("empty variable name"));
+	}
+
+	#[test]
+	fn env_expand_in_full_toml() {
+		unsafe { std::env::set_var("OVERSYNC_TEST_DB_URL", "http://prod:8000") };
+		unsafe { std::env::set_var("OVERSYNC_TEST_DB_USER", "admin") };
+		let toml = r#"
+[surrealdb]
+url = "${OVERSYNC_TEST_DB_URL}"
+username = "${OVERSYNC_TEST_DB_USER}"
+password = "${OVERSYNC_TEST_DB_PASS:-secret}"
+"#;
+		let config = SyncConfig::from_str_with_env(toml).unwrap();
+		assert_eq!(config.surrealdb.url, "http://prod:8000");
+		assert_eq!(config.surrealdb.username, "admin");
+		assert_eq!(config.surrealdb.password, "secret");
+		unsafe { std::env::remove_var("OVERSYNC_TEST_DB_URL") };
+		unsafe { std::env::remove_var("OVERSYNC_TEST_DB_USER") };
+	}
+
+	#[test]
+	fn env_expand_multiple_vars_in_one_line() {
+		unsafe { std::env::set_var("OVERSYNC_TEST_HOST", "db.prod") };
+		unsafe { std::env::set_var("OVERSYNC_TEST_DBPORT", "5432") };
+		let result =
+			expand_env_vars("dsn = \"postgres://${OVERSYNC_TEST_HOST}:${OVERSYNC_TEST_DBPORT}/app\"")
+				.unwrap();
+		assert_eq!(result, "dsn = \"postgres://db.prod:5432/app\"");
+		unsafe { std::env::remove_var("OVERSYNC_TEST_HOST") };
+		unsafe { std::env::remove_var("OVERSYNC_TEST_DBPORT") };
+	}
+
+	#[test]
+	fn env_expand_bare_dollar_passthrough() {
+		let result = expand_env_vars("price = $5").unwrap();
+		assert_eq!(result, "price = $5");
+	}
+
+	// ── Config validation tests ─────────────────────────────────
+
+	#[test]
+	fn validate_valid_config() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[sinks]]
+name = "kafka"
+type = "kafka"
+
+[[pipes]]
+name = "p1"
+targets = ["kafka"]
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[pipes.queries]]
+id = "q1"
+sql = "SELECT 1 AS id"
+key_column = "id"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.is_empty(), "expected no issues, got: {:?}", issues.iter().map(|i| &i.message).collect::<Vec<_>>());
+	}
+
+	#[test]
+	fn validate_zero_interval() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p1"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[pipes.schedule]
+interval_secs = 0
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("interval_secs is 0")));
+	}
+
+	#[test]
+	fn validate_unknown_target() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p1"
+targets = ["nonexistent"]
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("nonexistent")));
+	}
+
+	#[test]
+	fn validate_empty_dsn() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p1"
+
+[pipes.origin]
+connector = "postgres"
+dsn = ""
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("dsn is empty")));
+	}
+
+	#[test]
+	fn validate_no_queries_warns() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p1"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|i| i.severity == Severity::Warning && i.message.contains("no queries")));
+	}
+
+	#[test]
+	fn validate_query_unknown_sink() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "p1"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[[pipes.queries]]
+id = "q1"
+sql = "SELECT 1 AS id"
+key_column = "id"
+sinks = ["missing-sink"]
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("missing-sink")));
 	}
 }
