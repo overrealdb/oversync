@@ -1,5 +1,5 @@
 mod parse;
-mod steps;
+pub mod steps;
 
 use async_trait::async_trait;
 use oversync_core::error::OversyncError;

@@ -171,8 +171,47 @@ impl OversyncEngine {
 			api_key: self.api_key.clone(),
 		});
 
-		oversync_api::router(api_state)
+		let base = oversync_api::router(api_state);
+
+		let registry = crate::engine::default_registry();
+		let dry_run_state = Arc::new(DryRunState { registry });
+		base.route(
+			"/pipes/dry-run",
+			axum::routing::post(dry_run_handler).with_state(dry_run_state),
+		)
 	}
+}
+
+#[cfg(feature = "api")]
+struct DryRunState {
+	registry: PluginRegistry,
+}
+
+#[cfg(feature = "api")]
+async fn dry_run_handler(
+	axum::extract::State(state): axum::extract::State<Arc<DryRunState>>,
+	axum::Json(req): axum::Json<crate::dry_run::DryRunRequest>,
+) -> Result<axum::Json<crate::dry_run::DryRunResult>, axum::Json<oversync_api::types::ErrorResponse>> {
+	let transform_hook: Option<std::sync::Arc<dyn oversync_core::traits::TransformHook>> =
+		if req.transforms.is_empty() {
+			None
+		} else {
+			let chain = oversync_transforms::parse_steps(&req.transforms).map_err(|e| {
+				axum::Json(oversync_api::types::ErrorResponse {
+					error: e.to_string(),
+				})
+			})?;
+			Some(std::sync::Arc::new(chain))
+		};
+
+	let result = crate::dry_run::execute_dry_run(&req, &state.registry, transform_hook)
+		.await
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: e.to_string(),
+			})
+		})?;
+	Ok(axum::Json(result))
 }
 
 impl OversyncEngineBuilder {

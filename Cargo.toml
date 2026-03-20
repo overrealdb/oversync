@@ -108,6 +108,7 @@ oversync-core = { workspace = true }
 oversync-connectors = { workspace = true }
 oversync-delta = { workspace = true }
 oversync-sinks = { workspace = true }
+oversync-transforms = { workspace = true }
 surql-macros = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
