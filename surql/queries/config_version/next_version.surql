@@ -1,1 +1,1 @@
-SELECT math::max(version) AS max_v FROM config_version;
+SELECT version FROM config_version ORDER BY version DESC LIMIT 1;

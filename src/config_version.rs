@@ -40,7 +40,7 @@ pub async fn save_version(
 
 	let max_v = rows
 		.first()
-		.and_then(|r| r.get("max_v"))
+		.and_then(|r| r.get("version"))
 		.and_then(|v| v.as_u64())
 		.unwrap_or(0);
 
