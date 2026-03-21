@@ -14,6 +14,12 @@ use oversync_core::traits::OriginConnector;
 // ── Config ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct TrinoExtraCredentials {
+	pub username: String,
+	pub password: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct TrinoConfig {
 	#[serde(rename = "dsn")]
 	pub url: String,
@@ -25,6 +31,8 @@ pub struct TrinoConfig {
 	pub timeout_secs: u64,
 	#[serde(default)]
 	pub auth: Option<TrinoAuth>,
+	#[serde(default)]
+	pub extra_credentials: Option<TrinoExtraCredentials>,
 }
 
 fn default_user() -> String {
@@ -74,6 +82,20 @@ struct QueryError {
 	error_name: String,
 }
 
+fn encode_credential_value(s: &str) -> String {
+	s.replace('%', "%25")
+		.replace(',', "%2C")
+		.replace('=', "%3D")
+}
+
+pub(crate) fn build_extra_credential_header(creds: &TrinoExtraCredentials) -> String {
+	format!(
+		"db.user={}, db.password={}",
+		encode_credential_value(&creds.username),
+		encode_credential_value(&creds.password),
+	)
+}
+
 // ── TrinoClient ─────────────────────────────────────────────
 
 pub(crate) struct TrinoClient {
@@ -84,6 +106,7 @@ pub(crate) struct TrinoClient {
 	schema: Option<String>,
 	timeout: Duration,
 	bearer_token: Option<String>,
+	extra_credentials: Option<TrinoExtraCredentials>,
 }
 
 impl TrinoClient {
@@ -123,6 +146,7 @@ impl TrinoClient {
 			schema: config.schema.clone(),
 			timeout: Duration::from_secs(config.timeout_secs),
 			bearer_token,
+			extra_credentials: config.extra_credentials.clone(),
 		})
 	}
 
@@ -145,6 +169,9 @@ impl TrinoClient {
 		}
 		if let Some(ref token) = self.bearer_token {
 			req = req.bearer_auth(token);
+		}
+		if let Some(ref creds) = self.extra_credentials {
+			req = req.header("X-Trino-Extra-Credential", build_extra_credential_header(creds));
 		}
 
 		let resp = req
@@ -693,5 +720,47 @@ mod tests {
 		assert_eq!(value_to_string(&serde_json::json!(42)), "42");
 		assert_eq!(value_to_string(&serde_json::json!(true)), "true");
 		assert_eq!(value_to_string(&serde_json::Value::Null), "");
+	}
+
+	#[test]
+	fn extra_credential_header_format() {
+		let creds = TrinoExtraCredentials {
+			username: "ivan".into(),
+			password: "s3cret".into(),
+		};
+		let header = build_extra_credential_header(&creds);
+		assert_eq!(header, "db.user=ivan, db.password=s3cret");
+	}
+
+	#[test]
+	fn extra_credential_url_encoding() {
+		let creds = TrinoExtraCredentials {
+			username: "user=admin".into(),
+			password: "p,a=ss%word".into(),
+		};
+		let header = build_extra_credential_header(&creds);
+		assert_eq!(header, "db.user=user%3Dadmin, db.password=p%2Ca%3Dss%25word");
+	}
+
+	#[test]
+	fn extra_credential_config_parsing() {
+		let json = serde_json::json!({
+			"dsn": "http://trino:8080",
+			"extra_credentials": {
+				"username": "ivan",
+				"password": "secret"
+			}
+		});
+		let config: TrinoConfig = serde_json::from_value(json).unwrap();
+		let creds = config.extra_credentials.unwrap();
+		assert_eq!(creds.username, "ivan");
+		assert_eq!(creds.password, "secret");
+	}
+
+	#[test]
+	fn no_extra_credentials_by_default() {
+		let json = serde_json::json!({"dsn": "http://trino:8080"});
+		let config: TrinoConfig = serde_json::from_value(json).unwrap();
+		assert!(config.extra_credentials.is_none());
 	}
 }

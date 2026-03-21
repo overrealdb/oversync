@@ -97,6 +97,7 @@ async fn routing_resolve_pipe_query_sinks_filters() {
 			connector: "postgres".into(),
 			dsn: "postgres://localhost/db".into(),
 			credential: None,
+			trino_url: None,
 			config: serde_json::Value::Null,
 		},
 		targets,

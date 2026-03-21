@@ -21,6 +21,13 @@ pub enum DryRunMode {
 	Live,
 }
 
+/// Transient credentials for dry-run — NEVER persisted, only in-memory.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransientCredentials {
+	pub username: String,
+	pub password: String,
+}
+
 /// Request to execute a dry-run of a pipe.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DryRunRequest {
@@ -37,6 +44,11 @@ pub struct DryRunRequest {
 	/// When true, diff against current SurrealDB state instead of empty.
 	#[serde(default)]
 	pub use_existing_state: bool,
+	/// Transient credentials for the origin connection. Never stored.
+	/// For Trino: sent as X-Trino-Extra-Credential header.
+	/// For native (postgres/mysql): injected into DSN.
+	#[serde(default)]
+	pub credentials: Option<TransientCredentials>,
 }
 
 fn default_mode() -> DryRunMode {
@@ -108,7 +120,7 @@ pub async fn execute_dry_run(
 			req.mock_data[..limit].to_vec()
 		}
 		DryRunMode::Live => {
-			let connector = create_connector(&req.pipe, registry).await?;
+			let connector = create_connector(&req.pipe, registry, req.credentials.as_ref()).await?;
 			let limited_sql = format!("{} LIMIT {}", query.sql.trim().trim_end_matches(';'), req.row_limit);
 			connector
 				.fetch_all(&limited_sql, &query.key_column)
@@ -195,6 +207,7 @@ pub async fn execute_dry_run(
 async fn create_connector(
 	pipe: &PipeConfig,
 	registry: &PluginRegistry,
+	credentials: Option<&TransientCredentials>,
 ) -> Result<Box<dyn OriginConnector>, OversyncError> {
 	let mut map = match &pipe.origin.config {
 		serde_json::Value::Object(m) => m.clone(),
@@ -204,10 +217,54 @@ async fn create_connector(
 		"dsn".into(),
 		serde_json::Value::String(pipe.origin.dsn.clone()),
 	);
+
+	// Inject transient credentials into connector config
+	if let Some(creds) = credentials {
+		match pipe.origin.connector.as_str() {
+			"trino" => {
+				// Trino: pass as extra_credentials for X-Trino-Extra-Credential header
+				let extra = serde_json::json!({
+					"username": creds.username,
+					"password": creds.password,
+				});
+				map.insert("extra_credentials".into(), extra);
+			}
+			"postgres" | "mysql" => {
+				// Native: inject user:pass into DSN
+				if let Some(dsn) = map.get("dsn").and_then(|v| v.as_str()) {
+					let injected = inject_credentials_into_dsn(dsn, &creds.username, &creds.password);
+					map.insert("dsn".into(), serde_json::Value::String(injected));
+				}
+			}
+			_ => {
+				// Generic: add as top-level config fields
+				map.insert("username".into(), serde_json::Value::String(creds.username.clone()));
+				map.insert("password".into(), serde_json::Value::String(creds.password.clone()));
+			}
+		}
+	}
+
 	let config = serde_json::Value::Object(map);
 	registry
 		.create_source(&pipe.origin.connector, &pipe.name, &config)
 		.await
+}
+
+/// Inject username:password into a DSN URL (postgres://user:pass@host/db).
+fn inject_credentials_into_dsn(dsn: &str, username: &str, password: &str) -> String {
+	if let Some(rest) = dsn.strip_prefix("postgres://") {
+		if let Some(at_pos) = rest.find('@') {
+			return format!("postgres://{}:{}@{}", username, password, &rest[at_pos + 1..]);
+		}
+		return format!("postgres://{}:{}@{}", username, password, rest);
+	}
+	if let Some(rest) = dsn.strip_prefix("mysql://") {
+		if let Some(at_pos) = rest.find('@') {
+			return format!("mysql://{}:{}@{}", username, password, &rest[at_pos + 1..]);
+		}
+		return format!("mysql://{}:{}@{}", username, password, rest);
+	}
+	dsn.to_string()
 }
 
 #[cfg(test)]
@@ -222,6 +279,7 @@ mod tests {
 				connector: "mock".into(),
 				dsn: "mock://".into(),
 				credential: None,
+				trino_url: None,
 				config: serde_json::Value::Null,
 			},
 			targets: vec![],
@@ -268,6 +326,7 @@ mod tests {
 			row_limit: 100,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -295,6 +354,7 @@ mod tests {
 			row_limit: 2,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -324,6 +384,7 @@ mod tests {
 			row_limit: 100,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -354,6 +415,7 @@ mod tests {
 			row_limit: 100,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -377,6 +439,7 @@ mod tests {
 			row_limit: 100,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -394,6 +457,7 @@ mod tests {
 			row_limit: 100,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -418,6 +482,7 @@ mod tests {
 			row_limit: 25,
 			transforms: vec![],
 			use_existing_state: false,
+			credentials: None,
 		};
 
 		let registry = PluginRegistry::new();
@@ -425,5 +490,56 @@ mod tests {
 
 		assert_eq!(result.input_rows, 25);
 		assert_eq!(result.input_sample.len(), 10);
+	}
+
+	// ── Credential injection tests ──────────────────────────────
+
+	#[test]
+	fn inject_postgres_dsn() {
+		let dsn = "postgres://olduser:oldpass@db.prod:5432/app";
+		let result = inject_credentials_into_dsn(dsn, "ivan", "s3cret");
+		assert_eq!(result, "postgres://ivan:s3cret@db.prod:5432/app");
+	}
+
+	#[test]
+	fn inject_postgres_dsn_no_existing_creds() {
+		let dsn = "postgres://db.prod:5432/app";
+		let result = inject_credentials_into_dsn(dsn, "ivan", "pass");
+		assert_eq!(result, "postgres://ivan:pass@db.prod:5432/app");
+	}
+
+	#[test]
+	fn inject_mysql_dsn() {
+		let dsn = "mysql://olduser:oldpass@db.prod:3306/app";
+		let result = inject_credentials_into_dsn(dsn, "ivan", "pass");
+		assert_eq!(result, "mysql://ivan:pass@db.prod:3306/app");
+	}
+
+	#[test]
+	fn inject_unknown_dsn_unchanged() {
+		let dsn = "http://api.example.com";
+		let result = inject_credentials_into_dsn(dsn, "user", "pass");
+		assert_eq!(result, "http://api.example.com");
+	}
+
+	#[test]
+	fn transient_credentials_not_in_response() {
+		// DryRunResult has no credentials field — verify at type level
+		let result = DryRunResult {
+			input_rows: 0,
+			input_sample: vec![],
+			changes: DryRunChanges { created: 0, updated: 0, deleted: 0 },
+			after_transform: vec![],
+			stats: DryRunStats {
+				rows_fetched: 0,
+				events_before_transform: 0,
+				events_after_transform: 0,
+				events_filtered_out: 0,
+			},
+		};
+		let json = serde_json::to_value(&result).unwrap();
+		assert!(!json.as_object().unwrap().contains_key("credentials"));
+		assert!(!json.as_object().unwrap().contains_key("password"));
+		assert!(!json.as_object().unwrap().contains_key("username"));
 	}
 }

@@ -162,6 +162,11 @@ pub struct PipeConfig {
 	pub enabled: bool,
 }
 
+/// Known native connector types (no Trino bridge needed).
+const NATIVE_CONNECTORS: &[&str] = &[
+	"postgres", "mysql", "http", "graphql", "clickhouse", "flight_sql", "flight-sql", "mcp", "trino",
+];
+
 /// Origin connector configuration within a pipe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OriginDef {
@@ -169,8 +174,20 @@ pub struct OriginDef {
 	pub dsn: String,
 	#[serde(default)]
 	pub credential: Option<String>,
+	/// Trino URL for non-native connectors. When connector is e.g. "mssql",
+	/// queries are routed through this Trino instance.
+	/// If unset, falls back to engine-level default Trino URL.
+	#[serde(default)]
+	pub trino_url: Option<String>,
 	#[serde(default)]
 	pub config: serde_json::Value,
+}
+
+impl OriginDef {
+	/// Returns true if the connector type is handled natively (no Trino needed).
+	pub fn is_native(&self) -> bool {
+		NATIVE_CONNECTORS.contains(&self.connector.as_str())
+	}
 }
 
 /// Polling schedule for a pipe.
@@ -238,6 +255,7 @@ impl From<&SourceDef> for PipeConfig {
 				connector: src.connector.clone(),
 				dsn: src.dsn.clone(),
 				credential: None,
+				trino_url: None,
 				config: src.config.clone(),
 			},
 			targets: vec![],
@@ -1100,6 +1118,50 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert!(!config.pipes[0].enabled);
+	}
+
+	#[test]
+	fn origin_is_native() {
+		let origin = OriginDef {
+			connector: "postgres".into(),
+			dsn: "postgres://localhost/db".into(),
+			credential: None,
+			trino_url: None,
+			config: serde_json::Value::Null,
+		};
+		assert!(origin.is_native());
+	}
+
+	#[test]
+	fn origin_mssql_not_native() {
+		let origin = OriginDef {
+			connector: "mssql".into(),
+			dsn: "mssql://host:1433/db".into(),
+			credential: None,
+			trino_url: Some("http://trino:8080".into()),
+			config: serde_json::Value::Null,
+		};
+		assert!(!origin.is_native());
+	}
+
+	#[test]
+	fn parse_pipe_with_trino_url() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "mssql-pipe"
+
+[pipes.origin]
+connector = "mssql"
+dsn = "host:1433/db"
+trino_url = "http://domain-trino:8080"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipe = &config.pipes[0];
+		assert_eq!(pipe.origin.trino_url.as_deref(), Some("http://domain-trino:8080"));
+		assert!(!pipe.origin.is_native());
 	}
 
 	#[test]
