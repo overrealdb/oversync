@@ -1419,4 +1419,79 @@ sinks = ["missing-sink"]
 		let issues = validate_config(&config);
 		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("missing-sink")));
 	}
+
+	// ── Auto-routing tests ──────────────────────────────────────
+
+	#[test]
+	fn native_connectors_recognized() {
+		for connector in &["postgres", "mysql", "http", "graphql", "clickhouse", "flight_sql", "flight-sql", "mcp", "trino"] {
+			let origin = OriginDef {
+				connector: connector.to_string(),
+				dsn: "test://".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::Value::Null,
+			};
+			assert!(origin.is_native(), "{connector} should be native");
+		}
+	}
+
+	#[test]
+	fn non_native_connectors_detected() {
+		for connector in &["mssql", "oracle", "snowflake", "hive", "iceberg", "teradata", "db2"] {
+			let origin = OriginDef {
+				connector: connector.to_string(),
+				dsn: "test://".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::Value::Null,
+			};
+			assert!(!origin.is_native(), "{connector} should NOT be native");
+		}
+	}
+
+	#[test]
+	fn validate_config_blocks_zero_interval() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "bad"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[pipes.schedule]
+interval_secs = 0
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		let errors: Vec<_> = issues.iter().filter(|i| i.severity == Severity::Error).collect();
+		assert!(!errors.is_empty(), "should have error for zero interval");
+		assert!(errors[0].message.contains("interval_secs is 0"));
+	}
+
+	#[test]
+	fn validate_config_warns_no_queries() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "empty"
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		let warnings: Vec<_> = issues.iter().filter(|i| i.severity == Severity::Warning).collect();
+		assert!(!warnings.is_empty());
+		// Warnings don't block — only errors do
+		let errors: Vec<_> = issues.iter().filter(|i| i.severity == Severity::Error).collect();
+		assert!(errors.is_empty());
+	}
 }

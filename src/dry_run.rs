@@ -560,4 +560,60 @@ mod tests {
 		assert!(!json.as_object().unwrap().contains_key("password"));
 		assert!(!json.as_object().unwrap().contains_key("username"));
 	}
+
+	#[tokio::test]
+	async fn dry_run_non_native_routes_through_trino() {
+		let mut pipe = test_pipe();
+		pipe.origin.connector = "mssql".into();
+		pipe.origin.dsn = "mssql://host:1433/db".into();
+		pipe.origin.trino_url = Some("http://my-trino:8080".into());
+
+		let req = DryRunRequest {
+			pipe,
+			query_id: "q1".into(),
+			mode: DryRunMode::Live,
+			mock_data: vec![],
+			row_limit: 10,
+			transforms: vec![],
+			use_existing_state: false,
+			credentials: None,
+		};
+
+		let registry = PluginRegistry::new();
+		// Will fail because registry has no "trino" connector registered,
+		// but the error proves routing happened: "unknown source type: trino"
+		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
+		let msg = err.to_string();
+		assert!(
+			msg.contains("trino"),
+			"expected error about trino connector, got: {msg}"
+		);
+	}
+
+	#[tokio::test]
+	async fn dry_run_native_does_not_route_through_trino() {
+		let mut pipe = test_pipe();
+		pipe.origin.connector = "postgres".into();
+		pipe.origin.dsn = "postgres://localhost/db".into();
+
+		let req = DryRunRequest {
+			pipe,
+			query_id: "q1".into(),
+			mode: DryRunMode::Live,
+			mock_data: vec![],
+			row_limit: 10,
+			transforms: vec![],
+			use_existing_state: false,
+			credentials: None,
+		};
+
+		let registry = PluginRegistry::new();
+		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
+		let msg = err.to_string();
+		// Should fail with "unknown source type: postgres" (not trino)
+		assert!(
+			msg.contains("postgres"),
+			"expected error about postgres connector, got: {msg}"
+		);
+	}
 }
