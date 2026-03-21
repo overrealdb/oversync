@@ -95,9 +95,15 @@ impl EmbeddedSync {
 				))
 			})?;
 
+		let (eff_connector, eff_config) = if pipe.origin.is_native() {
+			(pipe.origin.connector.as_str(), build_connector_config(pipe))
+		} else {
+			let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+			("trino", serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}))
+		};
 		let connector = self
 			.registry
-			.create_source(&pipe.origin.connector, &pipe.name, &build_connector_config(pipe))
+			.create_source(eff_connector, &pipe.name, &eff_config)
 			.await?;
 
 		let query_sinks = self.resolve_sinks(pipe, &query.sinks)?;
@@ -349,8 +355,15 @@ async fn run_embedded_pipe_query(
 	transform_hooks: Arc<HashMap<String, Arc<dyn TransformHook>>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
+	let (effective_connector, connector_config) = if pipe.origin.is_native() {
+		(pipe.origin.connector.clone(), build_connector_config(&pipe))
+	} else {
+		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+		info!(pipe = %pipe.name, connector = %pipe.origin.connector, "routing through Trino");
+		("trino".to_string(), serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}))
+	};
 	let connector = match registry
-		.create_source(&pipe.origin.connector, &pipe.name, &build_connector_config(&pipe))
+		.create_source(&effective_connector, &pipe.name, &connector_config)
 		.await
 	{
 		Ok(c) => c,

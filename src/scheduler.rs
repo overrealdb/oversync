@@ -153,16 +153,29 @@ async fn run_pipe_query(
 	sinks: Vec<Arc<dyn Sink>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let connector_config = {
+	let (effective_connector, connector_config) = if pipe.origin.is_native() {
 		let mut map = match &pipe.origin.config {
 			serde_json::Value::Object(m) => m.clone(),
 			_ => serde_json::Map::new(),
 		};
 		map.insert("dsn".into(), serde_json::Value::String(pipe.origin.dsn.clone()));
-		serde_json::Value::Object(map)
+		(pipe.origin.connector.clone(), serde_json::Value::Object(map))
+	} else {
+		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+		info!(
+			pipe = %pipe.name,
+			connector = %pipe.origin.connector,
+			trino_url = %trino_url,
+			"non-native connector, routing through Trino"
+		);
+		let config = serde_json::json!({
+			"dsn": trino_url,
+			"catalog": pipe.origin.connector,
+		});
+		("trino".to_string(), config)
 	};
 	let connector = match registry
-		.create_source(&pipe.origin.connector, &pipe.name, &connector_config)
+		.create_source(&effective_connector, &pipe.name, &connector_config)
 		.await
 	{
 		Ok(c) => c,

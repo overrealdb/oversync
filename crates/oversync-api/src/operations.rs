@@ -112,8 +112,10 @@ pub async fn get_history(
 		})
 	})?;
 
+	const SQL_CYCLE_HISTORY: &str = include_str!("../../../surql/queries/delta/list_cycle_history.surql");
+
 	let mut response = db
-		.query("SELECT * FROM cycle_log ORDER BY started_at DESC LIMIT 100")
+		.query(SQL_CYCLE_HISTORY)
 		.await
 		.map_err(|e| {
 			Json(ErrorResponse {

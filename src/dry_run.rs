@@ -244,9 +244,27 @@ async fn create_connector(
 		}
 	}
 
-	let config = serde_json::Value::Object(map);
+	// Auto-route non-native connectors through Trino
+	let (effective_connector, config) = if pipe.origin.is_native() {
+		(pipe.origin.connector.as_str(), serde_json::Value::Object(map))
+	} else {
+		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+		// Merge credentials into Trino config
+		if let Some(creds) = credentials {
+			map.clear();
+			map.insert("dsn".into(), serde_json::Value::String(trino_url.to_string()));
+			map.insert("catalog".into(), serde_json::Value::String(pipe.origin.connector.clone()));
+			let extra = serde_json::json!({"username": creds.username, "password": creds.password});
+			map.insert("extra_credentials".into(), extra);
+		} else {
+			map.clear();
+			map.insert("dsn".into(), serde_json::Value::String(trino_url.to_string()));
+			map.insert("catalog".into(), serde_json::Value::String(pipe.origin.connector.clone()));
+		}
+		("trino", serde_json::Value::Object(map))
+	};
 	registry
-		.create_source(&pipe.origin.connector, &pipe.name, &config)
+		.create_source(effective_connector, &pipe.name, &config)
 		.await
 }
 

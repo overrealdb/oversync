@@ -96,10 +96,18 @@ impl OversyncEngine {
 		}
 	}
 
-	/// Start syncing with the given config. Stops any running scheduler first.
-	/// Resolves credential references in pipe configs before starting.
+	/// Start syncing with the given config. Validates, resolves credentials, versions, then starts.
 	pub async fn start(&self, mut config: SyncConfig) -> Result<(), OversyncError> {
-		self.resolve_credentials(&mut config).await?;
+		self.prepare_config(&mut config).await?;
+		if let Err(e) = crate::config_version::save_version(
+			&self.state_client,
+			&config,
+			"auto-save on start",
+		)
+		.await
+		{
+			tracing::warn!(error = %e, "failed to save config version (non-fatal)");
+		}
 		self.lifecycle.start(config).await
 	}
 
@@ -107,15 +115,40 @@ impl OversyncEngine {
 	pub async fn start_from_db(&self) -> Result<(), OversyncError> {
 		let mut config =
 			crate::config_db::load_config_from_db(&self.state_client, &self.surreal_def).await?;
-		self.resolve_credentials(&mut config).await?;
+		self.prepare_config(&mut config).await?;
 		self.lifecycle.start(config).await
 	}
 
 	/// Parse a TOML config file and start syncing.
 	pub async fn start_from_toml(&self, path: &Path) -> Result<(), OversyncError> {
 		let mut config = SyncConfig::from_file(path)?;
-		self.resolve_credentials(&mut config).await?;
+		self.prepare_config(&mut config).await?;
 		self.lifecycle.start(config).await
+	}
+
+	async fn prepare_config(&self, config: &mut SyncConfig) -> Result<(), OversyncError> {
+		let issues = crate::config::validate_config(config);
+		for issue in &issues {
+			match issue.severity {
+				crate::config::Severity::Error => {
+					tracing::error!(issue = %issue.message, "config validation error");
+				}
+				crate::config::Severity::Warning => {
+					tracing::warn!(issue = %issue.message, "config validation warning");
+				}
+			}
+		}
+		if issues.iter().any(|i| i.severity == crate::config::Severity::Error) {
+			return Err(OversyncError::Config(format!(
+				"config validation failed: {}",
+				issues.iter()
+					.filter(|i| i.severity == crate::config::Severity::Error)
+					.map(|i| i.message.as_str())
+					.collect::<Vec<_>>()
+					.join("; ")
+			)));
+		}
+		self.resolve_credentials(config).await
 	}
 
 	async fn resolve_credentials(&self, config: &mut SyncConfig) -> Result<(), OversyncError> {
@@ -218,6 +251,10 @@ impl OversyncEngine {
 		.route(
 			"/credentials/{name}",
 			axum::routing::delete(delete_credential).with_state(cred_state),
+		)
+		.route(
+			"/config/versions",
+			axum::routing::get(list_config_versions).with_state(Arc::new(self.state_client.clone())),
 		)
 	}
 }
@@ -338,6 +375,16 @@ async fn delete_credential(
 		ok: true,
 		message: format!("credential '{name}' deleted"),
 	}))
+}
+
+#[cfg(feature = "api")]
+async fn list_config_versions(
+	axum::extract::State(db): axum::extract::State<Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>>,
+) -> Result<axum::Json<serde_json::Value>, axum::Json<oversync_api::types::ErrorResponse>> {
+	let versions = crate::config_version::list_versions(&db)
+		.await
+		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: e.to_string() }))?;
+	Ok(axum::Json(serde_json::to_value(&versions).unwrap_or_default()))
 }
 
 impl OversyncEngineBuilder {

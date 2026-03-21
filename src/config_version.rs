@@ -5,6 +5,11 @@ use surrealdb::engine::any::Any;
 
 use oversync_core::error::OversyncError;
 
+const SQL_NEXT_VERSION: &str = include_str!("../surql/queries/config_version/next_version.surql");
+const SQL_CREATE_VERSION: &str = include_str!("../surql/queries/config_version/create_version.surql");
+const SQL_LIST_VERSIONS: &str = include_str!("../surql/queries/config_version/list_versions.surql");
+const SQL_GET_VERSION: &str = include_str!("../surql/queries/config_version/get_version.surql");
+
 /// A saved config snapshot with version number.
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigVersion {
@@ -25,7 +30,7 @@ pub async fn save_version(
 
 	// Get next version number
 	let mut resp = db
-		.query("SELECT math::max(version) AS max_v FROM config_version")
+		.query(SQL_NEXT_VERSION)
 		.await
 		.map_err(|e| OversyncError::SurrealDb(format!("config version query: {e}")))?;
 
@@ -41,7 +46,7 @@ pub async fn save_version(
 
 	let version = max_v + 1;
 
-	db.query("CREATE config_version SET version = $version, config_json = $config, description = $desc, created_at = time::now()")
+	db.query(SQL_CREATE_VERSION)
 		.bind(("version", version as i64))
 		.bind(("config", config_json))
 		.bind(("desc", description.to_string()))
@@ -56,7 +61,7 @@ pub async fn list_versions(
 	db: &Surreal<Any>,
 ) -> Result<Vec<ConfigVersion>, OversyncError> {
 	let mut resp = db
-		.query("SELECT version, config_json, created_at, description FROM config_version ORDER BY version DESC LIMIT 50")
+		.query(SQL_LIST_VERSIONS)
 		.await
 		.map_err(|e| OversyncError::SurrealDb(format!("list versions: {e}")))?;
 
@@ -93,7 +98,7 @@ pub async fn get_version(
 	version: u64,
 ) -> Result<ConfigVersion, OversyncError> {
 	let mut resp = db
-		.query("SELECT version, config_json, created_at, description FROM config_version WHERE version = $v")
+		.query(SQL_GET_VERSION)
 		.bind(("v", version as i64))
 		.await
 		.map_err(|e| OversyncError::SurrealDb(format!("get version: {e}")))?;
