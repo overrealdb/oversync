@@ -6,6 +6,34 @@ use axum::extract::{Path, State};
 use crate::state::ApiState;
 use crate::types::*;
 
+// ── Source mutations ────────────────────────────────────────
+const SQL_DELETE_SOURCE: &str = include_str!("../../../surql/queries/mutations/delete_source.surql");
+const SQL_CREATE_SOURCE: &str = include_str!("../../../surql/queries/mutations/create_source.surql");
+const SQL_UPDATE_SOURCE_CONNECTOR: &str = include_str!("../../../surql/queries/mutations/update_source_connector.surql");
+const SQL_UPDATE_SOURCE_ENABLED: &str = include_str!("../../../surql/queries/mutations/update_source_enabled.surql");
+const SQL_UPDATE_SOURCE_CONFIG: &str = include_str!("../../../surql/queries/mutations/update_source_config.surql");
+const SQL_DELETE_SOURCE_QUERIES: &str = include_str!("../../../surql/queries/mutations/delete_source_queries.surql");
+
+// ── Sink mutations ──────────────────────────────────────────
+const SQL_DELETE_SINK: &str = include_str!("../../../surql/queries/mutations/delete_sink.surql");
+const SQL_CREATE_SINK: &str = include_str!("../../../surql/queries/mutations/create_sink.surql");
+const SQL_UPDATE_SINK_TYPE: &str = include_str!("../../../surql/queries/mutations/update_sink_type.surql");
+const SQL_UPDATE_SINK_ENABLED: &str = include_str!("../../../surql/queries/mutations/update_sink_enabled.surql");
+const SQL_UPDATE_SINK_CONFIG: &str = include_str!("../../../surql/queries/mutations/update_sink_config.surql");
+
+// ── Pipe mutations ──────────────────────────────────────────
+const SQL_DELETE_PIPE: &str = include_str!("../../../surql/queries/mutations/delete_pipe.surql");
+const SQL_CREATE_PIPE: &str = include_str!("../../../surql/queries/mutations/create_pipe.surql");
+const SQL_DELETE_PIPE_QUERIES: &str = include_str!("../../../surql/queries/mutations/delete_pipe_queries.surql");
+const SQL_UPDATE_PIPE_ORIGIN_CONNECTOR: &str = include_str!("../../../surql/queries/mutations/update_pipe_origin_connector.surql");
+const SQL_UPDATE_PIPE_ORIGIN_DSN: &str = include_str!("../../../surql/queries/mutations/update_pipe_origin_dsn.surql");
+const SQL_UPDATE_PIPE_ORIGIN_CONFIG: &str = include_str!("../../../surql/queries/mutations/update_pipe_origin_config.surql");
+const SQL_UPDATE_PIPE_TARGETS: &str = include_str!("../../../surql/queries/mutations/update_pipe_targets.surql");
+const SQL_UPDATE_PIPE_SCHEDULE: &str = include_str!("../../../surql/queries/mutations/update_pipe_schedule.surql");
+const SQL_UPDATE_PIPE_DELTA: &str = include_str!("../../../surql/queries/mutations/update_pipe_delta.surql");
+const SQL_UPDATE_PIPE_RETRY: &str = include_str!("../../../surql/queries/mutations/update_pipe_retry.surql");
+const SQL_UPDATE_PIPE_ENABLED: &str = include_str!("../../../surql/queries/mutations/update_pipe_enabled.surql");
+
 #[utoipa::path(
 	post,
 	path = "/sources",
@@ -27,12 +55,12 @@ pub async fn create_source(
 		req.config
 	};
 
-	db.query("DELETE source_config WHERE name = $name")
+	db.query(SQL_DELETE_SOURCE)
 		.bind(("name", req.name.clone()))
 		.await
 		.map_err(db_err)?;
 
-	db.query("CREATE source_config SET name = $name, connector = $connector, config = $config, enabled = true, updated_at = time::now()")
+	db.query(SQL_CREATE_SOURCE)
 		.bind(("name", req.name.clone()))
 		.bind(("connector", req.connector))
 		.bind(("config", config_json))
@@ -65,7 +93,7 @@ pub async fn update_source(
 	let db = require_db(&state)?;
 
 	if let Some(connector) = req.connector {
-		db.query("UPDATE source_config SET connector = $connector, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_SOURCE_CONNECTOR)
 			.bind(("name", name.clone()))
 			.bind(("connector", connector))
 			.await
@@ -73,7 +101,7 @@ pub async fn update_source(
 	}
 
 	if let Some(enabled) = req.enabled {
-		db.query("UPDATE source_config SET enabled = $enabled, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_SOURCE_ENABLED)
 			.bind(("name", name.clone()))
 			.bind(("enabled", enabled))
 			.await
@@ -81,7 +109,7 @@ pub async fn update_source(
 	}
 
 	if let Some(config) = req.config {
-		db.query("UPDATE source_config SET config = $config, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_SOURCE_CONFIG)
 			.bind(("name", name.clone()))
 			.bind(("config", config))
 			.await
@@ -111,12 +139,12 @@ pub async fn delete_source(
 ) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
 	let db = require_db(&state)?;
 
-	db.query("DELETE source_config WHERE name = $name")
+	db.query(SQL_DELETE_SOURCE)
 		.bind(("name", name.clone()))
 		.await
 		.map_err(db_err)?;
 
-	db.query("DELETE query_config WHERE origin_id = $name")
+	db.query(SQL_DELETE_SOURCE_QUERIES)
 		.bind(("name", name.clone()))
 		.await
 		.map_err(db_err)?;
@@ -150,12 +178,12 @@ pub async fn create_sink(
 		req.config
 	};
 
-	db.query("DELETE sink_config WHERE name = $name")
+	db.query(SQL_DELETE_SINK)
 		.bind(("name", req.name.clone()))
 		.await
 		.map_err(db_err)?;
 
-	db.query("CREATE sink_config SET name = $name, sink_type = $sink_type, config = $config, enabled = true, updated_at = time::now()")
+	db.query(SQL_CREATE_SINK)
 		.bind(("name", req.name.clone()))
 		.bind(("sink_type", req.sink_type))
 		.bind(("config", config_json))
@@ -188,7 +216,7 @@ pub async fn update_sink(
 	let db = require_db(&state)?;
 
 	if let Some(sink_type) = req.sink_type {
-		db.query("UPDATE sink_config SET sink_type = $sink_type, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_SINK_TYPE)
 			.bind(("name", name.clone()))
 			.bind(("sink_type", sink_type))
 			.await
@@ -196,7 +224,7 @@ pub async fn update_sink(
 	}
 
 	if let Some(enabled) = req.enabled {
-		db.query("UPDATE sink_config SET enabled = $enabled, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_SINK_ENABLED)
 			.bind(("name", name.clone()))
 			.bind(("enabled", enabled))
 			.await
@@ -204,7 +232,7 @@ pub async fn update_sink(
 	}
 
 	if let Some(config) = req.config {
-		db.query("UPDATE sink_config SET config = $config, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_SINK_CONFIG)
 			.bind(("name", name.clone()))
 			.bind(("config", config))
 			.await
@@ -234,7 +262,7 @@ pub async fn delete_sink(
 ) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
 	let db = require_db(&state)?;
 
-	db.query("DELETE sink_config WHERE name = $name")
+	db.query(SQL_DELETE_SINK)
 		.bind(("name", name.clone()))
 		.await
 		.map_err(db_err)?;
@@ -285,12 +313,12 @@ pub async fn create_pipe(
 		req.retry
 	};
 
-	db.query("DELETE pipe_config WHERE name = $name")
+	db.query(SQL_DELETE_PIPE)
 		.bind(("name", req.name.clone()))
 		.await
 		.map_err(db_err)?;
 
-	db.query("CREATE pipe_config SET name = $name, origin_connector = $origin_connector, origin_dsn = $origin_dsn, origin_config = $origin_config, targets = $targets, schedule = $schedule, delta = $delta, retry = $retry, enabled = true, updated_at = time::now()")
+	db.query(SQL_CREATE_PIPE)
 		.bind(("name", req.name.clone()))
 		.bind(("origin_connector", req.origin_connector))
 		.bind(("origin_dsn", req.origin_dsn))
@@ -328,7 +356,7 @@ pub async fn update_pipe(
 	let db = require_db(&state)?;
 
 	if let Some(connector) = req.origin_connector {
-		db.query("UPDATE pipe_config SET origin_connector = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_ORIGIN_CONNECTOR)
 			.bind(("name", name.clone()))
 			.bind(("v", connector))
 			.await
@@ -336,7 +364,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(dsn) = req.origin_dsn {
-		db.query("UPDATE pipe_config SET origin_dsn = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_ORIGIN_DSN)
 			.bind(("name", name.clone()))
 			.bind(("v", dsn))
 			.await
@@ -344,7 +372,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(config) = req.origin_config {
-		db.query("UPDATE pipe_config SET origin_config = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_ORIGIN_CONFIG)
 			.bind(("name", name.clone()))
 			.bind(("v", config))
 			.await
@@ -352,7 +380,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(targets) = req.targets {
-		db.query("UPDATE pipe_config SET targets = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_TARGETS)
 			.bind(("name", name.clone()))
 			.bind(("v", targets))
 			.await
@@ -360,7 +388,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(schedule) = req.schedule {
-		db.query("UPDATE pipe_config SET schedule = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_SCHEDULE)
 			.bind(("name", name.clone()))
 			.bind(("v", schedule))
 			.await
@@ -368,7 +396,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(delta) = req.delta {
-		db.query("UPDATE pipe_config SET delta = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_DELTA)
 			.bind(("name", name.clone()))
 			.bind(("v", delta))
 			.await
@@ -376,7 +404,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(retry) = req.retry {
-		db.query("UPDATE pipe_config SET retry = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_RETRY)
 			.bind(("name", name.clone()))
 			.bind(("v", retry))
 			.await
@@ -384,7 +412,7 @@ pub async fn update_pipe(
 	}
 
 	if let Some(enabled) = req.enabled {
-		db.query("UPDATE pipe_config SET enabled = $v, updated_at = time::now() WHERE name = $name")
+		db.query(SQL_UPDATE_PIPE_ENABLED)
 			.bind(("name", name.clone()))
 			.bind(("v", enabled))
 			.await
@@ -414,12 +442,12 @@ pub async fn delete_pipe(
 ) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
 	let db = require_db(&state)?;
 
-	db.query("DELETE pipe_config WHERE name = $name")
+	db.query(SQL_DELETE_PIPE)
 		.bind(("name", name.clone()))
 		.await
 		.map_err(db_err)?;
 
-	db.query("DELETE query_config WHERE origin_id = $name")
+	db.query(SQL_DELETE_PIPE_QUERIES)
 		.bind(("name", name.clone()))
 		.await
 		.map_err(db_err)?;
@@ -470,8 +498,12 @@ async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
 async fn refresh_read_cache(state: &ApiState) {
 	let Some(db) = &state.db_client else { return };
 
+	const SQL_READ_SOURCES_CACHE: &str = include_str!("../../../surql/queries/config/read_sources_cache.surql");
+	const SQL_READ_SINKS_CACHE: &str = include_str!("../../../surql/queries/config/read_sinks_cache.surql");
+	const SQL_READ_PIPES_CACHE: &str = include_str!("../../../surql/queries/config/read_pipes_cache.surql");
+
 	if let Ok(mut resp) = db
-		.query("SELECT name, connector, config.interval_secs AS interval_secs FROM source_config WHERE enabled = true")
+		.query(SQL_READ_SOURCES_CACHE)
 		.await
 	{
 		if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0) {
@@ -494,7 +526,7 @@ async fn refresh_read_cache(state: &ApiState) {
 	}
 
 	if let Ok(mut resp) = db
-		.query("SELECT name, sink_type FROM sink_config WHERE enabled = true")
+		.query(SQL_READ_SINKS_CACHE)
 		.await
 	{
 		if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0) {
@@ -512,7 +544,7 @@ async fn refresh_read_cache(state: &ApiState) {
 	}
 
 	if let Ok(mut resp) = db
-		.query("SELECT name, origin_connector, origin_dsn, targets, schedule.interval_secs AS interval_secs, enabled FROM pipe_config WHERE enabled = true")
+		.query(SQL_READ_PIPES_CACHE)
 		.await
 	{
 		if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0) {

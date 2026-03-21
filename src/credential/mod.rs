@@ -33,8 +33,10 @@ pub async fn resolve_pipe_credentials(
 			None => continue,
 		};
 
+		const SQL_LOOKUP: &str = include_str!("../../surql/queries/credential/lookup_credential.surql");
+
 		let mut resp = db
-			.query("SELECT encrypted FROM credential WHERE name = $name")
+			.query(SQL_LOOKUP)
 			.bind(("name", cred_name.clone()))
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("credential lookup: {e}")))?;

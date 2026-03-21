@@ -269,14 +269,17 @@ async fn create_credential(
 		axum::Json(oversync_api::types::ErrorResponse { error: e.to_string() })
 	})?;
 
+	const SQL_DEL_CRED: &str = include_str!("../surql/queries/credential/delete_credential.surql");
+	const SQL_CREATE_CRED: &str = include_str!("../surql/queries/credential/create_credential.surql");
+
 	state.db
-		.query("DELETE credential WHERE name = $name")
+		.query(SQL_DEL_CRED)
 		.bind(("name", req.name.clone()))
 		.await
 		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
 
 	state.db
-		.query("CREATE credential SET name = $name, credential_type = $ctype, encrypted = $enc, updated_at = time::now()")
+		.query(SQL_CREATE_CRED)
 		.bind(("name", req.name.clone()))
 		.bind(("ctype", req.credential_type))
 		.bind(("enc", encrypted))
@@ -293,8 +296,10 @@ async fn create_credential(
 async fn list_credentials(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 ) -> Result<axum::Json<oversync_api::types::CredentialListResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+	const SQL_LIST_CREDS: &str = include_str!("../surql/queries/credential/list_credentials.surql");
+
 	let mut resp = state.db
-		.query("SELECT name, credential_type, created_at FROM credential ORDER BY name")
+		.query(SQL_LIST_CREDS)
 		.await
 		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
 
@@ -321,8 +326,10 @@ async fn delete_credential(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 	axum::extract::Path(name): axum::extract::Path<String>,
 ) -> Result<axum::Json<oversync_api::types::MutationResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+	const SQL_DEL: &str = include_str!("../surql/queries/credential/delete_credential.surql");
+
 	state.db
-		.query("DELETE credential WHERE name = $name")
+		.query(SQL_DEL)
 		.bind(("name", name.clone()))
 		.await
 		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;

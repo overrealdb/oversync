@@ -1,0 +1,1 @@
+CREATE pipe_config SET name = $name, origin_connector = $origin_connector, origin_dsn = $origin_dsn, origin_config = $origin_config, targets = $targets, schedule = $schedule, delta = $delta, retry = $retry, enabled = true, updated_at = time::now();
