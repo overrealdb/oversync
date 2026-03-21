@@ -95,7 +95,7 @@ impl EmbeddedSync {
 				))
 			})?;
 
-		let (eff_connector, eff_config) = if pipe.origin.is_native() {
+		let (eff_connector, eff_config) = if !pipe.origin.needs_trino_bridge() {
 			(pipe.origin.connector.as_str(), build_connector_config(pipe))
 		} else {
 			let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
@@ -355,7 +355,7 @@ async fn run_embedded_pipe_query(
 	transform_hooks: Arc<HashMap<String, Arc<dyn TransformHook>>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let (effective_connector, connector_config) = if pipe.origin.is_native() {
+	let (effective_connector, connector_config) = if !pipe.origin.needs_trino_bridge() {
 		(pipe.origin.connector.clone(), build_connector_config(&pipe))
 	} else {
 		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");

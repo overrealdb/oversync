@@ -153,7 +153,7 @@ async fn run_pipe_query(
 	sinks: Vec<Arc<dyn Sink>>,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let (effective_connector, connector_config) = if pipe.origin.is_native() {
+	let (effective_connector, connector_config) = if !pipe.origin.needs_trino_bridge() {
 		let mut map = match &pipe.origin.config {
 			serde_json::Value::Object(m) => m.clone(),
 			_ => serde_json::Map::new(),

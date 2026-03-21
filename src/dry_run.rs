@@ -245,7 +245,7 @@ async fn create_connector(
 	}
 
 	// Auto-route non-native connectors through Trino
-	let (effective_connector, config) = if pipe.origin.is_native() {
+	let (effective_connector, config) = if !pipe.origin.needs_trino_bridge() {
 		(pipe.origin.connector.as_str(), serde_json::Value::Object(map))
 	} else {
 		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");

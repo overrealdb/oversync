@@ -162,9 +162,10 @@ pub struct PipeConfig {
 	pub enabled: bool,
 }
 
-/// Known native connector types (no Trino bridge needed).
-const NATIVE_CONNECTORS: &[&str] = &[
-	"postgres", "mysql", "http", "graphql", "clickhouse", "flight_sql", "flight-sql", "mcp", "trino",
+/// Connector types that require Trino as a JDBC bridge.
+const TRINO_BRIDGE_CONNECTORS: &[&str] = &[
+	"mssql", "sqlserver", "oracle", "snowflake", "hive", "iceberg",
+	"teradata", "db2", "sap_hana", "greenplum", "redshift",
 ];
 
 /// Origin connector configuration within a pipe.
@@ -184,9 +185,10 @@ pub struct OriginDef {
 }
 
 impl OriginDef {
-	/// Returns true if the connector type is handled natively (no Trino needed).
-	pub fn is_native(&self) -> bool {
-		NATIVE_CONNECTORS.contains(&self.connector.as_str())
+	/// Returns true if the connector needs Trino as a JDBC bridge.
+	/// Unknown connector types are assumed native (custom registered connectors).
+	pub fn needs_trino_bridge(&self) -> bool {
+		TRINO_BRIDGE_CONNECTORS.contains(&self.connector.as_str())
 	}
 }
 
@@ -1129,7 +1131,7 @@ dsn = "postgres://localhost/db"
 			trino_url: None,
 			config: serde_json::Value::Null,
 		};
-		assert!(origin.is_native());
+		assert!(!origin.needs_trino_bridge());
 	}
 
 	#[test]
@@ -1141,7 +1143,7 @@ dsn = "postgres://localhost/db"
 			trino_url: Some("http://trino:8080".into()),
 			config: serde_json::Value::Null,
 		};
-		assert!(!origin.is_native());
+		assert!(origin.needs_trino_bridge());
 	}
 
 	#[test]
@@ -1161,7 +1163,7 @@ trino_url = "http://domain-trino:8080"
 		let config = SyncConfig::from_str(toml).unwrap();
 		let pipe = &config.pipes[0];
 		assert_eq!(pipe.origin.trino_url.as_deref(), Some("http://domain-trino:8080"));
-		assert!(!pipe.origin.is_native());
+		assert!(pipe.origin.needs_trino_bridge());
 	}
 
 	#[test]
@@ -1432,7 +1434,7 @@ sinks = ["missing-sink"]
 				trino_url: None,
 				config: serde_json::Value::Null,
 			};
-			assert!(origin.is_native(), "{connector} should be native");
+			assert!(!origin.needs_trino_bridge(), "{connector} should be native");
 		}
 	}
 
@@ -1446,8 +1448,20 @@ sinks = ["missing-sink"]
 				trino_url: None,
 				config: serde_json::Value::Null,
 			};
-			assert!(!origin.is_native(), "{connector} should NOT be native");
+			assert!(origin.needs_trino_bridge(), "{connector} should need Trino bridge");
 		}
+	}
+
+	#[test]
+	fn custom_connector_not_routed_to_trino() {
+		let origin = OriginDef {
+			connector: "my_custom_source".into(),
+			dsn: "custom://whatever".into(),
+			credential: None,
+			trino_url: None,
+			config: serde_json::Value::Null,
+		};
+		assert!(!origin.needs_trino_bridge(), "unknown custom connectors should NOT need Trino bridge");
 	}
 
 	#[test]

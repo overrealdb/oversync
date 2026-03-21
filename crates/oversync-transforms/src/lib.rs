@@ -208,4 +208,57 @@ mod tests {
 		let result = chain.transform(input).await;
 		assert!(result.is_err());
 	}
+
+	// ── filter_rows tests ───────────────────────────────────────
+
+	use oversync_core::model::RawRow;
+
+	fn test_rows() -> Vec<RawRow> {
+		vec![
+			RawRow { row_key: "1".into(), row_data: serde_json::json!({"name": "alice"}) },
+			RawRow { row_key: "2".into(), row_data: serde_json::json!({"name": "bob"}) },
+			RawRow { row_key: "3".into(), row_data: serde_json::json!({"name": "charlie"}) },
+		]
+	}
+
+	#[test]
+	fn filter_rows_keeps_all() {
+		let chain = StepChain::new(vec![Box::new(AlwaysKeep)]);
+		let result = chain.filter_rows(test_rows()).unwrap();
+		assert_eq!(result.len(), 3);
+	}
+
+	#[test]
+	fn filter_rows_drops_all() {
+		let chain = StepChain::new(vec![Box::new(AlwaysDrop)]);
+		let result = chain.filter_rows(test_rows()).unwrap();
+		assert!(result.is_empty());
+	}
+
+	#[test]
+	fn filter_rows_empty_chain_keeps_all() {
+		let chain = StepChain::new(vec![]);
+		let result = chain.filter_rows(test_rows()).unwrap();
+		assert_eq!(result.len(), 3);
+	}
+
+	#[test]
+	fn filter_rows_error_propagates() {
+		let chain = StepChain::new(vec![Box::new(FailStep)]);
+		let result = chain.filter_rows(test_rows());
+		assert!(result.is_err());
+	}
+
+	#[test]
+	fn filter_rows_partial() {
+		use crate::steps::{Filter, FilterOp};
+		let chain = StepChain::new(vec![Box::new(Filter {
+			field: "name".into(),
+			op: FilterOp::Eq,
+			value: serde_json::json!("alice"),
+		})]);
+		let result = chain.filter_rows(test_rows()).unwrap();
+		assert_eq!(result.len(), 1);
+		assert_eq!(result[0].row_key, "1");
+	}
 }
