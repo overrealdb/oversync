@@ -16,6 +16,7 @@
 //! # }
 //! ```
 
+pub mod alerting;
 pub mod config;
 pub mod config_db;
 pub mod config_version;

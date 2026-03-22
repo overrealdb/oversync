@@ -158,6 +158,8 @@ pub struct PipeConfig {
 	pub filters: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub transforms: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub alert_webhook: Option<String>,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
 }
@@ -286,6 +288,7 @@ impl From<&SourceDef> for PipeConfig {
 			},
 			filters: vec![],
 			transforms: vec![],
+			alert_webhook: None,
 			enabled: true,
 		}
 	}

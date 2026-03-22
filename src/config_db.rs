@@ -173,6 +173,7 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 			},
 			filters: vec![],
 			transforms: vec![],
+			alert_webhook: None,
 			enabled,
 		});
 	}
