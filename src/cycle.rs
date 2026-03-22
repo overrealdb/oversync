@@ -55,6 +55,8 @@ impl<'a> CycleRunner<'a> {
 	pub async fn run(&self, config: &CycleConfig) -> Result<DeltaResult, OversyncError> {
 		self.deliver_pending(config).await;
 
+		let metrics_start = crate::metrics::record_cycle_start(&config.origin_id, &config.query_id);
+
 		let cycle_id = self
 			.engine
 			.next_cycle_id(&config.origin_id, &config.query_id)
@@ -87,6 +89,14 @@ impl<'a> CycleRunner<'a> {
 						diff.deleted.len() as i64,
 					)
 					.await?;
+				crate::metrics::record_cycle_success(
+					&config.origin_id,
+					&config.query_id,
+					metrics_start,
+					diff.created.len(),
+					diff.updated.len(),
+					diff.deleted.len(),
+				);
 				info!(
 					source = %config.origin_id,
 					cycle = cycle_id,
@@ -97,6 +107,7 @@ impl<'a> CycleRunner<'a> {
 				);
 			}
 			Err(e) => {
+				crate::metrics::record_cycle_failure(&config.origin_id, &config.query_id, metrics_start);
 				let status = if e.to_string().contains("fail-safe") {
 					CycleStatus::Aborted
 				} else {
@@ -370,6 +381,7 @@ impl<'a> CycleRunner<'a> {
 		fetch_result?;
 		let total = upsert_result?;
 
+		crate::metrics::record_rows_fetched(&config.origin_id, &config.query_id, total);
 		info!(source = %config.origin_id, fetched = total, "ingested rows");
 		Ok(total)
 	}

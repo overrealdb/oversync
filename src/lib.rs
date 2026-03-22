@@ -25,6 +25,7 @@ pub mod dry_run;
 pub mod embedded;
 pub mod engine;
 pub mod lifecycle;
+pub mod metrics;
 pub mod rate_limit;
 pub mod registry;
 pub mod scheduler;

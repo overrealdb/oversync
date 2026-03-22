@@ -224,6 +224,11 @@ impl OversyncEngine {
 			api_key: self.api_key.clone(),
 		});
 
+		// Install prometheus metrics exporter
+		let prom_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+			.install_recorder()
+			.ok();
+
 		let base = oversync_api::router(api_state);
 
 		let registry = crate::engine::default_registry();
@@ -262,6 +267,21 @@ impl OversyncEngine {
 			"/config/versions",
 			axum::routing::get(list_config_versions)
 				.with_state(Arc::new(self.state_client.clone())),
+		)
+		.route(
+			"/metrics",
+			axum::routing::get(move || async move {
+				match prom_handle {
+					Some(ref h) => axum::response::Response::builder()
+						.header("content-type", "text/plain; version=0.0.4")
+						.body(axum::body::Body::from(h.render()))
+						.unwrap_or_default(),
+					None => axum::response::Response::builder()
+						.status(503)
+						.body(axum::body::Body::from("metrics not available"))
+						.unwrap_or_default(),
+				}
+			}),
 		)
 	}
 }

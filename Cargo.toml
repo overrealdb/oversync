@@ -70,6 +70,8 @@ hex = "0.4"
 aes-gcm = "0.10"
 rand = "0.9"
 base64 = "0.22"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
 wasmtime = "29"
 arrow = { version = "58", default-features = false, features = ["json"] }
 arrow-flight = { version = "58", features = ["flight-sql-experimental"] }
@@ -94,7 +96,7 @@ required-features = ["api"]
 [features]
 default = []
 schema = ["dep:overshift"]
-api = ["dep:oversync-api", "dep:axum"]
+api = ["dep:oversync-api", "dep:axum", "dep:metrics-exporter-prometheus"]
 cli = [
 	"api",
 	"schema",
@@ -123,6 +125,8 @@ surrealdb = { workspace = true }
 toml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true, optional = true }
 aes-gcm = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }
