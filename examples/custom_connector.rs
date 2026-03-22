@@ -6,8 +6,8 @@
 //! it via the builder, then runs a sync cycle.
 
 use async_trait::async_trait;
-use oversync::config::{QueryDef, SinkDef, SourceDef, SyncConfig, SurrealDbDef};
 use oversync::OversyncEngine;
+use oversync::config::{QueryDef, SinkDef, SourceDef, SurrealDbDef, SyncConfig};
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
 use oversync_core::traits::{OriginConnector, OriginFactory};

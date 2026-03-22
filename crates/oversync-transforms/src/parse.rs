@@ -29,16 +29,14 @@ pub fn parse_steps(defs: &[serde_json::Value]) -> Result<StepChain, OversyncErro
 	let mut steps: Vec<Box<dyn TransformStep>> = Vec::with_capacity(defs.len());
 
 	for (i, def) in defs.iter().enumerate() {
-		let obj = def.as_object().ok_or_else(|| {
-			OversyncError::Config(format!("transform step {i}: expected object"))
-		})?;
+		let obj = def
+			.as_object()
+			.ok_or_else(|| OversyncError::Config(format!("transform step {i}: expected object")))?;
 
 		let step_type = obj
 			.get("type")
 			.and_then(|v| v.as_str())
-			.ok_or_else(|| {
-				OversyncError::Config(format!("transform step {i}: missing 'type'"))
-			})?;
+			.ok_or_else(|| OversyncError::Config(format!("transform step {i}: missing 'type'")))?;
 
 		let step: Box<dyn TransformStep> = match step_type {
 			"rename" => Box::new(Rename {
@@ -86,10 +84,7 @@ pub fn parse_steps(defs: &[serde_json::Value]) -> Result<StepChain, OversyncErro
 				Box::new(Filter {
 					field: req_str(obj, "field", i)?,
 					op,
-					value: obj
-						.get("value")
-						.cloned()
-						.unwrap_or(serde_json::Value::Null),
+					value: obj.get("value").cloned().unwrap_or(serde_json::Value::Null),
 				})
 			}
 			"map_value" => {
@@ -108,14 +103,11 @@ pub fn parse_steps(defs: &[serde_json::Value]) -> Result<StepChain, OversyncErro
 				})
 			}
 			"truncate" => {
-				let max_len = obj
-					.get("max_len")
-					.and_then(|v| v.as_u64())
-					.ok_or_else(|| {
-						OversyncError::Config(format!(
-							"transform step {i}: 'truncate' requires 'max_len' (integer)"
-						))
-					})? as usize;
+				let max_len = obj.get("max_len").and_then(|v| v.as_u64()).ok_or_else(|| {
+					OversyncError::Config(format!(
+						"transform step {i}: 'truncate' requires 'max_len' (integer)"
+					))
+				})? as usize;
 				Box::new(Truncate {
 					field: req_str(obj, "field", i)?,
 					max_len,
@@ -180,9 +172,9 @@ fn req_val(
 	key: &str,
 	idx: usize,
 ) -> Result<serde_json::Value, OversyncError> {
-	obj.get(key).cloned().ok_or_else(|| {
-		OversyncError::Config(format!("transform step {idx}: missing '{key}'"))
-	})
+	obj.get(key)
+		.cloned()
+		.ok_or_else(|| OversyncError::Config(format!("transform step {idx}: missing '{key}'")))
 }
 
 fn req_str_array(
@@ -281,7 +273,10 @@ mod tests {
 
 		let mut data = serde_json::json!({"entity_id": "123", "name": "alice", "secret": "pw"});
 		chain.apply_one(&mut data).unwrap();
-		assert_eq!(data, serde_json::json!({"id": "123", "name": "ALICE", "version": 1}));
+		assert_eq!(
+			data,
+			serde_json::json!({"id": "123", "name": "ALICE", "version": 1})
+		);
 	}
 
 	#[test]

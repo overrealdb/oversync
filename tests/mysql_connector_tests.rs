@@ -26,7 +26,10 @@ async fn fetch_all_returns_rows() {
 		.await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id, name, value FROM items", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id, name, value FROM items", "id")
+		.await
+		.unwrap();
 
 	assert_eq!(rows.len(), 3);
 	let keys: Vec<&str> = rows.iter().map(|r| r.row_key.as_str()).collect();
@@ -45,7 +48,10 @@ async fn fetch_all_column_data() {
 		.await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id, name, value FROM items", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id, name, value FROM items", "id")
+		.await
+		.unwrap();
 
 	assert_eq!(rows[0].row_data["name"], "alpha");
 	assert_eq!(rows[0].row_data["value"], 42);
@@ -54,10 +60,14 @@ async fn fetch_all_column_data() {
 #[tokio::test]
 async fn fetch_all_empty_table() {
 	let my = TestMysql::new().await;
-	my.run_sql("CREATE TABLE empty_t (id VARCHAR(64) PRIMARY KEY)").await;
+	my.run_sql("CREATE TABLE empty_t (id VARCHAR(64) PRIMARY KEY)")
+		.await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id FROM empty_t", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id FROM empty_t", "id")
+		.await
+		.unwrap();
 	assert!(rows.is_empty());
 }
 
@@ -69,14 +79,18 @@ async fn fetch_all_null_values() {
 	my.run_sql("INSERT INTO nullable VALUES ('a', NULL)").await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id, val FROM nullable", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id, val FROM nullable", "id")
+		.await
+		.unwrap();
 	assert!(rows[0].row_data["val"].is_null());
 }
 
 #[tokio::test]
 async fn fetch_all_bad_key_column_errors() {
 	let my = TestMysql::new().await;
-	my.run_sql("CREATE TABLE t (id VARCHAR(64) PRIMARY KEY)").await;
+	my.run_sql("CREATE TABLE t (id VARCHAR(64) PRIMARY KEY)")
+		.await;
 	my.run_sql("INSERT INTO t VALUES ('a')").await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
@@ -92,7 +106,10 @@ async fn fetch_all_float_column() {
 	my.run_sql("INSERT INTO floats VALUES ('a', 3.14)").await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id, val FROM floats", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id, val FROM floats", "id")
+		.await
+		.unwrap();
 	let val = rows[0].row_data["val"].as_f64().unwrap();
 	assert!((val - 3.14).abs() < 0.001);
 }
@@ -106,7 +123,10 @@ async fn fetch_all_bigint_column() {
 		.await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id, val FROM big", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id, val FROM big", "id")
+		.await
+		.unwrap();
 	assert_eq!(rows[0].row_data["val"], 9223372036854775807_i64);
 }
 
@@ -119,7 +139,10 @@ async fn fetch_all_json_column() {
 		.await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
-	let rows = conn.fetch_all("SELECT id, data FROM jsons", "id").await.unwrap();
+	let rows = conn
+		.fetch_all("SELECT id, data FROM jsons", "id")
+		.await
+		.unwrap();
 	assert_eq!(rows[0].row_data["data"]["key"], "val");
 }
 
@@ -153,7 +176,8 @@ async fn fetch_into_matches_fetch_all() {
 	let my = TestMysql::new().await;
 	my.run_sql("CREATE TABLE match_t (id VARCHAR(64) PRIMARY KEY, name VARCHAR(255))")
 		.await;
-	my.run_sql("INSERT INTO match_t VALUES ('a', 'alpha')").await;
+	my.run_sql("INSERT INTO match_t VALUES ('a', 'alpha')")
+		.await;
 	my.run_sql("INSERT INTO match_t VALUES ('b', 'beta')").await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());

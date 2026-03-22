@@ -5,8 +5,8 @@
 //! Shows: Two postgres sources, a Kafka sink and a stdout sink.
 //! One query routes to both sinks, another only to Kafka.
 
-use oversync::config::*;
 use oversync::OversyncEngine;
+use oversync::config::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

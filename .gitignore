@@ -9,3 +9,4 @@ lcov.info
 surql/generated/current.surql
 oversync.infra-test.toml
 history.txt
+.fastembed_cache/

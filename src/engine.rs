@@ -10,9 +10,12 @@ use oversync_connectors::{
 	McpOriginFactory, MysqlOriginFactory, PostgresOriginFactory, TrinoOriginFactory,
 };
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{TargetFactory, OriginFactory};
+use oversync_core::traits::{OriginFactory, TargetFactory};
 use oversync_delta::DeltaEngine;
-use oversync_sinks::{HttpTargetFactory, KafkaTargetFactory, McpTargetFactory, StdoutTargetFactory, SurrealDbTargetFactory};
+use oversync_sinks::{
+	HttpTargetFactory, KafkaTargetFactory, McpTargetFactory, StdoutTargetFactory,
+	SurrealDbTargetFactory,
+};
 
 use crate::config::{SurrealDbDef, SyncConfig};
 use crate::lifecycle::LifecycleManager;
@@ -99,12 +102,9 @@ impl OversyncEngine {
 	/// Start syncing with the given config. Validates, resolves credentials, versions, then starts.
 	pub async fn start(&self, mut config: SyncConfig) -> Result<(), OversyncError> {
 		self.prepare_config(&mut config).await?;
-		if let Err(e) = crate::config_version::save_version(
-			&self.state_client,
-			&config,
-			"auto-save on start",
-		)
-		.await
+		if let Err(e) =
+			crate::config_version::save_version(&self.state_client, &config, "auto-save on start")
+				.await
 		{
 			tracing::warn!(error = %e, "failed to save config version (non-fatal)");
 		}
@@ -138,10 +138,14 @@ impl OversyncEngine {
 				}
 			}
 		}
-		if issues.iter().any(|i| i.severity == crate::config::Severity::Error) {
+		if issues
+			.iter()
+			.any(|i| i.severity == crate::config::Severity::Error)
+		{
 			return Err(OversyncError::Config(format!(
 				"config validation failed: {}",
-				issues.iter()
+				issues
+					.iter()
 					.filter(|i| i.severity == crate::config::Severity::Error)
 					.map(|i| i.message.as_str())
 					.collect::<Vec<_>>()
@@ -156,8 +160,8 @@ impl OversyncEngine {
 		if !has_credentials {
 			return Ok(());
 		}
-		let cred_key = std::env::var("OVERSYNC_CREDENTIAL_KEY")
-			.unwrap_or_else(|_| "oversync-dev-key".into());
+		let cred_key =
+			std::env::var("OVERSYNC_CREDENTIAL_KEY").unwrap_or_else(|_| "oversync-dev-key".into());
 		let store = crate::credential::AesGcmStore::from_passphrase(&cred_key);
 		crate::credential::resolve_pipe_credentials(&mut config.pipes, &self.state_client, &store)
 			.await
@@ -228,7 +232,9 @@ impl OversyncEngine {
 		let cred_key = match std::env::var("OVERSYNC_CREDENTIAL_KEY") {
 			Ok(key) => key,
 			Err(_) => {
-				tracing::warn!("OVERSYNC_CREDENTIAL_KEY not set, using insecure dev key — do NOT use in production");
+				tracing::warn!(
+					"OVERSYNC_CREDENTIAL_KEY not set, using insecure dev key — do NOT use in production"
+				);
 				"oversync-dev-key".into()
 			}
 		};
@@ -254,7 +260,8 @@ impl OversyncEngine {
 		)
 		.route(
 			"/config/versions",
-			axum::routing::get(list_config_versions).with_state(Arc::new(self.state_client.clone())),
+			axum::routing::get(list_config_versions)
+				.with_state(Arc::new(self.state_client.clone())),
 		)
 	}
 }
@@ -268,7 +275,8 @@ struct DryRunState {
 async fn dry_run_handler(
 	axum::extract::State(state): axum::extract::State<Arc<DryRunState>>,
 	axum::Json(req): axum::Json<crate::dry_run::DryRunRequest>,
-) -> Result<axum::Json<crate::dry_run::DryRunResult>, axum::Json<oversync_api::types::ErrorResponse>> {
+) -> Result<axum::Json<crate::dry_run::DryRunResult>, axum::Json<oversync_api::types::ErrorResponse>>
+{
 	let transform_hook: Option<std::sync::Arc<dyn oversync_core::traits::TransformHook>> =
 		if req.transforms.is_empty() {
 			None
@@ -301,27 +309,43 @@ struct CredentialState {
 async fn create_credential(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 	axum::Json(req): axum::Json<oversync_api::types::CreateCredentialRequest>,
-) -> Result<axum::Json<oversync_api::types::MutationResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+) -> Result<
+	axum::Json<oversync_api::types::MutationResponse>,
+	axum::Json<oversync_api::types::ErrorResponse>,
+> {
 	let encrypted = state.store.encrypt(&req.secret).map_err(|e| {
-		axum::Json(oversync_api::types::ErrorResponse { error: e.to_string() })
+		axum::Json(oversync_api::types::ErrorResponse {
+			error: e.to_string(),
+		})
 	})?;
 
 	const SQL_DEL_CRED: &str = include_str!("../surql/queries/credential/delete_credential.surql");
-	const SQL_CREATE_CRED: &str = include_str!("../surql/queries/credential/create_credential.surql");
+	const SQL_CREATE_CRED: &str =
+		include_str!("../surql/queries/credential/create_credential.surql");
 
-	state.db
+	state
+		.db
 		.query(SQL_DEL_CRED)
 		.bind(("name", req.name.clone()))
 		.await
-		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("db: {e}"),
+			})
+		})?;
 
-	state.db
+	state
+		.db
 		.query(SQL_CREATE_CRED)
 		.bind(("name", req.name.clone()))
 		.bind(("ctype", req.credential_type))
 		.bind(("enc", encrypted))
 		.await
-		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("db: {e}"),
+			})
+		})?;
 
 	Ok(axum::Json(oversync_api::types::MutationResponse {
 		ok: true,
@@ -332,17 +356,23 @@ async fn create_credential(
 #[cfg(feature = "api")]
 async fn list_credentials(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
-) -> Result<axum::Json<oversync_api::types::CredentialListResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+) -> Result<
+	axum::Json<oversync_api::types::CredentialListResponse>,
+	axum::Json<oversync_api::types::ErrorResponse>,
+> {
 	const SQL_LIST_CREDS: &str = include_str!("../surql/queries/credential/list_credentials.surql");
 
-	let mut resp = state.db
-		.query(SQL_LIST_CREDS)
-		.await
-		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+	let mut resp = state.db.query(SQL_LIST_CREDS).await.map_err(|e| {
+		axum::Json(oversync_api::types::ErrorResponse {
+			error: format!("db: {e}"),
+		})
+	})?;
 
-	let rows: Vec<serde_json::Value> = resp
-		.take(0)
-		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+	let rows: Vec<serde_json::Value> = resp.take(0).map_err(|e| {
+		axum::Json(oversync_api::types::ErrorResponse {
+			error: format!("db: {e}"),
+		})
+	})?;
 
 	let credentials = rows
 		.iter()
@@ -355,21 +385,31 @@ async fn list_credentials(
 		})
 		.collect();
 
-	Ok(axum::Json(oversync_api::types::CredentialListResponse { credentials }))
+	Ok(axum::Json(oversync_api::types::CredentialListResponse {
+		credentials,
+	}))
 }
 
 #[cfg(feature = "api")]
 async fn delete_credential(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 	axum::extract::Path(name): axum::extract::Path<String>,
-) -> Result<axum::Json<oversync_api::types::MutationResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+) -> Result<
+	axum::Json<oversync_api::types::MutationResponse>,
+	axum::Json<oversync_api::types::ErrorResponse>,
+> {
 	const SQL_DEL: &str = include_str!("../surql/queries/credential/delete_credential.surql");
 
-	state.db
+	state
+		.db
 		.query(SQL_DEL)
 		.bind(("name", name.clone()))
 		.await
-		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: format!("db: {e}") }))?;
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("db: {e}"),
+			})
+		})?;
 
 	Ok(axum::Json(oversync_api::types::MutationResponse {
 		ok: true,
@@ -379,12 +419,20 @@ async fn delete_credential(
 
 #[cfg(feature = "api")]
 async fn list_config_versions(
-	axum::extract::State(db): axum::extract::State<Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>>,
+	axum::extract::State(db): axum::extract::State<
+		Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>,
+	>,
 ) -> Result<axum::Json<serde_json::Value>, axum::Json<oversync_api::types::ErrorResponse>> {
 	let versions = crate::config_version::list_versions(&db)
 		.await
-		.map_err(|e| axum::Json(oversync_api::types::ErrorResponse { error: e.to_string() }))?;
-	Ok(axum::Json(serde_json::to_value(&versions).unwrap_or_default()))
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: e.to_string(),
+			})
+		})?;
+	Ok(axum::Json(
+		serde_json::to_value(&versions).unwrap_or_default(),
+	))
 }
 
 impl OversyncEngineBuilder {
@@ -562,14 +610,12 @@ impl OversyncEngineBuilder {
 			password: self.password,
 			namespace: self.namespace,
 			database: self.database,
-			snapshot: self.snapshot_url.map(|url| {
-				crate::config::SnapshotDbDef {
-					url,
-					username: self.snapshot_username.unwrap_or_else(|| "root".into()),
-					password: self.snapshot_password.unwrap_or_else(|| "root".into()),
-					namespace: self.snapshot_ns.unwrap_or_else(|| "oversync".into()),
-					database: self.snapshot_db.unwrap_or_else(|| "sync".into()),
-				}
+			snapshot: self.snapshot_url.map(|url| crate::config::SnapshotDbDef {
+				url,
+				username: self.snapshot_username.unwrap_or_else(|| "root".into()),
+				password: self.snapshot_password.unwrap_or_else(|| "root".into()),
+				namespace: self.snapshot_ns.unwrap_or_else(|| "oversync".into()),
+				database: self.snapshot_db.unwrap_or_else(|| "sync".into()),
 			}),
 		};
 
@@ -634,10 +680,7 @@ struct LifecycleAdapter {
 #[cfg(feature = "api")]
 #[async_trait::async_trait]
 impl oversync_api::state::LifecycleControl for LifecycleAdapter {
-	async fn restart_with_config_json(
-		&self,
-		db: &Surreal<Any>,
-	) -> Result<(), OversyncError> {
+	async fn restart_with_config_json(&self, db: &Surreal<Any>) -> Result<(), OversyncError> {
 		let config = crate::config_db::load_config_from_db(db, &self.surreal_def).await?;
 		self.lifecycle.start(config).await
 	}

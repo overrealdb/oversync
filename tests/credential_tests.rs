@@ -1,9 +1,7 @@
 mod common;
 
 use common::surreal::TestSurrealContainer;
-use oversync::config::{
-	DeltaDef, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef,
-};
+use oversync::config::{DeltaDef, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef};
 use oversync::credential::{AesGcmStore, resolve_pipe_credentials};
 
 #[tokio::test]
@@ -12,10 +10,14 @@ async fn resolve_credential_into_pipe_dsn() {
 	let store = AesGcmStore::from_passphrase("test-key");
 
 	// Store an encrypted credential
-	let encrypted = store.encrypt("postgres://real-user:real-pass@prod:5432/db").unwrap();
+	let encrypted = store
+		.encrypt("postgres://real-user:real-pass@prod:5432/db")
+		.unwrap();
 	surreal
 		.client
-		.query("CREATE credential SET name = 'prod-pg', credential_type = 'password', encrypted = $enc")
+		.query(
+			"CREATE credential SET name = 'prod-pg', credential_type = 'password', encrypted = $enc",
+		)
 		.bind(("enc", encrypted))
 		.await
 		.unwrap();

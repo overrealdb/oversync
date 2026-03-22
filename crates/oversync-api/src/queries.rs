@@ -6,12 +6,17 @@ use axum::extract::{Path, State};
 use crate::state::ApiState;
 use crate::types::*;
 
-const SQL_LIST_QUERIES: &str = include_str!("../../../surql/queries/query_config/list_by_source.surql");
+const SQL_LIST_QUERIES: &str =
+	include_str!("../../../surql/queries/query_config/list_by_source.surql");
 const SQL_DELETE_QUERY: &str = include_str!("../../../surql/queries/query_config/delete_one.surql");
-const SQL_UPDATE_QUERY_SQL: &str = include_str!("../../../surql/queries/query_config/update_query.surql");
-const SQL_UPDATE_QUERY_KEY: &str = include_str!("../../../surql/queries/query_config/update_key_column.surql");
-const SQL_UPDATE_QUERY_SINKS: &str = include_str!("../../../surql/queries/query_config/update_sinks.surql");
-const SQL_UPDATE_QUERY_ENABLED: &str = include_str!("../../../surql/queries/query_config/update_enabled.surql");
+const SQL_UPDATE_QUERY_SQL: &str =
+	include_str!("../../../surql/queries/query_config/update_query.surql");
+const SQL_UPDATE_QUERY_KEY: &str =
+	include_str!("../../../surql/queries/query_config/update_key_column.surql");
+const SQL_UPDATE_QUERY_SINKS: &str =
+	include_str!("../../../surql/queries/query_config/update_sinks.surql");
+const SQL_UPDATE_QUERY_ENABLED: &str =
+	include_str!("../../../surql/queries/query_config/update_enabled.surql");
 
 fn db_err(e: surrealdb::Error) -> Json<ErrorResponse> {
 	Json(ErrorResponse {
@@ -59,10 +64,11 @@ pub async fn list_queries(
 				name: r.get("name")?.as_str()?.to_string(),
 				query: r.get("query")?.as_str()?.to_string(),
 				key_column: r.get("key_column")?.as_str()?.to_string(),
-				sinks: r
-					.get("sinks")
-					.and_then(|v| v.as_array())
-					.map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()),
+				sinks: r.get("sinks").and_then(|v| v.as_array()).map(|arr| {
+					arr.iter()
+						.filter_map(|v| v.as_str().map(String::from))
+						.collect()
+				}),
 				enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
 			})
 		})
@@ -96,15 +102,16 @@ pub async fn create_query(
 
 	let mut query_str = "CREATE query_config SET origin_id = $source, name = $name, query = $query, key_column = $key_column, enabled = true".to_string();
 
-	let sinks_val = req.sinks.map(|s| {
-		serde_json::Value::Array(s.into_iter().map(serde_json::Value::String).collect())
-	});
+	let sinks_val = req
+		.sinks
+		.map(|s| serde_json::Value::Array(s.into_iter().map(serde_json::Value::String).collect()));
 
 	if sinks_val.is_some() {
 		query_str.push_str(", sinks = $sinks");
 	}
 
-	let mut q = db.query(&query_str)
+	let mut q = db
+		.query(&query_str)
 		.bind(("source", source.clone()))
 		.bind(("name", req.name.clone()))
 		.bind(("query", req.query))
@@ -163,9 +170,8 @@ pub async fn update_query(
 	}
 
 	if let Some(sinks) = req.sinks {
-		let sinks_val = serde_json::Value::Array(
-			sinks.into_iter().map(serde_json::Value::String).collect(),
-		);
+		let sinks_val =
+			serde_json::Value::Array(sinks.into_iter().map(serde_json::Value::String).collect());
 		db.query(SQL_UPDATE_QUERY_SINKS)
 			.bind(("source", source.clone()))
 			.bind(("name", name.clone()))

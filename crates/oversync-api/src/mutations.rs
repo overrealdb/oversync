@@ -7,32 +7,50 @@ use crate::state::ApiState;
 use crate::types::*;
 
 // ── Source mutations ────────────────────────────────────────
-const SQL_DELETE_SOURCE: &str = include_str!("../../../surql/queries/mutations/delete_source.surql");
-const SQL_CREATE_SOURCE: &str = include_str!("../../../surql/queries/mutations/create_source.surql");
-const SQL_UPDATE_SOURCE_CONNECTOR: &str = include_str!("../../../surql/queries/mutations/update_source_connector.surql");
-const SQL_UPDATE_SOURCE_ENABLED: &str = include_str!("../../../surql/queries/mutations/update_source_enabled.surql");
-const SQL_UPDATE_SOURCE_CONFIG: &str = include_str!("../../../surql/queries/mutations/update_source_config.surql");
-const SQL_DELETE_SOURCE_QUERIES: &str = include_str!("../../../surql/queries/mutations/delete_source_queries.surql");
+const SQL_DELETE_SOURCE: &str =
+	include_str!("../../../surql/queries/mutations/delete_source.surql");
+const SQL_CREATE_SOURCE: &str =
+	include_str!("../../../surql/queries/mutations/create_source.surql");
+const SQL_UPDATE_SOURCE_CONNECTOR: &str =
+	include_str!("../../../surql/queries/mutations/update_source_connector.surql");
+const SQL_UPDATE_SOURCE_ENABLED: &str =
+	include_str!("../../../surql/queries/mutations/update_source_enabled.surql");
+const SQL_UPDATE_SOURCE_CONFIG: &str =
+	include_str!("../../../surql/queries/mutations/update_source_config.surql");
+const SQL_DELETE_SOURCE_QUERIES: &str =
+	include_str!("../../../surql/queries/mutations/delete_source_queries.surql");
 
 // ── Sink mutations ──────────────────────────────────────────
 const SQL_DELETE_SINK: &str = include_str!("../../../surql/queries/mutations/delete_sink.surql");
 const SQL_CREATE_SINK: &str = include_str!("../../../surql/queries/mutations/create_sink.surql");
-const SQL_UPDATE_SINK_TYPE: &str = include_str!("../../../surql/queries/mutations/update_sink_type.surql");
-const SQL_UPDATE_SINK_ENABLED: &str = include_str!("../../../surql/queries/mutations/update_sink_enabled.surql");
-const SQL_UPDATE_SINK_CONFIG: &str = include_str!("../../../surql/queries/mutations/update_sink_config.surql");
+const SQL_UPDATE_SINK_TYPE: &str =
+	include_str!("../../../surql/queries/mutations/update_sink_type.surql");
+const SQL_UPDATE_SINK_ENABLED: &str =
+	include_str!("../../../surql/queries/mutations/update_sink_enabled.surql");
+const SQL_UPDATE_SINK_CONFIG: &str =
+	include_str!("../../../surql/queries/mutations/update_sink_config.surql");
 
 // ── Pipe mutations ──────────────────────────────────────────
 const SQL_DELETE_PIPE: &str = include_str!("../../../surql/queries/mutations/delete_pipe.surql");
 const SQL_CREATE_PIPE: &str = include_str!("../../../surql/queries/mutations/create_pipe.surql");
-const SQL_DELETE_PIPE_QUERIES: &str = include_str!("../../../surql/queries/mutations/delete_pipe_queries.surql");
-const SQL_UPDATE_PIPE_ORIGIN_CONNECTOR: &str = include_str!("../../../surql/queries/mutations/update_pipe_origin_connector.surql");
-const SQL_UPDATE_PIPE_ORIGIN_DSN: &str = include_str!("../../../surql/queries/mutations/update_pipe_origin_dsn.surql");
-const SQL_UPDATE_PIPE_ORIGIN_CONFIG: &str = include_str!("../../../surql/queries/mutations/update_pipe_origin_config.surql");
-const SQL_UPDATE_PIPE_TARGETS: &str = include_str!("../../../surql/queries/mutations/update_pipe_targets.surql");
-const SQL_UPDATE_PIPE_SCHEDULE: &str = include_str!("../../../surql/queries/mutations/update_pipe_schedule.surql");
-const SQL_UPDATE_PIPE_DELTA: &str = include_str!("../../../surql/queries/mutations/update_pipe_delta.surql");
-const SQL_UPDATE_PIPE_RETRY: &str = include_str!("../../../surql/queries/mutations/update_pipe_retry.surql");
-const SQL_UPDATE_PIPE_ENABLED: &str = include_str!("../../../surql/queries/mutations/update_pipe_enabled.surql");
+const SQL_DELETE_PIPE_QUERIES: &str =
+	include_str!("../../../surql/queries/mutations/delete_pipe_queries.surql");
+const SQL_UPDATE_PIPE_ORIGIN_CONNECTOR: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_origin_connector.surql");
+const SQL_UPDATE_PIPE_ORIGIN_DSN: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_origin_dsn.surql");
+const SQL_UPDATE_PIPE_ORIGIN_CONFIG: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_origin_config.surql");
+const SQL_UPDATE_PIPE_TARGETS: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_targets.surql");
+const SQL_UPDATE_PIPE_SCHEDULE: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_schedule.surql");
+const SQL_UPDATE_PIPE_DELTA: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_delta.surql");
+const SQL_UPDATE_PIPE_RETRY: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_retry.surql");
+const SQL_UPDATE_PIPE_ENABLED: &str =
+	include_str!("../../../surql/queries/mutations/update_pipe_enabled.surql");
 
 #[utoipa::path(
 	post,
@@ -482,14 +500,11 @@ pub(crate) async fn reload_config_pub(state: &ApiState) -> Result<(), Json<Error
 
 async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
 	if let (Some(lifecycle), Some(db)) = (&state.lifecycle, &state.db_client) {
-		lifecycle
-			.restart_with_config_json(db)
-			.await
-			.map_err(|e| {
-				Json(ErrorResponse {
-					error: format!("reload: {e}"),
-				})
-			})?;
+		lifecycle.restart_with_config_json(db).await.map_err(|e| {
+			Json(ErrorResponse {
+				error: format!("reload: {e}"),
+			})
+		})?;
 	}
 	refresh_read_cache(state).await;
 	Ok(())
@@ -498,81 +513,75 @@ async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
 async fn refresh_read_cache(state: &ApiState) {
 	let Some(db) = &state.db_client else { return };
 
-	const SQL_READ_SOURCES_CACHE: &str = include_str!("../../../surql/queries/config/read_sources_cache.surql");
-	const SQL_READ_SINKS_CACHE: &str = include_str!("../../../surql/queries/config/read_sinks_cache.surql");
-	const SQL_READ_PIPES_CACHE: &str = include_str!("../../../surql/queries/config/read_pipes_cache.surql");
+	const SQL_READ_SOURCES_CACHE: &str =
+		include_str!("../../../surql/queries/config/read_sources_cache.surql");
+	const SQL_READ_SINKS_CACHE: &str =
+		include_str!("../../../surql/queries/config/read_sinks_cache.surql");
+	const SQL_READ_PIPES_CACHE: &str =
+		include_str!("../../../surql/queries/config/read_pipes_cache.surql");
 
-	if let Ok(mut resp) = db
-		.query(SQL_READ_SOURCES_CACHE)
-		.await
+	if let Ok(mut resp) = db.query(SQL_READ_SOURCES_CACHE).await
+		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)
 	{
-		if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0) {
-			let configs: Vec<crate::state::SourceConfig> = rows
-				.iter()
-				.filter_map(|r| {
-					Some(crate::state::SourceConfig {
-						name: r.get("name")?.as_str()?.to_string(),
-						connector: r.get("connector")?.as_str()?.to_string(),
-						interval_secs: r
-							.get("interval_secs")
-							.and_then(|v| v.as_u64())
-							.unwrap_or(300),
-						queries: vec![],
-					})
+		let configs: Vec<crate::state::SourceConfig> = rows
+			.iter()
+			.filter_map(|r| {
+				Some(crate::state::SourceConfig {
+					name: r.get("name")?.as_str()?.to_string(),
+					connector: r.get("connector")?.as_str()?.to_string(),
+					interval_secs: r
+						.get("interval_secs")
+						.and_then(|v| v.as_u64())
+						.unwrap_or(300),
+					queries: vec![],
 				})
-				.collect();
-			*state.sources.write().await = configs;
-		}
+			})
+			.collect();
+		*state.sources.write().await = configs;
 	}
 
-	if let Ok(mut resp) = db
-		.query(SQL_READ_SINKS_CACHE)
-		.await
+	if let Ok(mut resp) = db.query(SQL_READ_SINKS_CACHE).await
+		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)
 	{
-		if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0) {
-			let configs: Vec<crate::state::SinkConfig> = rows
-				.iter()
-				.filter_map(|r| {
-					Some(crate::state::SinkConfig {
-						name: r.get("name")?.as_str()?.to_string(),
-						sink_type: r.get("sink_type")?.as_str()?.to_string(),
-					})
+		let configs: Vec<crate::state::SinkConfig> = rows
+			.iter()
+			.filter_map(|r| {
+				Some(crate::state::SinkConfig {
+					name: r.get("name")?.as_str()?.to_string(),
+					sink_type: r.get("sink_type")?.as_str()?.to_string(),
 				})
-				.collect();
-			*state.sinks.write().await = configs;
-		}
+			})
+			.collect();
+		*state.sinks.write().await = configs;
 	}
 
-	if let Ok(mut resp) = db
-		.query(SQL_READ_PIPES_CACHE)
-		.await
+	if let Ok(mut resp) = db.query(SQL_READ_PIPES_CACHE).await
+		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)
 	{
-		if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0) {
-			let configs: Vec<crate::state::PipeConfigCache> = rows
-				.iter()
-				.filter_map(|r| {
-					Some(crate::state::PipeConfigCache {
-						name: r.get("name")?.as_str()?.to_string(),
-						origin_connector: r.get("origin_connector")?.as_str()?.to_string(),
-						origin_dsn: r.get("origin_dsn")?.as_str()?.to_string(),
-						targets: r
-							.get("targets")
-							.and_then(|v| v.as_array())
-							.map(|arr| {
-								arr.iter()
-									.filter_map(|v| v.as_str().map(String::from))
-									.collect()
-							})
-							.unwrap_or_default(),
-						interval_secs: r
-							.get("interval_secs")
-							.and_then(|v| v.as_u64())
-							.unwrap_or(300),
-						enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
-					})
+		let configs: Vec<crate::state::PipeConfigCache> = rows
+			.iter()
+			.filter_map(|r| {
+				Some(crate::state::PipeConfigCache {
+					name: r.get("name")?.as_str()?.to_string(),
+					origin_connector: r.get("origin_connector")?.as_str()?.to_string(),
+					origin_dsn: r.get("origin_dsn")?.as_str()?.to_string(),
+					targets: r
+						.get("targets")
+						.and_then(|v| v.as_array())
+						.map(|arr| {
+							arr.iter()
+								.filter_map(|v| v.as_str().map(String::from))
+								.collect()
+						})
+						.unwrap_or_default(),
+					interval_secs: r
+						.get("interval_secs")
+						.and_then(|v| v.as_u64())
+						.unwrap_or(300),
+					enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
 				})
-				.collect();
-			*state.pipes.write().await = configs;
-		}
+			})
+			.collect();
+		*state.pipes.write().await = configs;
 	}
 }

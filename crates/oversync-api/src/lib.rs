@@ -81,7 +81,10 @@ pub struct ApiDoc;
 pub fn router(state: Arc<ApiState>) -> Router {
 	// Protected routes — require API key when configured
 	let protected = Router::new()
-		.route("/sources", get(handlers::list_sources).post(mutations::create_source))
+		.route(
+			"/sources",
+			get(handlers::list_sources).post(mutations::create_source),
+		)
 		.route(
 			"/sources/{name}",
 			get(handlers::get_source)
@@ -97,12 +100,18 @@ pub fn router(state: Arc<ApiState>) -> Router {
 			"/sources/{source}/queries/{name}",
 			put(queries::update_query).delete(queries::delete_query),
 		)
-		.route("/sinks", get(handlers::list_sinks).post(mutations::create_sink))
+		.route(
+			"/sinks",
+			get(handlers::list_sinks).post(mutations::create_sink),
+		)
 		.route(
 			"/sinks/{name}",
 			put(mutations::update_sink).delete(mutations::delete_sink),
 		)
-		.route("/pipes", get(handlers::list_pipes).post(mutations::create_pipe))
+		.route(
+			"/pipes",
+			get(handlers::list_pipes).post(mutations::create_pipe),
+		)
 		.route(
 			"/pipes/{name}",
 			get(handlers::get_pipe)

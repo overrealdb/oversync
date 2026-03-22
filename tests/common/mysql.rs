@@ -22,7 +22,10 @@ async fn shared_mysql() -> &'static SharedMysqlContainer {
 				.expect("failed to start mysql container");
 
 			let host = container.get_host().await.expect("mysql host");
-			let port = container.get_host_port_ipv4(3306).await.expect("mysql port");
+			let port = container
+				.get_host_port_ipv4(3306)
+				.await
+				.expect("mysql port");
 
 			SharedMysqlContainer {
 				url: format!("mysql://root@{host}:{port}/test"),
@@ -53,22 +56,14 @@ impl TestMysql {
 			.expect("failed to create database");
 		bootstrap.close().await;
 
-		let dsn = format!(
-			"{}/{}",
-			shared.url.trim_end_matches("/test"),
-			db_name
-		);
+		let dsn = format!("{}/{}", shared.url.trim_end_matches("/test"), db_name);
 		let pool = MySqlPoolOptions::new()
 			.max_connections(2)
 			.connect(&dsn)
 			.await
 			.expect("failed to connect to mysql test db");
 
-		Self {
-			pool,
-			db_name,
-			dsn,
-		}
+		Self { pool, db_name, dsn }
 	}
 
 	pub async fn run_sql(&self, sql: &str) {

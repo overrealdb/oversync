@@ -5,8 +5,8 @@
 //! Requires a GraphQL API at the configured endpoint. This shows how to
 //! configure Relay-style cursor pagination with oversync.
 
-use oversync::config::*;
 use oversync::OversyncEngine;
+use oversync::config::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -9,7 +9,7 @@ use oversync::EmbeddedSync;
 use oversync::config::{QueryDef, SourceDef};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
-use oversync_core::traits::{Sink, OriginConnector, OriginFactory, TransformHook};
+use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TransformHook};
 
 // ── Test doubles ─────────────────────────────────────────────
 
@@ -101,7 +101,7 @@ fn test_source_def() -> SourceDef {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: oversync::config::DiffMode::Memory,
-			missed_tick_policy: Default::default(),
+		missed_tick_policy: Default::default(),
 		config: serde_json::Value::Null,
 		queries: vec![QueryDef {
 			id: "q1".into(),
@@ -165,9 +165,7 @@ async fn run_once_delivers_events_to_custom_sink() {
 		.skip_schema()
 		.add_source(test_source_def())
 		.add_sink("rec", sink)
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
 		.unwrap();
@@ -198,9 +196,7 @@ async fn run_once_second_cycle_detects_no_changes() {
 		.skip_schema()
 		.add_source(test_source_def())
 		.add_sink("rec", sink)
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
 		.unwrap();
@@ -240,9 +236,7 @@ async fn run_once_unknown_query_errors() {
 		.state_db(db)
 		.skip_schema()
 		.add_source(test_source_def())
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
 		.unwrap();
@@ -273,9 +267,7 @@ async fn transform_hook_modifies_events_before_sink() {
 		.add_source(source)
 		.add_sink("rec", sink)
 		.add_transform("uppercase", Arc::new(UppercaseTransform))
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
 		.unwrap();
@@ -309,9 +301,7 @@ async fn start_spawns_polling_shutdown_stops() {
 		.skip_schema()
 		.add_source(source)
 		.add_sink("rec", sink)
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
 		.unwrap();
@@ -361,9 +351,7 @@ async fn transform_hook_ignored_when_query_has_no_transform() {
 		.add_source(test_source_def()) // query.transform = None
 		.add_sink("rec", sink)
 		.add_transform("uppercase", Arc::new(UppercaseTransform))
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
 		.unwrap();

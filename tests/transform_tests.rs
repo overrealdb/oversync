@@ -127,16 +127,19 @@ async fn transform_filters_events_via_for_loop() {
 
 #[tokio::test]
 async fn transform_invalid_fn_name_rejected() {
-	let engine = DeltaEngine::single(
-		surrealdb::engine::any::connect("mem://").await.unwrap(),
-	);
+	let engine = DeltaEngine::single(surrealdb::engine::any::connect("mem://").await.unwrap());
 
 	let envelopes = vec![];
 	let result = engine
 		.apply_transform("'; DROP TABLE snapshot; --", envelopes)
 		.await;
 	assert!(result.is_err());
-	assert!(result.unwrap_err().to_string().contains("invalid transform"));
+	assert!(
+		result
+			.unwrap_err()
+			.to_string()
+			.contains("invalid transform")
+	);
 }
 
 // Direct test of apply_transform without full cycle pipeline

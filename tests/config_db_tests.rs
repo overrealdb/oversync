@@ -107,12 +107,16 @@ async fn disabled_sinks_excluded() {
 
 	container
 		.client
-		.query("CREATE sink_config SET name = 'active', sink_type = 'stdout', config = {}, enabled = true")
+		.query(
+			"CREATE sink_config SET name = 'active', sink_type = 'stdout', config = {}, enabled = true",
+		)
 		.await
 		.unwrap();
 	container
 		.client
-		.query("CREATE sink_config SET name = 'off', sink_type = 'kafka', config = {}, enabled = false")
+		.query(
+			"CREATE sink_config SET name = 'off', sink_type = 'kafka', config = {}, enabled = false",
+		)
 		.await
 		.unwrap();
 

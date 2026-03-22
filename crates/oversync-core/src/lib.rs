@@ -16,4 +16,6 @@ pub use model::{
 	compute_diff,
 };
 pub use table_names::TableNames;
-pub use traits::{Sink, TargetFactory, OriginConnector, OriginFactory, TransformHook, TransformPipeline};
+pub use traits::{
+	OriginConnector, OriginFactory, Sink, TargetFactory, TransformHook, TransformPipeline,
+};

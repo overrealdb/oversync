@@ -56,12 +56,14 @@ impl McpSink {
 			.spawn()
 			.map_err(|e| OversyncError::Sink(format!("mcp spawn '{command}': {e}")))?;
 
-		let stdin = child.stdin.take().ok_or_else(|| {
-			OversyncError::Sink("mcp sink: failed to capture stdin".into())
-		})?;
-		let stdout = child.stdout.take().ok_or_else(|| {
-			OversyncError::Sink("mcp sink: failed to capture stdout".into())
-		})?;
+		let stdin = child
+			.stdin
+			.take()
+			.ok_or_else(|| OversyncError::Sink("mcp sink: failed to capture stdin".into()))?;
+		let stdout = child
+			.stdout
+			.take()
+			.ok_or_else(|| OversyncError::Sink("mcp sink: failed to capture stdout".into()))?;
 		let reader = BufReader::new(stdout);
 
 		let mut mcp_proc = McpSinkProcess {
@@ -110,9 +112,9 @@ impl Sink for McpSink {
 	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError> {
 		self.ensure_connected().await?;
 		let mut proc_guard = self.process.lock().await;
-		let proc = proc_guard.as_mut().ok_or_else(|| {
-			OversyncError::Sink("mcp sink: not connected".into())
-		})?;
+		let proc = proc_guard
+			.as_mut()
+			.ok_or_else(|| OversyncError::Sink("mcp sink: not connected".into()))?;
 
 		let call_req = serde_json::json!({
 			"jsonrpc": "2.0",
@@ -133,7 +135,9 @@ impl Sink for McpSink {
 
 		if response.get("error").is_some() {
 			let error = response["error"].clone();
-			return Err(OversyncError::Sink(format!("mcp tool call failed: {error}")));
+			return Err(OversyncError::Sink(format!(
+				"mcp tool call failed: {error}"
+			)));
 		}
 
 		debug!(sink = %self.name, tool = %self.config.tool_name, "MCP event delivered");
@@ -147,10 +151,10 @@ impl Sink for McpSink {
 
 impl Drop for McpSink {
 	fn drop(&mut self) {
-		if let Ok(mut guard) = self.process.try_lock() {
-			if let Some(mut proc) = guard.take() {
-				let _ = proc.child.start_kill();
-			}
+		if let Ok(mut guard) = self.process.try_lock()
+			&& let Some(mut proc) = guard.take()
+		{
+			let _ = proc.child.start_kill();
 		}
 	}
 }
@@ -161,11 +165,17 @@ async fn send(
 ) -> Result<(), OversyncError> {
 	let json = serde_json::to_string(msg)
 		.map_err(|e| OversyncError::Sink(format!("mcp serialize: {e}")))?;
-	stdin.write_all(json.as_bytes()).await
+	stdin
+		.write_all(json.as_bytes())
+		.await
 		.map_err(|e| OversyncError::Sink(format!("mcp write: {e}")))?;
-	stdin.write_all(b"\n").await
+	stdin
+		.write_all(b"\n")
+		.await
 		.map_err(|e| OversyncError::Sink(format!("mcp write: {e}")))?;
-	stdin.flush().await
+	stdin
+		.flush()
+		.await
 		.map_err(|e| OversyncError::Sink(format!("mcp flush: {e}")))?;
 	Ok(())
 }
@@ -174,11 +184,12 @@ async fn recv(
 	reader: &mut BufReader<tokio::process::ChildStdout>,
 ) -> Result<serde_json::Value, OversyncError> {
 	let mut line = String::new();
-	let n = reader.read_line(&mut line).await
+	let n = reader
+		.read_line(&mut line)
+		.await
 		.map_err(|e| OversyncError::Sink(format!("mcp read: {e}")))?;
 	if n == 0 {
 		return Err(OversyncError::Sink("mcp sink: server closed stdout".into()));
 	}
-	serde_json::from_str(line.trim())
-		.map_err(|e| OversyncError::Sink(format!("mcp parse: {e}")))
+	serde_json::from_str(line.trim()).map_err(|e| OversyncError::Sink(format!("mcp parse: {e}")))
 }

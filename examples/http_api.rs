@@ -14,8 +14,8 @@
 //!   GET  /history
 //!   GET  /openapi.json
 
-use oversync::config::{SinkDef, SyncConfig, SurrealDbDef};
 use oversync::OversyncEngine;
+use oversync::config::{SinkDef, SurrealDbDef, SyncConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

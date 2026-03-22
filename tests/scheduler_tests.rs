@@ -42,8 +42,8 @@ fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 				id: "items".into(),
 				sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 				key_column: "id".into(),
-			sinks: None,
-			transform: None,
+				sinks: None,
+				transform: None,
 			}],
 		}],
 		sinks: vec![],
@@ -156,8 +156,8 @@ async fn scheduler_handles_connector_error() {
 				id: "q".into(),
 				sql: "SELECT 1 AS id".into(),
 				key_column: "id".into(),
-			sinks: None,
-			transform: None,
+				sinks: None,
+				transform: None,
 			}],
 		}],
 		sinks: vec![],
@@ -239,8 +239,8 @@ async fn scheduler_detects_data_changes() {
 				id: "items".into(),
 				sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 				key_column: "id".into(),
-			sinks: None,
-			transform: None,
+				sinks: None,
+				transform: None,
 			}],
 		}],
 		sinks: vec![],
@@ -334,15 +334,15 @@ async fn scheduler_multiple_queries() {
 					id: "items".into(),
 					sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 					key_column: "id".into(),
-				sinks: None,
-				transform: None,
+					sinks: None,
+					transform: None,
 				},
 				QueryDef {
 					id: "users".into(),
 					sql: format!("SELECT id, email FROM {}.users", pg.schema),
 					key_column: "id".into(),
-				sinks: None,
-				transform: None,
+					sinks: None,
+					transform: None,
 				},
 			],
 		}],
@@ -363,7 +363,9 @@ async fn scheduler_multiple_queries() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE origin_id = 'pg-multi-q' AND query_id = 'items'")
+		.query(
+			"SELECT * FROM sync_pg_multi_q_cycle_log WHERE origin_id = 'pg-multi-q' AND query_id = 'items'",
+		)
 		.await
 		.unwrap();
 	let items_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -374,7 +376,9 @@ async fn scheduler_multiple_queries() {
 
 	let mut res = surreal
 		.client
-		.query("SELECT * FROM sync_pg_multi_q_cycle_log WHERE origin_id = 'pg-multi-q' AND query_id = 'users'")
+		.query(
+			"SELECT * FROM sync_pg_multi_q_cycle_log WHERE origin_id = 'pg-multi-q' AND query_id = 'users'",
+		)
 		.await
 		.unwrap();
 	let users_logs: Vec<serde_json::Value> = res.take(0).unwrap();
@@ -419,14 +423,14 @@ async fn scheduler_multiple_sources() {
 				max_retries: 1,
 				retry_base_delay_secs: 1,
 				diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
+				missed_tick_policy: Default::default(),
 				config: serde_json::Value::Null,
 				queries: vec![QueryDef {
 					id: "items".into(),
 					sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 					key_column: "id".into(),
 					sinks: None,
-				transform: None,
+					transform: None,
 				}],
 			},
 			SourceDef {
@@ -438,14 +442,14 @@ async fn scheduler_multiple_sources() {
 				max_retries: 1,
 				retry_base_delay_secs: 1,
 				diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
+				missed_tick_policy: Default::default(),
 				config: serde_json::Value::Null,
 				queries: vec![QueryDef {
 					id: "users".into(),
 					sql: format!("SELECT id, email FROM {}.users", pg.schema),
 					key_column: "id".into(),
 					sinks: None,
-				transform: None,
+					transform: None,
 				}],
 			},
 		],

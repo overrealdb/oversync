@@ -1,7 +1,7 @@
 use std::process::Stdio;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
@@ -63,12 +63,14 @@ impl McpOriginConnector {
 			.spawn()
 			.map_err(|e| OversyncError::Connector(format!("mcp spawn '{command}': {e}")))?;
 
-		let stdin = child.stdin.take().ok_or_else(|| {
-			OversyncError::Connector("mcp: failed to capture stdin".into())
-		})?;
-		let stdout = child.stdout.take().ok_or_else(|| {
-			OversyncError::Connector("mcp: failed to capture stdout".into())
-		})?;
+		let stdin = child
+			.stdin
+			.take()
+			.ok_or_else(|| OversyncError::Connector("mcp: failed to capture stdin".into()))?;
+		let stdout = child
+			.stdout
+			.take()
+			.ok_or_else(|| OversyncError::Connector("mcp: failed to capture stdout".into()))?;
 		let reader = BufReader::new(stdout);
 
 		let mut mcp_proc = McpProcess {
@@ -115,12 +117,16 @@ impl OriginConnector for McpOriginConnector {
 		&self.name
 	}
 
-	async fn fetch_all(&self, tool_name: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
+	async fn fetch_all(
+		&self,
+		tool_name: &str,
+		key_column: &str,
+	) -> Result<Vec<RawRow>, OversyncError> {
 		self.ensure_connected().await?;
 		let mut proc_guard = self.process.lock().await;
-		let proc = proc_guard.as_mut().ok_or_else(|| {
-			OversyncError::Connector("mcp: not connected".into())
-		})?;
+		let proc = proc_guard
+			.as_mut()
+			.ok_or_else(|| OversyncError::Connector("mcp: not connected".into()))?;
 
 		// Parse tool_name as "tool_name" or "tool_name:arg1=val1,arg2=val2"
 		let (tool, arguments) = parse_tool_call(tool_name)?;
@@ -141,12 +147,13 @@ impl OriginConnector for McpOriginConnector {
 
 		debug!(connector = %self.name, tool = %tool, "MCP tool call response received");
 
-		let result = response
-			.get("result")
-			.ok_or_else(|| {
-				let error = response.get("error").cloned().unwrap_or(serde_json::Value::Null);
-				OversyncError::Connector(format!("mcp tool call failed: {error}"))
-			})?;
+		let result = response.get("result").ok_or_else(|| {
+			let error = response
+				.get("error")
+				.cloned()
+				.unwrap_or(serde_json::Value::Null);
+			OversyncError::Connector(format!("mcp tool call failed: {error}"))
+		})?;
 
 		// Extract content from MCP tool result
 		let data = extract_content_data(result, self.config.response_path.as_deref())?;
@@ -168,10 +175,10 @@ impl OriginConnector for McpOriginConnector {
 
 impl Drop for McpOriginConnector {
 	fn drop(&mut self) {
-		if let Ok(mut guard) = self.process.try_lock() {
-			if let Some(mut proc) = guard.take() {
-				let _ = proc.child.start_kill();
-			}
+		if let Ok(mut guard) = self.process.try_lock()
+			&& let Some(mut proc) = guard.take()
+		{
+			let _ = proc.child.start_kill();
 		}
 	}
 }
@@ -182,7 +189,10 @@ fn parse_tool_call(spec: &str) -> Result<(&str, serde_json::Value), OversyncErro
 		let mut args = serde_json::Map::new();
 		for pair in args_str.split(',') {
 			if let Some((k, v)) = pair.split_once('=') {
-				args.insert(k.trim().to_string(), serde_json::Value::String(v.trim().to_string()));
+				args.insert(
+					k.trim().to_string(),
+					serde_json::Value::String(v.trim().to_string()),
+				);
 			}
 		}
 		Ok((name, serde_json::Value::Object(args)))
@@ -214,8 +224,9 @@ fn extract_content_data(
 		})
 		.ok_or_else(|| OversyncError::Connector("mcp: no text content in result".into()))?;
 
-	let parsed: serde_json::Value = serde_json::from_str(text)
-		.map_err(|e| OversyncError::Connector(format!("mcp: failed to parse text content as JSON: {e}")))?;
+	let parsed: serde_json::Value = serde_json::from_str(text).map_err(|e| {
+		OversyncError::Connector(format!("mcp: failed to parse text content as JSON: {e}"))
+	})?;
 
 	// Navigate to response_path if specified
 	let target = match response_path {
@@ -223,7 +234,9 @@ fn extract_content_data(
 			let mut current = &parsed;
 			for segment in path.split('.') {
 				current = current.get(segment).ok_or_else(|| {
-					OversyncError::Connector(format!("mcp: response_path '{path}' not found at '{segment}'"))
+					OversyncError::Connector(format!(
+						"mcp: response_path '{path}' not found at '{segment}'"
+					))
 				})?;
 			}
 			current.clone()

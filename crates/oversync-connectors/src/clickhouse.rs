@@ -3,7 +3,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde::Deserialize;
 use tokio::sync::mpsc;
-use tracing::{Instrument, info, warn};
+use tracing::{Instrument, info};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
@@ -93,7 +93,9 @@ impl ClickHouseConnector {
 
 		// ClickHouse can return 200 with error in body
 		if body.starts_with("Code:") || body.contains("DB::Exception") {
-			return Err(OversyncError::Connector(format!("clickhouse error: {body}")));
+			return Err(OversyncError::Connector(format!(
+				"clickhouse error: {body}"
+			)));
 		}
 
 		Ok(body)
@@ -110,13 +112,11 @@ fn parse_jsonl(body: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncErro
 		let json: serde_json::Value = serde_json::from_str(line)
 			.map_err(|e| OversyncError::Connector(format!("clickhouse JSON parse: {e}")))?;
 
-		let key = json
-			.get(key_column)
-			.ok_or_else(|| {
-				OversyncError::Connector(format!(
-					"clickhouse: key column '{key_column}' not found in row"
-				))
-			})?;
+		let key = json.get(key_column).ok_or_else(|| {
+			OversyncError::Connector(format!(
+				"clickhouse: key column '{key_column}' not found in row"
+			))
+		})?;
 
 		let key_str = match key {
 			serde_json::Value::String(s) => s.clone(),
@@ -148,10 +148,7 @@ impl OriginConnector for ClickHouseConnector {
 			let body = self.execute_query(sql).await?;
 			let rows = parse_jsonl(&body, key_column)?;
 
-			info!(
-				rows = rows.len(),
-				"clickhouse fetch_all complete"
-			);
+			info!(rows = rows.len(), "clickhouse fetch_all complete");
 			Ok(rows)
 		}
 		.instrument(tracing::info_span!("clickhouse_fetch_all", source = %self.source_name))
@@ -278,7 +275,10 @@ mod tests {
 			},
 		)
 		.unwrap();
-		assert_eq!(conn.query_url(), "http://localhost:8123/?default_format=JSONEachRow");
+		assert_eq!(
+			conn.query_url(),
+			"http://localhost:8123/?default_format=JSONEachRow"
+		);
 	}
 
 	#[test]

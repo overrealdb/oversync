@@ -6,11 +6,11 @@ use oversync_core::error::OversyncError;
 use oversync_core::traits::{Sink, TargetFactory};
 
 use crate::http_sink::HttpSink;
-use crate::mcp_sink::{McpSink, McpSinkConfig};
-use oversync_core::model::AuthConfig;
 use crate::kafka::KafkaSink;
+use crate::mcp_sink::{McpSink, McpSinkConfig};
 use crate::stdout::StdoutSink;
 use crate::surrealdb_sink::SurrealDbSink;
+use oversync_core::model::AuthConfig;
 
 pub struct StdoutTargetFactory;
 
@@ -150,7 +150,7 @@ impl TargetFactory for HttpTargetFactory {
 			other => {
 				return Err(OversyncError::Config(format!(
 					"http sink: unsupported method '{other}'"
-				)))
+				)));
 			}
 		};
 
@@ -161,8 +161,10 @@ impl TargetFactory for HttpTargetFactory {
 		};
 
 		let auth: Option<AuthConfig> = match config.get("auth") {
-			Some(v) => Some(serde_json::from_value(v.clone())
-				.map_err(|e| OversyncError::Config(format!("http sink auth: {e}")))?),
+			Some(v) => Some(
+				serde_json::from_value(v.clone())
+					.map_err(|e| OversyncError::Config(format!("http sink auth: {e}")))?,
+			),
 			None => None,
 		};
 

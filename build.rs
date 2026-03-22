@@ -9,6 +9,6 @@ fn main() {
 	// Only scans schema/ (not queries/ which contain DML)
 	surql_parser::build::generate_typed_functions(
 		"surql/schema/",
-		&format!("{out_dir}/surql_functions.rs"),
+		format!("{out_dir}/surql_functions.rs"),
 	);
 }

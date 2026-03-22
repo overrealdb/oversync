@@ -6,8 +6,8 @@ use tokio::net::TcpListener;
 
 use oversync_core::model::{AuthConfig, EventEnvelope, EventMeta, OpType};
 use oversync_core::traits::{Sink, TargetFactory};
-use oversync_sinks::http_sink::HttpSink;
 use oversync_sinks::HttpTargetFactory;
+use oversync_sinks::http_sink::HttpSink;
 
 async fn start_server(app: Router) -> String {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

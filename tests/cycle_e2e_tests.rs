@@ -3,10 +3,10 @@ mod common;
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_connectors::PostgresConnector;
 use oversync_core::model::OpType;
-use std::sync::Arc;
 use oversync_core::traits::Sink;
 use oversync_delta::DeltaEngine;
 use oversync_sinks::StdoutSink;
+use std::sync::Arc;
 
 use common::postgres::TestPostgres;
 use common::surreal::TestSurrealContainer;

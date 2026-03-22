@@ -8,8 +8,8 @@ use axum::routing::get;
 use axum::{Json, Router};
 use tokio::net::TcpListener;
 
-use oversync_connectors::http_source::{AuthConfig, HttpSourceConfig, PaginationConfig};
 use oversync_connectors::HttpSource;
+use oversync_connectors::http_source::{AuthConfig, HttpSourceConfig, PaginationConfig};
 use oversync_core::traits::OriginConnector;
 
 async fn start_server(app: Router) -> String {
@@ -189,12 +189,7 @@ async fn cursor_pagination_fetches_all_pages() {
 					.and_then(|s| s.parse().ok())
 					.unwrap_or(0);
 				let page_size = 5;
-				let page: Vec<_> = items
-					.iter()
-					.skip(start)
-					.take(page_size)
-					.cloned()
-					.collect();
+				let page: Vec<_> = items.iter().skip(start).take(page_size).cloned().collect();
 				let next_cursor = if start + page_size < items.len() {
 					serde_json::json!(start + page_size)
 				} else {

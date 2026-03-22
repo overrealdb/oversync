@@ -3,14 +3,14 @@ use async_trait::async_trait;
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{OriginConnector, OriginFactory};
 
+use crate::PostgresConnector;
+use crate::clickhouse::{ClickHouseConfig, ClickHouseConnector};
 use crate::flight_sql::FlightSqlConnector;
 use crate::graphql::{GraphqlConfig, GraphqlConnector};
 use crate::http_source::{HttpSource, HttpSourceConfig};
 use crate::mcp::{McpConfig, McpOriginConnector};
 use crate::mysql::MysqlConnector;
-use crate::clickhouse::{ClickHouseConfig, ClickHouseConnector};
 use crate::trino::{TrinoConfig, TrinoConnector};
-use crate::PostgresConnector;
 
 pub struct PostgresOriginFactory;
 

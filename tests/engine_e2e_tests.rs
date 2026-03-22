@@ -11,8 +11,8 @@ use axum::{Json, Router};
 use tokio::net::TcpListener;
 
 use common::surreal::TestSurrealContainer;
-use oversync::config::*;
 use oversync::OversyncEngine;
+use oversync::config::*;
 
 async fn start_mock(app: Router) -> String {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -24,10 +24,7 @@ async fn start_mock(app: Router) -> String {
 }
 
 /// Build engine with real SurrealDB container (state + snapshot both with schema).
-async fn build_engine(
-	state: &TestSurrealContainer,
-	snap: &TestSurrealContainer,
-) -> OversyncEngine {
+async fn build_engine(state: &TestSurrealContainer, snap: &TestSurrealContainer) -> OversyncEngine {
 	let url = TestSurrealContainer::url().await;
 	OversyncEngine::builder(&url)
 		.namespace(&state.ns)
@@ -98,7 +95,7 @@ async fn engine_http_source_to_stdout_produces_cycle() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
-			missed_tick_policy: Default::default(),
+		missed_tick_policy: Default::default(),
 		config: serde_json::json!({"dsn": source_url}),
 		queries: vec![QueryDef {
 			id: "items".into(),
@@ -181,7 +178,7 @@ async fn engine_http_source_to_http_sink_delivers_events() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
-			missed_tick_policy: Default::default(),
+		missed_tick_policy: Default::default(),
 		config: serde_json::json!({"dsn": source_url}),
 		queries: vec![QueryDef {
 			id: "data".into(),
@@ -243,7 +240,7 @@ async fn engine_graphql_source_produces_cycle() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
-			missed_tick_policy: Default::default(),
+		missed_tick_policy: Default::default(),
 		config: serde_json::json!({
 			"dsn": gql_endpoint,
 			"response_path": "data.items",
@@ -294,9 +291,7 @@ async fn engine_second_cycle_detects_no_changes() {
 
 	let app = Router::new().route(
 		"/items",
-		get(|| async {
-			Json(serde_json::json!([{"id": "1", "name": "stable"}]))
-		}),
+		get(|| async { Json(serde_json::json!([{"id": "1", "name": "stable"}])) }),
 	);
 	let source_url = start_mock(app).await;
 
@@ -311,7 +306,7 @@ async fn engine_second_cycle_detects_no_changes() {
 		max_retries: 0,
 		retry_base_delay_secs: 1,
 		diff_mode: DiffMode::Memory,
-			missed_tick_policy: Default::default(),
+		missed_tick_policy: Default::default(),
 		config: serde_json::json!({"dsn": source_url}),
 		queries: vec![QueryDef {
 			id: "items".into(),
@@ -339,7 +334,9 @@ async fn engine_second_cycle_detects_no_changes() {
 
 	let mut resp = state_db
 		.client
-		.query("SELECT * FROM sync_stable_src_cycle_log WHERE origin_id = 'stable-src' ORDER BY cycle_id ASC")
+		.query(
+			"SELECT * FROM sync_stable_src_cycle_log WHERE origin_id = 'stable-src' ORDER BY cycle_id ASC",
+		)
 		.await
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();

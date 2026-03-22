@@ -21,11 +21,7 @@ pub async fn require_api_key(
 		.get("authorization")
 		.and_then(|v| v.to_str().ok())
 		.and_then(|v| v.strip_prefix("Bearer "))
-		.or_else(|| {
-			req.headers()
-				.get("x-api-key")
-				.and_then(|v| v.to_str().ok())
-		});
+		.or_else(|| req.headers().get("x-api-key").and_then(|v| v.to_str().ok()));
 
 	match provided {
 		Some(key) if key == expected => Ok(next.run(req).await),

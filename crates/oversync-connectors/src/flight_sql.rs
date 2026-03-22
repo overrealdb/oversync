@@ -196,25 +196,28 @@ fn arrow_value_to_string(col: &dyn Array, row: usize) -> String {
 	match col.data_type() {
 		DataType::Utf8 => col.as_string::<i32>().value(row).to_string(),
 		DataType::LargeUtf8 => col.as_string::<i64>().value(row).to_string(),
-		DataType::Int32 => col.as_primitive::<arrow::datatypes::Int32Type>().value(row).to_string(),
-		DataType::Int64 => col.as_primitive::<arrow::datatypes::Int64Type>().value(row).to_string(),
-		_ => col.as_string_opt::<i32>().map(|a| a.value(row).to_string()).unwrap_or_default(),
+		DataType::Int32 => col
+			.as_primitive::<arrow::datatypes::Int32Type>()
+			.value(row)
+			.to_string(),
+		DataType::Int64 => col
+			.as_primitive::<arrow::datatypes::Int64Type>()
+			.value(row)
+			.to_string(),
+		_ => col
+			.as_string_opt::<i32>()
+			.map(|a| a.value(row).to_string())
+			.unwrap_or_default(),
 	}
 }
 
-fn arrow_value_to_json(
-	col: &dyn Array,
-	row: usize,
-	data_type: &DataType,
-) -> serde_json::Value {
+fn arrow_value_to_json(col: &dyn Array, row: usize, data_type: &DataType) -> serde_json::Value {
 	if col.is_null(row) {
 		return serde_json::Value::Null;
 	}
 
 	match data_type {
-		DataType::Boolean => {
-			serde_json::Value::Bool(col.as_boolean().value(row))
-		}
+		DataType::Boolean => serde_json::Value::Bool(col.as_boolean().value(row)),
 		DataType::Int8 => {
 			serde_json::json!(col.as_primitive::<arrow::datatypes::Int8Type>().value(row))
 		}
@@ -228,32 +231,44 @@ fn arrow_value_to_json(
 			serde_json::json!(col.as_primitive::<arrow::datatypes::Int64Type>().value(row))
 		}
 		DataType::Float32 => {
-			serde_json::json!(col.as_primitive::<arrow::datatypes::Float32Type>().value(row))
+			serde_json::json!(
+				col.as_primitive::<arrow::datatypes::Float32Type>()
+					.value(row)
+			)
 		}
 		DataType::Float64 => {
-			serde_json::json!(col.as_primitive::<arrow::datatypes::Float64Type>().value(row))
+			serde_json::json!(
+				col.as_primitive::<arrow::datatypes::Float64Type>()
+					.value(row)
+			)
 		}
-		DataType::Utf8 => {
-			serde_json::Value::String(col.as_string::<i32>().value(row).to_string())
-		}
+		DataType::Utf8 => serde_json::Value::String(col.as_string::<i32>().value(row).to_string()),
 		DataType::LargeUtf8 => {
 			serde_json::Value::String(col.as_string::<i64>().value(row).to_string())
 		}
 		DataType::Date32 => {
-			let days = col.as_primitive::<arrow::datatypes::Date32Type>().value(row);
+			let days = col
+				.as_primitive::<arrow::datatypes::Date32Type>()
+				.value(row);
 			serde_json::Value::String(format!("{days}"))
 		}
 		DataType::Date64 => {
-			let ms = col.as_primitive::<arrow::datatypes::Date64Type>().value(row);
+			let ms = col
+				.as_primitive::<arrow::datatypes::Date64Type>()
+				.value(row);
 			serde_json::Value::String(format!("{ms}"))
 		}
 		DataType::Timestamp(_, _) => {
 			// Timestamps come as i64 — format as string
-			let val = col.as_primitive::<arrow::datatypes::TimestampMicrosecondType>().value(row);
+			let val = col
+				.as_primitive::<arrow::datatypes::TimestampMicrosecondType>()
+				.value(row);
 			serde_json::Value::String(format!("{val}"))
 		}
 		DataType::Decimal128(_, scale) => {
-			let val = col.as_primitive::<arrow::datatypes::Decimal128Type>().value(row);
+			let val = col
+				.as_primitive::<arrow::datatypes::Decimal128Type>()
+				.value(row);
 			let f = val as f64 / 10f64.powi(*scale as i32);
 			serde_json::json!(f)
 		}

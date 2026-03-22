@@ -62,15 +62,9 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 			.cloned()
 			.unwrap_or(serde_json::Value::Null);
 
-		let delta = row
-			.get("delta")
-			.cloned()
-			.unwrap_or(serde_json::Value::Null);
+		let delta = row.get("delta").cloned().unwrap_or(serde_json::Value::Null);
 
-		let retry = row
-			.get("retry")
-			.cloned()
-			.unwrap_or(serde_json::Value::Null);
+		let retry = row.get("retry").cloned().unwrap_or(serde_json::Value::Null);
 
 		let targets = row
 			.get("targets")
@@ -87,14 +81,11 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 			.iter()
 			.filter(|q| q.get("origin_id").and_then(|v| v.as_str()) == Some(&name))
 		{
-			let sinks = q
-				.get("sinks")
-				.and_then(|v| v.as_array())
-				.map(|arr| {
-					arr.iter()
-						.filter_map(|v| v.as_str().map(String::from))
-						.collect()
-				});
+			let sinks = q.get("sinks").and_then(|v| v.as_array()).map(|arr| {
+				arr.iter()
+					.filter_map(|v| v.as_str().map(String::from))
+					.collect()
+			});
 			queries.push(QueryDef {
 				id: str_field(q, "name")?,
 				sql: str_field(q, "query")?,
@@ -133,18 +124,21 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 			}
 		};
 
-		let enabled = row
-			.get("enabled")
-			.and_then(|v| v.as_bool())
-			.unwrap_or(true);
+		let enabled = row.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
 
 		pipes.push(PipeConfig {
 			name,
 			origin: OriginDef {
 				connector: str_field(row, "origin_connector")?,
 				dsn: str_field(row, "origin_dsn")?,
-				credential: row.get("origin_credential").and_then(|v| v.as_str()).map(String::from),
-				trino_url: row.get("trino_url").and_then(|v| v.as_str()).map(String::from),
+				credential: row
+					.get("origin_credential")
+					.and_then(|v| v.as_str())
+					.map(String::from),
+				trino_url: row
+					.get("trino_url")
+					.and_then(|v| v.as_str())
+					.map(String::from),
 				config: origin_config,
 			},
 			targets,
@@ -230,14 +224,11 @@ async fn load_sources(client: &Surreal<Any>) -> Result<Vec<SourceDef>, OversyncE
 			.iter()
 			.filter(|q| q.get("origin_id").and_then(|v| v.as_str()) == Some(&name))
 		{
-			let sinks = q
-				.get("sinks")
-				.and_then(|v| v.as_array())
-				.map(|arr| {
-					arr.iter()
-						.filter_map(|v| v.as_str().map(String::from))
-						.collect()
-				});
+			let sinks = q.get("sinks").and_then(|v| v.as_array()).map(|arr| {
+				arr.iter()
+					.filter_map(|v| v.as_str().map(String::from))
+					.collect()
+			});
 			queries.push(QueryDef {
 				id: str_field(q, "name")?,
 				sql: str_field(q, "query")?,

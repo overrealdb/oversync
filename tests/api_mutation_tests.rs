@@ -12,9 +12,7 @@ use tower::ServiceExt;
 use common::surreal::TestSurrealContainer;
 use oversync_api::state::*;
 
-fn test_state_with_db(
-	client: surrealdb::Surreal<surrealdb::engine::any::Any>,
-) -> Arc<ApiState> {
+fn test_state_with_db(client: surrealdb::Surreal<surrealdb::engine::any::Any>) -> Arc<ApiState> {
 	Arc::new(ApiState {
 		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
@@ -70,13 +68,8 @@ async fn put_json(
 	(status, json)
 }
 
-async fn delete_req(
-	app: &axum::Router,
-	path: &str,
-) -> (StatusCode, serde_json::Value) {
-	let req = Request::delete(path)
-		.body(Body::empty())
-		.unwrap();
+async fn delete_req(app: &axum::Router, path: &str) -> (StatusCode, serde_json::Value) {
+	let req = Request::delete(path).body(Body::empty()).unwrap();
 	let resp = app.clone().oneshot(req).await.unwrap();
 	let status = resp.status();
 	let bytes = resp.into_body().collect().await.unwrap().to_bytes();
@@ -84,10 +77,7 @@ async fn delete_req(
 	(status, json)
 }
 
-async fn get_json(
-	app: &axum::Router,
-	path: &str,
-) -> (StatusCode, serde_json::Value) {
+async fn get_json(app: &axum::Router, path: &str) -> (StatusCode, serde_json::Value) {
 	let req = Request::get(path).body(Body::empty()).unwrap();
 	let resp = app.clone().oneshot(req).await.unwrap();
 	let status = resp.status();
@@ -502,9 +492,7 @@ async fn auth_key_blocks_unauthorized_requests() {
 	assert_eq!(status, StatusCode::OK);
 
 	// Protected route without key → 401
-	let req = Request::get("/sources")
-		.body(Body::empty())
-		.unwrap();
+	let req = Request::get("/sources").body(Body::empty()).unwrap();
 	let resp = app.clone().oneshot(req).await.unwrap();
 	assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }

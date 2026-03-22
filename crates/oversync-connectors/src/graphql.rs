@@ -10,7 +10,7 @@ use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
 use oversync_core::traits::OriginConnector;
 
-use crate::http_common::{apply_auth, extract_items, items_to_rows, navigate_path, AuthConfig};
+use crate::http_common::{AuthConfig, apply_auth, extract_items, items_to_rows, navigate_path};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GraphqlConfig {
@@ -96,9 +96,7 @@ impl GraphqlConnector {
 
 		let status = resp.status();
 		if !status.is_success() {
-			return Err(OversyncError::Connector(format!(
-				"graphql: HTTP {status}"
-			)));
+			return Err(OversyncError::Connector(format!("graphql: HTTP {status}")));
 		}
 
 		let json: serde_json::Value = resp
@@ -106,17 +104,15 @@ impl GraphqlConnector {
 			.await
 			.map_err(|e| OversyncError::Connector(format!("graphql json: {e}")))?;
 
-		if let Some(errors) = json.get("errors").and_then(|e| e.as_array()) {
-			if !errors.is_empty() {
-				let msg = errors
-					.iter()
-					.filter_map(|e| e.get("message").and_then(|m| m.as_str()))
-					.collect::<Vec<_>>()
-					.join("; ");
-				return Err(OversyncError::Connector(format!(
-					"graphql errors: {msg}"
-				)));
-			}
+		if let Some(errors) = json.get("errors").and_then(|e| e.as_array())
+			&& !errors.is_empty()
+		{
+			let msg = errors
+				.iter()
+				.filter_map(|e| e.get("message").and_then(|m| m.as_str()))
+				.collect::<Vec<_>>()
+				.join("; ");
+			return Err(OversyncError::Connector(format!("graphql errors: {msg}")));
 		}
 
 		Ok(json)
@@ -162,10 +158,7 @@ impl GraphqlConnector {
 				);
 			}
 			None => {
-				vars.insert(
-					pagination.cursor_variable.clone(),
-					serde_json::Value::Null,
-				);
+				vars.insert(pagination.cursor_variable.clone(), serde_json::Value::Null);
 			}
 		}
 		serde_json::Value::Object(vars)
@@ -181,9 +174,7 @@ impl OriginConnector for GraphqlConnector {
 	async fn fetch_all(&self, sql: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
 		match &self.config.pagination {
 			None => {
-				let body = self
-					.execute_query(sql, serde_json::json!({}))
-					.await?;
+				let body = self.execute_query(sql, serde_json::json!({})).await?;
 				let items = extract_items(&body, &self.config.response_path);
 				debug!(count = items.len(), "fetched items from graphql");
 				items_to_rows(&items, key_column)
@@ -202,8 +193,7 @@ impl OriginConnector for GraphqlConnector {
 					}
 					all_rows.extend(items_to_rows(&items, key_column)?);
 
-					let (has_next, end_cursor) =
-						self.fetch_page_info(&body, &pagination);
+					let (has_next, end_cursor) = self.fetch_page_info(&body, &pagination);
 					if !has_next {
 						break;
 					}
@@ -213,7 +203,10 @@ impl OriginConnector for GraphqlConnector {
 					}
 				}
 
-				debug!(count = all_rows.len(), "fetched all pages from graphql (relay)");
+				debug!(
+					count = all_rows.len(),
+					"fetched all pages from graphql (relay)"
+				);
 				Ok(all_rows)
 			}
 		}
@@ -255,8 +248,7 @@ impl OriginConnector for GraphqlConnector {
 						.await
 						.map_err(|_| OversyncError::Internal("channel closed".into()))?;
 
-					let (has_next, end_cursor) =
-						self.fetch_page_info(&body, &pagination);
+					let (has_next, end_cursor) = self.fetch_page_info(&body, &pagination);
 					if !has_next {
 						break;
 					}

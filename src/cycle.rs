@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::{CycleStatus, DeltaEvent, DeltaResult, EventEnvelope};
-use oversync_core::traits::{Sink, OriginConnector, TransformHook};
+use oversync_core::traits::{OriginConnector, Sink, TransformHook};
 use oversync_delta::{DeltaEngine, check_fail_safe};
 use tracing::{Instrument, error, info, warn};
 
@@ -133,7 +133,7 @@ impl<'a> CycleRunner<'a> {
 		};
 
 		let created_count = diff.created.len();
-		let updated_count = diff.updated.len();
+		let _updated_count = diff.updated.len();
 		let deleted_count = diff.deleted.len();
 		let previous_count = total_upserted + deleted_count;
 
@@ -390,11 +390,11 @@ impl<'a> CycleRunner<'a> {
 
 			// Save to outbox before delivery (crash-safe)
 			self.engine
-				.save_pending_events(&config.origin_id, &config.query_id, page_id, &envelopes)
+				.save_pending_events(&config.origin_id, &config.query_id, page_id, envelopes)
 				.await?;
 
 			// Deliver to all sinks
-			if !self.deliver_to_sinks(&envelopes).await {
+			if !self.deliver_to_sinks(envelopes).await {
 				warn!(
 					source = %config.origin_id,
 					page = i,

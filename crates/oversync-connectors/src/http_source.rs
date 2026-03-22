@@ -82,11 +82,7 @@ impl HttpSource {
 	}
 
 	fn build_url(&self, path: &str) -> String {
-		format!(
-			"{}{}",
-			self.config.base_url.trim_end_matches('/'),
-			path
-		)
+		format!("{}{}", self.config.base_url.trim_end_matches('/'), path)
 	}
 
 	fn apply_auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -168,7 +164,10 @@ impl OriginConnector for HttpSource {
 					}
 					offset += count;
 				}
-				debug!(count = all_rows.len(), "fetched all pages from http (offset)");
+				debug!(
+					count = all_rows.len(),
+					"fetched all pages from http (offset)"
+				);
 				Ok(all_rows)
 			}
 			Some(PaginationConfig::Cursor {
@@ -194,7 +193,10 @@ impl OriginConnector for HttpSource {
 						break;
 					}
 				}
-				debug!(count = all_rows.len(), "fetched all pages from http (cursor)");
+				debug!(
+					count = all_rows.len(),
+					"fetched all pages from http (cursor)"
+				);
 				Ok(all_rows)
 			}
 		}
@@ -339,14 +341,18 @@ mod tests {
 	fn parse_auth_basic() {
 		let json = serde_json::json!({"type": "basic", "username": "user", "password": "pass"});
 		let auth: AuthConfig = serde_json::from_value(json).unwrap();
-		assert!(matches!(auth, AuthConfig::Basic { ref username, ref password } if username == "user" && password == "pass"));
+		assert!(
+			matches!(auth, AuthConfig::Basic { ref username, ref password } if username == "user" && password == "pass")
+		);
 	}
 
 	#[test]
 	fn parse_auth_header() {
 		let json = serde_json::json!({"type": "header", "name": "X-API-Key", "value": "key123"});
 		let auth: AuthConfig = serde_json::from_value(json).unwrap();
-		assert!(matches!(auth, AuthConfig::Header { ref name, ref value } if name == "X-API-Key" && value == "key123"));
+		assert!(
+			matches!(auth, AuthConfig::Header { ref name, ref value } if name == "X-API-Key" && value == "key123")
+		);
 	}
 
 	#[test]
@@ -394,14 +400,20 @@ mod tests {
 	fn build_url_joins_path() {
 		let config = make_config("https://api.example.com");
 		let source = HttpSource::new("test", config).unwrap();
-		assert_eq!(source.build_url("/v1/items"), "https://api.example.com/v1/items");
+		assert_eq!(
+			source.build_url("/v1/items"),
+			"https://api.example.com/v1/items"
+		);
 	}
 
 	#[test]
 	fn build_url_strips_trailing_slash() {
 		let config = make_config("https://api.example.com/");
 		let source = HttpSource::new("test", config).unwrap();
-		assert_eq!(source.build_url("/v1/items"), "https://api.example.com/v1/items");
+		assert_eq!(
+			source.build_url("/v1/items"),
+			"https://api.example.com/v1/items"
+		);
 	}
 
 	#[test]
@@ -470,7 +482,12 @@ mod tests {
 		let items = vec![serde_json::json!({"name": "no id field"})];
 		let result = items_to_rows(&items, "id");
 		assert!(result.is_err());
-		assert!(result.unwrap_err().to_string().contains("missing key field"));
+		assert!(
+			result
+				.unwrap_err()
+				.to_string()
+				.contains("missing key field")
+		);
 	}
 
 	#[test]
@@ -483,7 +500,10 @@ mod tests {
 	#[test]
 	fn extract_cursor_string() {
 		let body = serde_json::json!({"meta": {"next": "cursor_abc"}});
-		assert_eq!(extract_cursor(&body, "meta.next"), Some("cursor_abc".into()));
+		assert_eq!(
+			extract_cursor(&body, "meta.next"),
+			Some("cursor_abc".into())
+		);
 	}
 
 	#[test]

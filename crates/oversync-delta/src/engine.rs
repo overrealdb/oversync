@@ -99,7 +99,7 @@ impl DeltaEngine {
 	) -> Result<i64, OversyncError> {
 		let mut response = self
 			.state_client
-			.query(&self.sql(NEXT_CYCLE_ID_SQL))
+			.query(self.sql(NEXT_CYCLE_ID_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -125,7 +125,7 @@ impl DeltaEngine {
 	) -> Result<HashMap<String, String>, OversyncError> {
 		let mut response = self
 			.snapshot_client
-			.query(&self.sql(READ_SNAPSHOT_KEYS_SQL))
+			.query(self.sql(READ_SNAPSHOT_KEYS_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -210,7 +210,7 @@ impl DeltaEngine {
 		query_id: &str,
 	) -> Result<(), OversyncError> {
 		self.snapshot_client
-			.query(&self.sql(PREP_PREV_HASH_SQL))
+			.query(self.sql(PREP_PREV_HASH_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -258,7 +258,7 @@ impl DeltaEngine {
 
 			let response = self
 				.snapshot_client
-				.query(&self.sql(BATCH_UPSERT_SQL))
+				.query(self.sql(BATCH_UPSERT_SQL))
 				.bind(("rows", batch))
 				.await
 				.map_err(|e| OversyncError::SurrealDb(format!("batch upsert: {e}")))?;
@@ -282,7 +282,7 @@ impl DeltaEngine {
 		cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.snapshot_client
-			.query(&self.sql(DELETE_STALE_SQL))
+			.query(self.sql(DELETE_STALE_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -474,7 +474,7 @@ impl DeltaEngine {
 		let events_json = serde_json::to_string(events)
 			.map_err(|e| OversyncError::Internal(format!("serialize events: {e}")))?;
 		self.state_client
-			.query(&self.sql(SAVE_PENDING_SQL))
+			.query(self.sql(SAVE_PENDING_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -492,7 +492,7 @@ impl DeltaEngine {
 	) -> Result<Vec<(i64, Vec<EventEnvelope>)>, OversyncError> {
 		let mut response = self
 			.state_client
-			.query(&self.sql(READ_PENDING_SQL))
+			.query(self.sql(READ_PENDING_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.await
@@ -524,7 +524,7 @@ impl DeltaEngine {
 		up_to_cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
-			.query(&self.sql(DELETE_PENDING_SQL))
+			.query(self.sql(DELETE_PENDING_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", up_to_cycle_id))
@@ -540,7 +540,7 @@ impl DeltaEngine {
 		cycle_id: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
-			.query(&self.sql(LOG_CYCLE_START_SQL))
+			.query(self.sql(LOG_CYCLE_START_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -549,6 +549,7 @@ impl DeltaEngine {
 		Ok(())
 	}
 
+	#[allow(clippy::too_many_arguments)]
 	pub async fn log_cycle_finish(
 		&self,
 		origin_id: &str,
@@ -561,7 +562,7 @@ impl DeltaEngine {
 		rows_deleted: i64,
 	) -> Result<(), OversyncError> {
 		self.state_client
-			.query(&self.sql(LOG_CYCLE_FINISH_SQL))
+			.query(self.sql(LOG_CYCLE_FINISH_SQL))
 			.bind(("origin_id", origin_id.to_string()))
 			.bind(("query_id", query_id.to_string()))
 			.bind(("cycle_id", cycle_id))
@@ -595,7 +596,7 @@ impl DeltaEngine {
 
 		let events_json: Vec<serde_json::Value> = envelopes
 			.iter()
-			.map(|e| serde_json::to_value(e))
+			.map(serde_json::to_value)
 			.collect::<Result<_, _>>()?;
 
 		let sql = format!("RETURN fn::{fn_name}($events)");
@@ -604,15 +605,11 @@ impl DeltaEngine {
 			.query(&sql)
 			.bind(("events", events_json))
 			.await
-			.map_err(|e| {
-				OversyncError::Internal(format!("transform fn::{fn_name}: {e}"))
-			})?;
+			.map_err(|e| OversyncError::Internal(format!("transform fn::{fn_name}: {e}")))?;
 
 		let items: Vec<serde_json::Value> = response
 			.take(0)
-			.map_err(|e| {
-				OversyncError::Internal(format!("transform fn::{fn_name} result: {e}"))
-			})?;
+			.map_err(|e| OversyncError::Internal(format!("transform fn::{fn_name} result: {e}")))?;
 		let mut transformed = Vec::with_capacity(items.len());
 		for item in items {
 			if item.is_null() {
@@ -683,13 +680,18 @@ mod tests {
 		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
 		db.use_ns("t").use_db("t").await.unwrap();
 
-		let engine = DeltaEngine::new(db.clone(), db)
-			.with_tables(TableNames::for_source("my-src"));
+		let engine = DeltaEngine::new(db.clone(), db).with_tables(TableNames::for_source("my-src"));
 		engine.ensure_tables().await.unwrap();
 
 		let rows = vec![
-			RawRow { row_key: "k1".into(), row_data: serde_json::json!({"v": 1}) },
-			RawRow { row_key: "k2".into(), row_data: serde_json::json!({"v": 2}) },
+			RawRow {
+				row_key: "k1".into(),
+				row_data: serde_json::json!({"v": 1}),
+			},
+			RawRow {
+				row_key: "k2".into(),
+				row_data: serde_json::json!({"v": 2}),
+			},
 		];
 		engine.upsert_batch_raw("s", "q", 1, &rows).await.unwrap();
 
@@ -708,8 +710,14 @@ mod tests {
 		eng_a.ensure_tables().await.unwrap();
 		eng_b.ensure_tables().await.unwrap();
 
-		let rows = vec![RawRow { row_key: "k1".into(), row_data: serde_json::json!({"v": 1}) }];
-		eng_a.upsert_batch_raw("source-a", "q", 1, &rows).await.unwrap();
+		let rows = vec![RawRow {
+			row_key: "k1".into(),
+			row_data: serde_json::json!({"v": 1}),
+		}];
+		eng_a
+			.upsert_batch_raw("source-a", "q", 1, &rows)
+			.await
+			.unwrap();
 
 		let keys_a = eng_a.read_snapshot_keys("source-a", "q").await.unwrap();
 		let keys_b = eng_b.read_snapshot_keys("source-b", "q").await.unwrap();
@@ -722,22 +730,37 @@ mod tests {
 		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
 		db.use_ns("t").use_db("t").await.unwrap();
 
-		let engine = DeltaEngine::new(db.clone(), db)
-			.with_tables(TableNames::for_source("test-src"));
+		let engine =
+			DeltaEngine::new(db.clone(), db).with_tables(TableNames::for_source("test-src"));
 		engine.ensure_tables().await.unwrap();
 
 		// Cycle 1: create rows
 		let cycle_id = engine.next_cycle_id("test-src", "q").await.unwrap();
 		assert_eq!(cycle_id, 1);
-		engine.log_cycle_start("test-src", "q", cycle_id).await.unwrap();
+		engine
+			.log_cycle_start("test-src", "q", cycle_id)
+			.await
+			.unwrap();
 
 		let rows = vec![
-			RawRow { row_key: "a".into(), row_data: serde_json::json!({"v": 1}) },
-			RawRow { row_key: "b".into(), row_data: serde_json::json!({"v": 2}) },
+			RawRow {
+				row_key: "a".into(),
+				row_data: serde_json::json!({"v": 1}),
+			},
+			RawRow {
+				row_key: "b".into(),
+				row_data: serde_json::json!({"v": 2}),
+			},
 		];
-		engine.upsert_batch_raw("test-src", "q", cycle_id, &rows).await.unwrap();
+		engine
+			.upsert_batch_raw("test-src", "q", cycle_id, &rows)
+			.await
+			.unwrap();
 
-		let keys = engine.read_snapshot_keys_paged("test-src", "q").await.unwrap();
+		let keys = engine
+			.read_snapshot_keys_paged("test-src", "q")
+			.await
+			.unwrap();
 		assert_eq!(keys.len(), 2, "should have 2 keys after upsert");
 	}
 }

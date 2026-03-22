@@ -7,7 +7,7 @@ use tokio::time::MissedTickBehavior;
 use tracing::{error, info, warn};
 
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{Sink, OriginConnector};
+use oversync_core::traits::{OriginConnector, Sink};
 use oversync_delta::DeltaEngine;
 
 use crate::config::{MissedTickPolicy, PipeConfig, QueryDef, SyncConfig};
@@ -63,8 +63,7 @@ impl Scheduler {
 			}
 
 			for query in &pipe.queries {
-				let query_sinks =
-					resolve_pipe_query_sinks(&named_sinks, pipe, query)?;
+				let query_sinks = resolve_pipe_query_sinks(&named_sinks, pipe, query)?;
 
 				let engine = self.engine.clone();
 				let registry = self.registry.clone();
@@ -73,8 +72,7 @@ impl Scheduler {
 				let mut shutdown = self.shutdown_rx.clone();
 
 				let handle = tokio::spawn(async move {
-					run_pipe_query(engine, registry, pipe, query, query_sinks, &mut shutdown)
-						.await;
+					run_pipe_query(engine, registry, pipe, query, query_sinks, &mut shutdown).await;
 				});
 
 				handles.push(handle);
@@ -158,10 +156,20 @@ async fn run_pipe_query(
 			serde_json::Value::Object(m) => m.clone(),
 			_ => serde_json::Map::new(),
 		};
-		map.insert("dsn".into(), serde_json::Value::String(pipe.origin.dsn.clone()));
-		(pipe.origin.connector.clone(), serde_json::Value::Object(map))
+		map.insert(
+			"dsn".into(),
+			serde_json::Value::String(pipe.origin.dsn.clone()),
+		);
+		(
+			pipe.origin.connector.clone(),
+			serde_json::Value::Object(map),
+		)
 	} else {
-		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+		let trino_url = pipe
+			.origin
+			.trino_url
+			.as_deref()
+			.unwrap_or("http://localhost:8080");
 		info!(
 			pipe = %pipe.name,
 			connector = %pipe.origin.connector,
@@ -217,7 +225,15 @@ async fn run_pipe_query(
 	if let Some(ref mut rl) = rate_limiter {
 		rl.acquire().await;
 	}
-	run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
+	run_timed_cycle(
+		&pipe_engine,
+		connector.as_ref(),
+		&sinks,
+		&pipe,
+		&query,
+		interval,
+	)
+	.await;
 
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
@@ -339,9 +355,9 @@ async fn run_with_retry(
 			Err(e) => {
 				if attempt < pipe.retry.max_retries {
 					let delay = Duration::from_secs(
-						pipe.retry.retry_base_delay_secs.saturating_mul(
-							2u64.saturating_pow(attempt),
-						),
+						pipe.retry
+							.retry_base_delay_secs
+							.saturating_mul(2u64.saturating_pow(attempt)),
 					);
 					warn!(
 						pipe = %pipe.name,

@@ -20,12 +20,7 @@ pub async fn trigger_source(
 	State(state): State<Arc<ApiState>>,
 	Path(name): Path<String>,
 ) -> Result<Json<TriggerResponse>, Json<ErrorResponse>> {
-	let found = state
-		.sources
-		.read()
-		.await
-		.iter()
-		.any(|s| s.name == name);
+	let found = state.sources.read().await.iter().any(|s| s.name == name);
 	if !found {
 		return Err(Json(ErrorResponse {
 			error: format!("source not found: {name}"),
@@ -33,17 +28,14 @@ pub async fn trigger_source(
 	}
 
 	// Trigger by restarting the lifecycle with current config
-	if let Some(ref lifecycle) = state.lifecycle {
-		if let Some(ref db) = state.db_client {
-			lifecycle
-				.restart_with_config_json(db)
-				.await
-				.map_err(|e| {
-					Json(ErrorResponse {
-						error: format!("trigger: {e}"),
-					})
-				})?;
-		}
+	if let Some(ref lifecycle) = state.lifecycle
+		&& let Some(ref db) = state.db_client
+	{
+		lifecycle.restart_with_config_json(db).await.map_err(|e| {
+			Json(ErrorResponse {
+				error: format!("trigger: {e}"),
+			})
+		})?;
 	}
 
 	Ok(Json(TriggerResponse {
@@ -59,9 +51,7 @@ pub async fn trigger_source(
 		(status = 200, description = "Sync paused", body = MutationResponse)
 	)
 )]
-pub async fn pause_sync(
-	State(state): State<Arc<ApiState>>,
-) -> Json<MutationResponse> {
+pub async fn pause_sync(State(state): State<Arc<ApiState>>) -> Json<MutationResponse> {
 	if let Some(ref lifecycle) = state.lifecycle {
 		lifecycle.pause().await;
 	}
@@ -112,16 +102,14 @@ pub async fn get_history(
 		})
 	})?;
 
-	const SQL_CYCLE_HISTORY: &str = include_str!("../../../surql/queries/delta/list_cycle_history.surql");
+	const SQL_CYCLE_HISTORY: &str =
+		include_str!("../../../surql/queries/delta/list_cycle_history.surql");
 
-	let mut response = db
-		.query(SQL_CYCLE_HISTORY)
-		.await
-		.map_err(|e| {
-			Json(ErrorResponse {
-				error: format!("db: {e}"),
-			})
-		})?;
+	let mut response = db.query(SQL_CYCLE_HISTORY).await.map_err(|e| {
+		Json(ErrorResponse {
+			error: format!("db: {e}"),
+		})
+	})?;
 
 	let rows: Vec<serde_json::Value> = response.take(0).map_err(|e| {
 		Json(ErrorResponse {
@@ -150,18 +138,9 @@ pub async fn get_history(
 					.get("finished_at")
 					.and_then(|v| v.as_str())
 					.and_then(|s| s.parse().ok()),
-				rows_created: r
-					.get("rows_created")
-					.and_then(|v| v.as_u64())
-					.unwrap_or(0),
-				rows_updated: r
-					.get("rows_updated")
-					.and_then(|v| v.as_u64())
-					.unwrap_or(0),
-				rows_deleted: r
-					.get("rows_deleted")
-					.and_then(|v| v.as_u64())
-					.unwrap_or(0),
+				rows_created: r.get("rows_created").and_then(|v| v.as_u64()).unwrap_or(0),
+				rows_updated: r.get("rows_updated").and_then(|v| v.as_u64()).unwrap_or(0),
+				rows_deleted: r.get("rows_deleted").and_then(|v| v.as_u64()).unwrap_or(0),
 			})
 		})
 		.collect();
@@ -176,9 +155,7 @@ pub async fn get_history(
 		(status = 200, description = "Sync status", body = StatusResponse)
 	)
 )]
-pub async fn sync_status(
-	State(state): State<Arc<ApiState>>,
-) -> Json<StatusResponse> {
+pub async fn sync_status(State(state): State<Arc<ApiState>>) -> Json<StatusResponse> {
 	let (running, paused) = match &state.lifecycle {
 		Some(lc) => (lc.is_running().await, lc.is_paused().await),
 		None => (false, false),

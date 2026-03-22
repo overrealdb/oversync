@@ -6,7 +6,8 @@ use surrealdb::engine::any::Any;
 use oversync_core::error::OversyncError;
 
 const SQL_NEXT_VERSION: &str = include_str!("../surql/queries/config_version/next_version.surql");
-const SQL_CREATE_VERSION: &str = include_str!("../surql/queries/config_version/create_version.surql");
+const SQL_CREATE_VERSION: &str =
+	include_str!("../surql/queries/config_version/create_version.surql");
 const SQL_LIST_VERSIONS: &str = include_str!("../surql/queries/config_version/list_versions.surql");
 const SQL_GET_VERSION: &str = include_str!("../surql/queries/config_version/get_version.surql");
 
@@ -57,9 +58,7 @@ pub async fn save_version(
 }
 
 /// List all config versions (newest first).
-pub async fn list_versions(
-	db: &Surreal<Any>,
-) -> Result<Vec<ConfigVersion>, OversyncError> {
+pub async fn list_versions(db: &Surreal<Any>) -> Result<Vec<ConfigVersion>, OversyncError> {
 	let mut resp = db
 		.query(SQL_LIST_VERSIONS)
 		.await
@@ -93,10 +92,7 @@ pub async fn list_versions(
 }
 
 /// Get a specific version's config.
-pub async fn get_version(
-	db: &Surreal<Any>,
-	version: u64,
-) -> Result<ConfigVersion, OversyncError> {
+pub async fn get_version(db: &Surreal<Any>, version: u64) -> Result<ConfigVersion, OversyncError> {
 	let mut resp = db
 		.query(SQL_GET_VERSION)
 		.bind(("v", version as i64))
@@ -107,12 +103,15 @@ pub async fn get_version(
 		.take(0)
 		.map_err(|e| OversyncError::SurrealDb(format!("get version take: {e}")))?;
 
-	let row = rows.first().ok_or_else(|| {
-		OversyncError::Config(format!("config version {version} not found"))
-	})?;
+	let row = rows
+		.first()
+		.ok_or_else(|| OversyncError::Config(format!("config version {version} not found")))?;
 
 	Ok(ConfigVersion {
-		version: row.get("version").and_then(|v| v.as_u64()).unwrap_or(version),
+		version: row
+			.get("version")
+			.and_then(|v| v.as_u64())
+			.unwrap_or(version),
 		config_json: row
 			.get("config_json")
 			.cloned()

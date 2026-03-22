@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
-use oversync_core::traits::{Sink, OriginConnector};
+use oversync_core::traits::{OriginConnector, Sink};
 use oversync_delta::DeltaEngine;
 
 use common::surreal::TestSurrealContainer;

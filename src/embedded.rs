@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::DeltaResult;
-use oversync_core::traits::{Sink, TargetFactory, OriginFactory, TransformHook};
+use oversync_core::traits::{OriginFactory, Sink, TargetFactory, TransformHook};
 use oversync_delta::DeltaEngine;
 
 use crate::config::{MissedTickPolicy, PipeConfig, SourceDef};
@@ -22,7 +22,10 @@ fn build_connector_config(pipe: &PipeConfig) -> serde_json::Value {
 		serde_json::Value::Object(m) => m.clone(),
 		_ => serde_json::Map::new(),
 	};
-	map.insert("dsn".into(), serde_json::Value::String(pipe.origin.dsn.clone()));
+	map.insert(
+		"dsn".into(),
+		serde_json::Value::String(pipe.origin.dsn.clone()),
+	);
 	serde_json::Value::Object(map)
 }
 
@@ -81,25 +84,28 @@ impl EmbeddedSync {
 			.pipes
 			.iter()
 			.find(|p| p.name == pipe_name)
-			.ok_or_else(|| {
-				OversyncError::Config(format!("unknown pipe '{pipe_name}'"))
-			})?;
+			.ok_or_else(|| OversyncError::Config(format!("unknown pipe '{pipe_name}'")))?;
 
 		let query = pipe
 			.queries
 			.iter()
 			.find(|q| q.id == query_id)
 			.ok_or_else(|| {
-				OversyncError::Config(format!(
-					"pipe '{pipe_name}': unknown query '{query_id}'"
-				))
+				OversyncError::Config(format!("pipe '{pipe_name}': unknown query '{query_id}'"))
 			})?;
 
 		let (eff_connector, eff_config) = if !pipe.origin.needs_trino_bridge() {
 			(pipe.origin.connector.as_str(), build_connector_config(pipe))
 		} else {
-			let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
-			("trino", serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}))
+			let trino_url = pipe
+				.origin
+				.trino_url
+				.as_deref()
+				.unwrap_or("http://localhost:8080");
+			(
+				"trino",
+				serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}),
+			)
 		};
 		let connector = self
 			.registry
@@ -120,8 +126,7 @@ impl EmbeddedSync {
 
 		let pipe_engine = self.delta_engine.for_source(pipe_name);
 		pipe_engine.ensure_tables().await?;
-		let mut runner =
-			CycleRunner::new(&pipe_engine, connector.as_ref(), &query_sinks);
+		let mut runner = CycleRunner::new(&pipe_engine, connector.as_ref(), &query_sinks);
 
 		if !pipe.filters.is_empty() {
 			let chain = oversync_transforms::parse_steps(&pipe.filters)?;
@@ -131,10 +136,10 @@ impl EmbeddedSync {
 		if !pipe.transforms.is_empty() {
 			let chain = oversync_transforms::parse_steps(&pipe.transforms)?;
 			runner = runner.with_transform(Arc::new(chain));
-		} else if let Some(ref transform_name) = query.transform {
-			if let Some(hook) = self.transform_hooks.get(transform_name) {
-				runner = runner.with_transform(Arc::clone(hook));
-			}
+		} else if let Some(ref transform_name) = query.transform
+			&& let Some(hook) = self.transform_hooks.get(transform_name)
+		{
+			runner = runner.with_transform(Arc::clone(hook));
 		}
 
 		runner.run(&cycle_config).await
@@ -157,8 +162,7 @@ impl EmbeddedSync {
 		let registry = self.registry.clone();
 
 		let handle = tokio::spawn(async move {
-			run_all_pipes(engine, registry, pipes, sinks, transform_hooks, shutdown_rx)
-				.await;
+			run_all_pipes(engine, registry, pipes, sinks, transform_hooks, shutdown_rx).await;
 		});
 
 		*self.shutdown_tx.lock().unwrap() = Some(shutdown_tx);
@@ -188,9 +192,10 @@ impl EmbeddedSync {
 			Some(names) => {
 				let mut resolved = Vec::with_capacity(names.len());
 				for name in names {
-					let sink = self.sinks.get(name).ok_or_else(|| {
-						OversyncError::Config(format!("unknown sink '{name}'"))
-					})?;
+					let sink = self
+						.sinks
+						.get(name)
+						.ok_or_else(|| OversyncError::Config(format!("unknown sink '{name}'")))?;
 					resolved.push(sink.clone());
 				}
 				Ok(resolved)
@@ -358,9 +363,16 @@ async fn run_embedded_pipe_query(
 	let (effective_connector, connector_config) = if !pipe.origin.needs_trino_bridge() {
 		(pipe.origin.connector.clone(), build_connector_config(&pipe))
 	} else {
-		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+		let trino_url = pipe
+			.origin
+			.trino_url
+			.as_deref()
+			.unwrap_or("http://localhost:8080");
 		info!(pipe = %pipe.name, connector = %pipe.origin.connector, "routing through Trino");
-		("trino".to_string(), serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}))
+		(
+			"trino".to_string(),
+			serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}),
+		)
 	};
 	let connector = match registry
 		.create_source(&effective_connector, &pipe.name, &connector_config)
@@ -554,9 +566,9 @@ async fn run_embedded_cycle(
 			Err(e) => {
 				if attempt < pipe.retry.max_retries {
 					let delay = Duration::from_secs(
-						pipe.retry.retry_base_delay_secs.saturating_mul(
-							2u64.saturating_pow(attempt),
-						),
+						pipe.retry
+							.retry_base_delay_secs
+							.saturating_mul(2u64.saturating_pow(attempt)),
 					);
 					warn!(
 						pipe = %pipe.name,

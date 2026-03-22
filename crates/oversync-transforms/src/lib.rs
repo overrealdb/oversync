@@ -32,9 +32,7 @@ pub struct StepChain {
 impl std::fmt::Debug for StepChain {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		let names: Vec<&str> = self.steps.iter().map(|s| s.step_name()).collect();
-		f.debug_struct("StepChain")
-			.field("steps", &names)
-			.finish()
+		f.debug_struct("StepChain").field("steps", &names).finish()
 	}
 }
 
@@ -215,9 +213,18 @@ mod tests {
 
 	fn test_rows() -> Vec<RawRow> {
 		vec![
-			RawRow { row_key: "1".into(), row_data: serde_json::json!({"name": "alice"}) },
-			RawRow { row_key: "2".into(), row_data: serde_json::json!({"name": "bob"}) },
-			RawRow { row_key: "3".into(), row_data: serde_json::json!({"name": "charlie"}) },
+			RawRow {
+				row_key: "1".into(),
+				row_data: serde_json::json!({"name": "alice"}),
+			},
+			RawRow {
+				row_key: "2".into(),
+				row_data: serde_json::json!({"name": "bob"}),
+			},
+			RawRow {
+				row_key: "3".into(),
+				row_data: serde_json::json!({"name": "charlie"}),
+			},
 		]
 	}
 

@@ -6,8 +6,8 @@
 //! and a stdout sink, runs for 2 seconds, then shuts down. In a real app
 //! you would configure actual sources (postgres, http, graphql, etc).
 
-use oversync::config::{SinkDef, SyncConfig, SurrealDbDef};
 use oversync::OversyncEngine;
+use oversync::config::{SinkDef, SurrealDbDef, SyncConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

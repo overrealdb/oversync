@@ -10,9 +10,7 @@ pub fn apply_auth(
 	match auth {
 		Some(AuthConfig::Bearer { token }) => req.bearer_auth(token),
 		Some(AuthConfig::Header { name, value }) => req.header(name, value),
-		Some(AuthConfig::Basic { username, password }) => {
-			req.basic_auth(username, Some(password))
-		}
+		Some(AuthConfig::Basic { username, password }) => req.basic_auth(username, Some(password)),
 		None => req,
 	}
 }

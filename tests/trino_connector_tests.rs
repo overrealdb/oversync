@@ -47,7 +47,9 @@ async fn fetch_all_memory_table() {
 		.run_sql("CREATE TABLE memory.default.items (id VARCHAR, name VARCHAR, value INTEGER)")
 		.await;
 	trino
-		.run_sql("INSERT INTO memory.default.items VALUES ('a', 'alpha', 1), ('b', 'beta', 2), ('c', 'gamma', 3)")
+		.run_sql(
+			"INSERT INTO memory.default.items VALUES ('a', 'alpha', 1), ('b', 'beta', 2), ('c', 'gamma', 3)",
+		)
 		.await;
 
 	let conn = make_connector(&trino);
@@ -154,16 +156,16 @@ async fn fetch_all_decimal() {
 	let conn = make_connector(&trino);
 
 	let rows = conn
-		.fetch_all(
-			"SELECT 'k' AS id, CAST(123.45 AS DECIMAL(10,2)) AS d",
-			"id",
-		)
+		.fetch_all("SELECT 'k' AS id, CAST(123.45 AS DECIMAL(10,2)) AS d", "id")
 		.await
 		.unwrap();
 
 	// Decimal comes as string to preserve precision
 	let d = &rows[0].row_data["d"];
-	assert!(d.is_string() || d.is_number(), "decimal should be string or number: {d}");
+	assert!(
+		d.is_string() || d.is_number(),
+		"decimal should be string or number: {d}"
+	);
 }
 
 #[tokio::test]
@@ -240,7 +242,10 @@ async fn fetch_all_json_type() {
 
 	// JSON comes as string in Trino REST protocol
 	let j = &rows[0].row_data["j"];
-	assert!(j.is_string() || j.is_object(), "json should be string or object: {j}");
+	assert!(
+		j.is_string() || j.is_object(),
+		"json should be string or object: {j}"
+	);
 }
 
 // ── Large dataset ───────────────────────────────────────────
@@ -323,7 +328,10 @@ async fn query_error_returns_error() {
 	let conn = make_connector(&trino);
 
 	let result = conn
-		.fetch_all("SELECT * FROM nonexistent_catalog.nonexistent_schema.nonexistent_table", "id")
+		.fetch_all(
+			"SELECT * FROM nonexistent_catalog.nonexistent_schema.nonexistent_table",
+			"id",
+		)
 		.await;
 
 	assert!(result.is_err());

@@ -164,8 +164,17 @@ pub struct PipeConfig {
 
 /// Connector types that require Trino as a JDBC bridge.
 const TRINO_BRIDGE_CONNECTORS: &[&str] = &[
-	"mssql", "sqlserver", "oracle", "snowflake", "hive", "iceberg",
-	"teradata", "db2", "sap_hana", "greenplum", "redshift",
+	"mssql",
+	"sqlserver",
+	"oracle",
+	"snowflake",
+	"hive",
+	"iceberg",
+	"teradata",
+	"db2",
+	"sap_hana",
+	"greenplum",
+	"redshift",
 ];
 
 /// Origin connector configuration within a pipe.
@@ -318,10 +327,7 @@ pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
 		if pipe.schedule.interval_secs == 0 {
 			issues.push(ConfigIssue {
 				severity: Severity::Error,
-				message: format!(
-					"pipe '{}': interval_secs is 0 (would busy-loop)",
-					pipe.name
-				),
+				message: format!("pipe '{}': interval_secs is 0 (would busy-loop)", pipe.name),
 			});
 		}
 
@@ -396,9 +402,7 @@ pub fn expand_env_vars(input: &str) -> Result<String, OversyncError> {
 					var_expr.push(c);
 				}
 				if !found_close {
-					return Err(OversyncError::Config(
-						"unclosed ${...} in config".into(),
-					));
+					return Err(OversyncError::Config("unclosed ${...} in config".into()));
 				}
 
 				let (var_name, default_val) = if let Some(pos) = var_expr.find(":-") {
@@ -444,6 +448,7 @@ impl SyncConfig {
 	}
 
 	/// Parse config from a TOML string (no env var expansion).
+	#[allow(clippy::should_implement_trait)]
 	pub fn from_str(toml_str: &str) -> Result<Self, OversyncError> {
 		toml::from_str(toml_str).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
@@ -920,14 +925,20 @@ sinks = ["kafka-main"]
 		assert_eq!(pipe.origin.connector, "postgres");
 		assert_eq!(pipe.origin.config["ssl_mode"], "require");
 		assert_eq!(pipe.schedule.interval_secs, 60);
-		assert!(matches!(pipe.schedule.missed_tick_policy, MissedTickPolicy::Burst));
+		assert!(matches!(
+			pipe.schedule.missed_tick_policy,
+			MissedTickPolicy::Burst
+		));
 		assert!(matches!(pipe.delta.diff_mode, DiffMode::Memory));
 		assert_eq!(pipe.delta.fail_safe_threshold, 25.0);
 		assert_eq!(pipe.retry.max_retries, 5);
 		assert_eq!(pipe.retry.retry_base_delay_secs, 10);
 		assert_eq!(pipe.queries.len(), 2);
 		assert_eq!(pipe.queries[0].transform.as_deref(), Some("smt::normalize"));
-		assert_eq!(pipe.queries[1].sinks.as_deref(), Some(["kafka-main".to_string()].as_slice()));
+		assert_eq!(
+			pipe.queries[1].sinks.as_deref(),
+			Some(["kafka-main".to_string()].as_slice())
+		);
 	}
 
 	#[test]
@@ -1067,13 +1078,19 @@ dsn = "mysql://new"
 		assert_eq!(pipe.origin.dsn, "postgres://localhost/db");
 		assert_eq!(pipe.origin.config["ssl"], true);
 		assert_eq!(pipe.schedule.interval_secs, 120);
-		assert!(matches!(pipe.schedule.missed_tick_policy, MissedTickPolicy::Burst));
+		assert!(matches!(
+			pipe.schedule.missed_tick_policy,
+			MissedTickPolicy::Burst
+		));
 		assert!(matches!(pipe.delta.diff_mode, DiffMode::Memory));
 		assert_eq!(pipe.delta.fail_safe_threshold, 20.0);
 		assert_eq!(pipe.retry.max_retries, 5);
 		assert_eq!(pipe.retry.retry_base_delay_secs, 10);
 		assert_eq!(pipe.queries.len(), 1);
-		assert_eq!(pipe.queries[0].sinks.as_deref(), Some(&["kafka".to_string()][..]));
+		assert_eq!(
+			pipe.queries[0].sinks.as_deref(),
+			Some(&["kafka".to_string()][..])
+		);
 		assert!(pipe.targets.is_empty());
 		assert!(pipe.enabled);
 	}
@@ -1162,7 +1179,10 @@ trino_url = "http://domain-trino:8080"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let pipe = &config.pipes[0];
-		assert_eq!(pipe.origin.trino_url.as_deref(), Some("http://domain-trino:8080"));
+		assert_eq!(
+			pipe.origin.trino_url.as_deref(),
+			Some("http://domain-trino:8080")
+		);
 		assert!(pipe.origin.needs_trino_bridge());
 	}
 
@@ -1196,7 +1216,10 @@ field = "name"
 		let chain = oversync_transforms::parse_steps(&config.pipes[0].transforms).unwrap();
 		let mut data = serde_json::json!({"old_name": "alice", "name": "bob"});
 		chain.apply_one(&mut data).unwrap();
-		assert_eq!(data, serde_json::json!({"new_name": "alice", "name": "BOB"}));
+		assert_eq!(
+			data,
+			serde_json::json!({"new_name": "alice", "name": "BOB"})
+		);
 	}
 
 	// ── Env var expansion tests ──────────────────────────────────
@@ -1278,9 +1301,10 @@ password = "${OVERSYNC_TEST_DB_PASS:-secret}"
 	fn env_expand_multiple_vars_in_one_line() {
 		unsafe { std::env::set_var("OVERSYNC_TEST_HOST", "db.prod") };
 		unsafe { std::env::set_var("OVERSYNC_TEST_DBPORT", "5432") };
-		let result =
-			expand_env_vars("dsn = \"postgres://${OVERSYNC_TEST_HOST}:${OVERSYNC_TEST_DBPORT}/app\"")
-				.unwrap();
+		let result = expand_env_vars(
+			"dsn = \"postgres://${OVERSYNC_TEST_HOST}:${OVERSYNC_TEST_DBPORT}/app\"",
+		)
+		.unwrap();
 		assert_eq!(result, "dsn = \"postgres://db.prod:5432/app\"");
 		unsafe { std::env::remove_var("OVERSYNC_TEST_HOST") };
 		unsafe { std::env::remove_var("OVERSYNC_TEST_DBPORT") };
@@ -1319,7 +1343,11 @@ key_column = "id"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		assert!(issues.is_empty(), "expected no issues, got: {:?}", issues.iter().map(|i| &i.message).collect::<Vec<_>>());
+		assert!(
+			issues.is_empty(),
+			"expected no issues, got: {:?}",
+			issues.iter().map(|i| &i.message).collect::<Vec<_>>()
+		);
 	}
 
 	#[test]
@@ -1340,7 +1368,11 @@ interval_secs = 0
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("interval_secs is 0")));
+		assert!(
+			issues
+				.iter()
+				.any(|i| i.severity == Severity::Error && i.message.contains("interval_secs is 0"))
+		);
 	}
 
 	#[test]
@@ -1359,7 +1391,11 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("nonexistent")));
+		assert!(
+			issues
+				.iter()
+				.any(|i| i.severity == Severity::Error && i.message.contains("nonexistent"))
+		);
 	}
 
 	#[test]
@@ -1377,7 +1413,11 @@ dsn = ""
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("dsn is empty")));
+		assert!(
+			issues
+				.iter()
+				.any(|i| i.severity == Severity::Error && i.message.contains("dsn is empty"))
+		);
 	}
 
 	#[test]
@@ -1395,7 +1435,11 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		assert!(issues.iter().any(|i| i.severity == Severity::Warning && i.message.contains("no queries")));
+		assert!(
+			issues
+				.iter()
+				.any(|i| i.severity == Severity::Warning && i.message.contains("no queries"))
+		);
 	}
 
 	#[test]
@@ -1419,14 +1463,28 @@ sinks = ["missing-sink"]
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		assert!(issues.iter().any(|i| i.severity == Severity::Error && i.message.contains("missing-sink")));
+		assert!(
+			issues
+				.iter()
+				.any(|i| i.severity == Severity::Error && i.message.contains("missing-sink"))
+		);
 	}
 
 	// ── Auto-routing tests ──────────────────────────────────────
 
 	#[test]
 	fn native_connectors_recognized() {
-		for connector in &["postgres", "mysql", "http", "graphql", "clickhouse", "flight_sql", "flight-sql", "mcp", "trino"] {
+		for connector in &[
+			"postgres",
+			"mysql",
+			"http",
+			"graphql",
+			"clickhouse",
+			"flight_sql",
+			"flight-sql",
+			"mcp",
+			"trino",
+		] {
 			let origin = OriginDef {
 				connector: connector.to_string(),
 				dsn: "test://".into(),
@@ -1440,7 +1498,15 @@ sinks = ["missing-sink"]
 
 	#[test]
 	fn non_native_connectors_detected() {
-		for connector in &["mssql", "oracle", "snowflake", "hive", "iceberg", "teradata", "db2"] {
+		for connector in &[
+			"mssql",
+			"oracle",
+			"snowflake",
+			"hive",
+			"iceberg",
+			"teradata",
+			"db2",
+		] {
 			let origin = OriginDef {
 				connector: connector.to_string(),
 				dsn: "test://".into(),
@@ -1448,7 +1514,10 @@ sinks = ["missing-sink"]
 				trino_url: None,
 				config: serde_json::Value::Null,
 			};
-			assert!(origin.needs_trino_bridge(), "{connector} should need Trino bridge");
+			assert!(
+				origin.needs_trino_bridge(),
+				"{connector} should need Trino bridge"
+			);
 		}
 	}
 
@@ -1461,7 +1530,10 @@ sinks = ["missing-sink"]
 			trino_url: None,
 			config: serde_json::Value::Null,
 		};
-		assert!(!origin.needs_trino_bridge(), "unknown custom connectors should NOT need Trino bridge");
+		assert!(
+			!origin.needs_trino_bridge(),
+			"unknown custom connectors should NOT need Trino bridge"
+		);
 	}
 
 	#[test]
@@ -1482,7 +1554,10 @@ interval_secs = 0
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		let errors: Vec<_> = issues.iter().filter(|i| i.severity == Severity::Error).collect();
+		let errors: Vec<_> = issues
+			.iter()
+			.filter(|i| i.severity == Severity::Error)
+			.collect();
 		assert!(!errors.is_empty(), "should have error for zero interval");
 		assert!(errors[0].message.contains("interval_secs is 0"));
 	}
@@ -1502,10 +1577,16 @@ dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		let issues = validate_config(&config);
-		let warnings: Vec<_> = issues.iter().filter(|i| i.severity == Severity::Warning).collect();
+		let warnings: Vec<_> = issues
+			.iter()
+			.filter(|i| i.severity == Severity::Warning)
+			.collect();
 		assert!(!warnings.is_empty());
 		// Warnings don't block — only errors do
-		let errors: Vec<_> = issues.iter().filter(|i| i.severity == Severity::Error).collect();
+		let errors: Vec<_> = issues
+			.iter()
+			.filter(|i| i.severity == Severity::Error)
+			.collect();
 		assert!(errors.is_empty());
 	}
 }

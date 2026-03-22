@@ -1,8 +1,8 @@
 mod common;
 
 use common::surreal::TestSurrealContainer;
-use oversync::config::{SinkDef, SyncConfig};
 use oversync::OversyncEngine;
+use oversync::config::{SinkDef, SyncConfig};
 
 fn make_config(container: &TestSurrealContainer) -> SyncConfig {
 	SyncConfig {
@@ -121,12 +121,16 @@ async fn engine_start_from_db() {
 	// Insert config into DB
 	container
 		.client
-		.query("CREATE source_config SET name = 'test-src', connector = 'stdout', config = {}, enabled = true")
+		.query(
+			"CREATE source_config SET name = 'test-src', connector = 'stdout', config = {}, enabled = true",
+		)
 		.await
 		.unwrap();
 	container
 		.client
-		.query("CREATE sink_config SET name = 'test-sink', sink_type = 'stdout', config = {}, enabled = true")
+		.query(
+			"CREATE sink_config SET name = 'test-sink', sink_type = 'stdout', config = {}, enabled = true",
+		)
 		.await
 		.unwrap();
 

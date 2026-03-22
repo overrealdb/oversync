@@ -26,7 +26,11 @@ async fn surrealdb_sink_upserts_created_event() {
 	let surreal = TestSurrealContainer::new_raw().await;
 	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "synced_items");
 
-	let envelope = make_envelope("item_1", OpType::Created, serde_json::json!({"name": "alpha", "val": 42}));
+	let envelope = make_envelope(
+		"item_1",
+		OpType::Created,
+		serde_json::json!({"name": "alpha", "val": 42}),
+	);
 	sink.send_event(&envelope).await.unwrap();
 
 	let mut res = surreal
@@ -47,10 +51,18 @@ async fn surrealdb_sink_upserts_updated_event() {
 	let surreal = TestSurrealContainer::new_raw().await;
 	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "synced_items");
 
-	let create = make_envelope("item_1", OpType::Created, serde_json::json!({"name": "alpha"}));
+	let create = make_envelope(
+		"item_1",
+		OpType::Created,
+		serde_json::json!({"name": "alpha"}),
+	);
 	sink.send_event(&create).await.unwrap();
 
-	let update = make_envelope("item_1", OpType::Updated, serde_json::json!({"name": "alpha_v2"}));
+	let update = make_envelope(
+		"item_1",
+		OpType::Updated,
+		serde_json::json!({"name": "alpha_v2"}),
+	);
 	sink.send_event(&update).await.unwrap();
 
 	let mut res = surreal
@@ -69,7 +81,11 @@ async fn surrealdb_sink_handles_deleted_event() {
 	let surreal = TestSurrealContainer::new_raw().await;
 	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "synced_items");
 
-	let create = make_envelope("item_1", OpType::Created, serde_json::json!({"name": "alpha"}));
+	let create = make_envelope(
+		"item_1",
+		OpType::Created,
+		serde_json::json!({"name": "alpha"}),
+	);
 	sink.send_event(&create).await.unwrap();
 
 	let delete = make_envelope("item_1", OpType::Deleted, serde_json::Value::Null);

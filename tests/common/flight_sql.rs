@@ -22,7 +22,10 @@ async fn shared_trino() -> &'static SharedTrinoContainer {
 				.expect("failed to start trino container");
 
 			let host = container.get_host().await.expect("trino host");
-			let port = container.get_host_port_ipv4(8080).await.expect("trino port");
+			let port = container
+				.get_host_port_ipv4(8080)
+				.await
+				.expect("trino port");
 
 			// Wait for Trino to be ready
 			let client = reqwest::Client::new();
@@ -79,7 +82,10 @@ impl TestFlightSql {
 		let body: serde_json::Value = resp.json().await.unwrap();
 
 		// Follow nextUri until query completes
-		let mut next_uri = body.get("nextUri").and_then(|v| v.as_str()).map(String::from);
+		let mut next_uri = body
+			.get("nextUri")
+			.and_then(|v| v.as_str())
+			.map(String::from);
 		while let Some(uri) = next_uri {
 			tokio::time::sleep(Duration::from_millis(200)).await;
 			let resp = client
@@ -92,7 +98,10 @@ impl TestFlightSql {
 			if let Some(err) = body.get("error") {
 				panic!("trino query error: {err}\nSQL: {sql}");
 			}
-			next_uri = body.get("nextUri").and_then(|v| v.as_str()).map(String::from);
+			next_uri = body
+				.get("nextUri")
+				.and_then(|v| v.as_str())
+				.map(String::from);
 		}
 	}
 }

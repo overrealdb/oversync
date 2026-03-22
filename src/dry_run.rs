@@ -121,10 +121,12 @@ pub async fn execute_dry_run(
 		}
 		DryRunMode::Live => {
 			let connector = create_connector(&req.pipe, registry, req.credentials.as_ref()).await?;
-			let limited_sql = format!("{} LIMIT {}", query.sql.trim().trim_end_matches(';'), req.row_limit);
-			connector
-				.fetch_all(&limited_sql, &query.key_column)
-				.await?
+			let limited_sql = format!(
+				"{} LIMIT {}",
+				query.sql.trim().trim_end_matches(';'),
+				req.row_limit
+			);
+			connector.fetch_all(&limited_sql, &query.key_column).await?
 		}
 	};
 
@@ -232,34 +234,60 @@ async fn create_connector(
 			"postgres" | "mysql" => {
 				// Native: inject user:pass into DSN
 				if let Some(dsn) = map.get("dsn").and_then(|v| v.as_str()) {
-					let injected = inject_credentials_into_dsn(dsn, &creds.username, &creds.password);
+					let injected =
+						inject_credentials_into_dsn(dsn, &creds.username, &creds.password);
 					map.insert("dsn".into(), serde_json::Value::String(injected));
 				}
 			}
 			_ => {
 				// Generic: add as top-level config fields
-				map.insert("username".into(), serde_json::Value::String(creds.username.clone()));
-				map.insert("password".into(), serde_json::Value::String(creds.password.clone()));
+				map.insert(
+					"username".into(),
+					serde_json::Value::String(creds.username.clone()),
+				);
+				map.insert(
+					"password".into(),
+					serde_json::Value::String(creds.password.clone()),
+				);
 			}
 		}
 	}
 
 	// Auto-route non-native connectors through Trino
 	let (effective_connector, config) = if !pipe.origin.needs_trino_bridge() {
-		(pipe.origin.connector.as_str(), serde_json::Value::Object(map))
+		(
+			pipe.origin.connector.as_str(),
+			serde_json::Value::Object(map),
+		)
 	} else {
-		let trino_url = pipe.origin.trino_url.as_deref().unwrap_or("http://localhost:8080");
+		let trino_url = pipe
+			.origin
+			.trino_url
+			.as_deref()
+			.unwrap_or("http://localhost:8080");
 		// Merge credentials into Trino config
 		if let Some(creds) = credentials {
 			map.clear();
-			map.insert("dsn".into(), serde_json::Value::String(trino_url.to_string()));
-			map.insert("catalog".into(), serde_json::Value::String(pipe.origin.connector.clone()));
+			map.insert(
+				"dsn".into(),
+				serde_json::Value::String(trino_url.to_string()),
+			);
+			map.insert(
+				"catalog".into(),
+				serde_json::Value::String(pipe.origin.connector.clone()),
+			);
 			let extra = serde_json::json!({"username": creds.username, "password": creds.password});
 			map.insert("extra_credentials".into(), extra);
 		} else {
 			map.clear();
-			map.insert("dsn".into(), serde_json::Value::String(trino_url.to_string()));
-			map.insert("catalog".into(), serde_json::Value::String(pipe.origin.connector.clone()));
+			map.insert(
+				"dsn".into(),
+				serde_json::Value::String(trino_url.to_string()),
+			);
+			map.insert(
+				"catalog".into(),
+				serde_json::Value::String(pipe.origin.connector.clone()),
+			);
 		}
 		("trino", serde_json::Value::Object(map))
 	};
@@ -272,7 +300,12 @@ async fn create_connector(
 fn inject_credentials_into_dsn(dsn: &str, username: &str, password: &str) -> String {
 	if let Some(rest) = dsn.strip_prefix("postgres://") {
 		if let Some(at_pos) = rest.find('@') {
-			return format!("postgres://{}:{}@{}", username, password, &rest[at_pos + 1..]);
+			return format!(
+				"postgres://{}:{}@{}",
+				username,
+				password,
+				&rest[at_pos + 1..]
+			);
 		}
 		return format!("postgres://{}:{}@{}", username, password, rest);
 	}
@@ -387,7 +420,9 @@ mod tests {
 		use oversync_transforms::{StepChain, steps};
 
 		let chain = StepChain::new(vec![
-			Box::new(steps::Upper { field: "name".into() }),
+			Box::new(steps::Upper {
+				field: "name".into(),
+			}),
 			Box::new(steps::Set {
 				field: "version".into(),
 				value: serde_json::json!(1),
@@ -461,7 +496,9 @@ mod tests {
 		};
 
 		let registry = PluginRegistry::new();
-		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
+		let err = execute_dry_run(&req, &registry, None, None)
+			.await
+			.unwrap_err();
 		assert!(err.to_string().contains("mock_data"));
 	}
 
@@ -479,7 +516,9 @@ mod tests {
 		};
 
 		let registry = PluginRegistry::new();
-		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
+		let err = execute_dry_run(&req, &registry, None, None)
+			.await
+			.unwrap_err();
 		assert!(err.to_string().contains("nonexistent"));
 	}
 
@@ -546,7 +585,11 @@ mod tests {
 		let result = DryRunResult {
 			input_rows: 0,
 			input_sample: vec![],
-			changes: DryRunChanges { created: 0, updated: 0, deleted: 0 },
+			changes: DryRunChanges {
+				created: 0,
+				updated: 0,
+				deleted: 0,
+			},
 			after_transform: vec![],
 			stats: DryRunStats {
 				rows_fetched: 0,
@@ -582,7 +625,9 @@ mod tests {
 		let registry = PluginRegistry::new();
 		// Will fail because registry has no "trino" connector registered,
 		// but the error proves routing happened: "unknown source type: trino"
-		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
+		let err = execute_dry_run(&req, &registry, None, None)
+			.await
+			.unwrap_err();
 		let msg = err.to_string();
 		assert!(
 			msg.contains("trino"),
@@ -608,7 +653,9 @@ mod tests {
 		};
 
 		let registry = PluginRegistry::new();
-		let err = execute_dry_run(&req, &registry, None, None).await.unwrap_err();
+		let err = execute_dry_run(&req, &registry, None, None)
+			.await
+			.unwrap_err();
 		let msg = err.to_string();
 		// Should fail with "unknown source type: postgres" (not trino)
 		assert!(

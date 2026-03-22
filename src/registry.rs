@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use oversync_core::error::OversyncError;
-use oversync_core::traits::{Sink, TargetFactory, OriginConnector, OriginFactory};
+use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TargetFactory};
 
 #[derive(Clone)]
 pub struct PluginRegistry {

@@ -6,9 +6,9 @@ use axum::routing::post;
 use axum::{Json, Router};
 use tokio::net::TcpListener;
 
+use oversync_connectors::GraphqlOriginFactory;
 use oversync_connectors::graphql::{GraphqlConfig, GraphqlConnector, GraphqlPagination};
 use oversync_connectors::http_common::AuthConfig;
-use oversync_connectors::GraphqlOriginFactory;
 use oversync_core::traits::{OriginConnector, OriginFactory};
 
 async fn start_server(app: Router) -> String {
@@ -84,7 +84,10 @@ async fn nested_response_path() {
 	let connector = GraphqlConnector::new("test", config).unwrap();
 
 	let rows = connector
-		.fetch_all("query { organization { repos { nodes { id name } } } }", "id")
+		.fetch_all(
+			"query { organization { repos { nodes { id name } } } }",
+			"id",
+		)
 		.await
 		.unwrap();
 	assert_eq!(rows.len(), 3);
@@ -112,12 +115,7 @@ async fn relay_cursor_pagination_fetches_all_pages() {
 					.and_then(|s| s.parse::<usize>().ok())
 					.unwrap_or(0);
 				let page_size = 3;
-				let page: Vec<_> = items
-					.iter()
-					.skip(cursor)
-					.take(page_size)
-					.cloned()
-					.collect();
+				let page: Vec<_> = items.iter().skip(cursor).take(page_size).cloned().collect();
 				let has_next = cursor + page_size < items.len();
 				let end_cursor = if has_next {
 					serde_json::json!((cursor + page_size).to_string())
@@ -187,10 +185,7 @@ async fn auth_headers_forwarded() {
 	});
 	let connector = GraphqlConnector::new("test", config).unwrap();
 
-	let rows = connector
-		.fetch_all("{ items { id } }", "id")
-		.await
-		.unwrap();
+	let rows = connector.fetch_all("{ items { id } }", "id").await.unwrap();
 	assert_eq!(rows.len(), 1);
 	assert_eq!(rows[0].row_key, "ok");
 }
@@ -254,10 +249,7 @@ async fn empty_response_returns_empty_rows() {
 	config.response_path = Some("data.items".into());
 	let connector = GraphqlConnector::new("test", config).unwrap();
 
-	let rows = connector
-		.fetch_all("{ items { id } }", "id")
-		.await
-		.unwrap();
+	let rows = connector.fetch_all("{ items { id } }", "id").await.unwrap();
 	assert!(rows.is_empty());
 }
 
@@ -278,7 +270,12 @@ async fn missing_key_column_errors() {
 
 	let result = connector.fetch_all("{ items { name } }", "id").await;
 	assert!(result.is_err());
-	assert!(result.unwrap_err().to_string().contains("missing key field"));
+	assert!(
+		result
+			.unwrap_err()
+			.to_string()
+			.contains("missing key field")
+	);
 }
 
 #[tokio::test]
@@ -301,10 +298,7 @@ async fn custom_headers_forwarded() {
 	config.headers.insert("X-Custom".into(), "test-val".into());
 	let connector = GraphqlConnector::new("test", config).unwrap();
 
-	let rows = connector
-		.fetch_all("{ items { id } }", "id")
-		.await
-		.unwrap();
+	let rows = connector.fetch_all("{ items { id } }", "id").await.unwrap();
 	assert_eq!(rows[0].row_key, "test-val");
 }
 
@@ -365,9 +359,6 @@ async fn factory_creates_graphql_connector() {
 	let connector = factory.create("test-gql", &config).await.unwrap();
 	assert_eq!(connector.name(), "test-gql");
 
-	let rows = connector
-		.fetch_all("{ nodes { id } }", "id")
-		.await
-		.unwrap();
+	let rows = connector.fetch_all("{ nodes { id } }", "id").await.unwrap();
 	assert_eq!(rows.len(), 1);
 }

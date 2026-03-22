@@ -10,10 +10,10 @@ pub struct Rename {
 
 impl TransformStep for Rename {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.remove(&self.from) {
-				obj.insert(self.to.clone(), val);
-			}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.remove(&self.from)
+		{
+			obj.insert(self.to.clone(), val);
 		}
 		Ok(true)
 	}
@@ -49,12 +49,11 @@ pub struct Upper {
 
 impl TransformStep for Upper {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.get_mut(&self.field) {
-				if let Some(s) = val.as_str() {
-					*val = serde_json::Value::String(s.to_uppercase());
-				}
-			}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.get_mut(&self.field)
+			&& let Some(s) = val.as_str()
+		{
+			*val = serde_json::Value::String(s.to_uppercase());
 		}
 		Ok(true)
 	}
@@ -71,12 +70,11 @@ pub struct Lower {
 
 impl TransformStep for Lower {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.get_mut(&self.field) {
-				if let Some(s) = val.as_str() {
-					*val = serde_json::Value::String(s.to_lowercase());
-				}
-			}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.get_mut(&self.field)
+			&& let Some(s) = val.as_str()
+		{
+			*val = serde_json::Value::String(s.to_lowercase());
 		}
 		Ok(true)
 	}
@@ -112,10 +110,10 @@ pub struct Copy {
 
 impl TransformStep for Copy {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.get(&self.from).cloned() {
-				obj.insert(self.to.clone(), val);
-			}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.get(&self.from).cloned()
+		{
+			obj.insert(self.to.clone(), val);
 		}
 		Ok(true)
 	}
@@ -217,15 +215,15 @@ pub struct MapValue {
 
 impl TransformStep for MapValue {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.get(&self.field) {
-				let key = match val {
-					serde_json::Value::String(s) => s.clone(),
-					other => other.to_string(),
-				};
-				if let Some(replacement) = self.mapping.get(&key) {
-					obj.insert(self.field.clone(), replacement.clone());
-				}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.get(&self.field)
+		{
+			let key = match val {
+				serde_json::Value::String(s) => s.clone(),
+				other => other.to_string(),
+			};
+			if let Some(replacement) = self.mapping.get(&key) {
+				obj.insert(self.field.clone(), replacement.clone());
 			}
 		}
 		Ok(true)
@@ -244,15 +242,13 @@ pub struct Truncate {
 
 impl TransformStep for Truncate {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.get_mut(&self.field) {
-				if let Some(s) = val.as_str() {
-					if s.chars().count() > self.max_len {
-						let truncated: String = s.chars().take(self.max_len).collect();
-						*val = serde_json::Value::String(truncated);
-					}
-				}
-			}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.get_mut(&self.field)
+			&& let Some(s) = val.as_str()
+			&& s.chars().count() > self.max_len
+		{
+			let truncated: String = s.chars().take(self.max_len).collect();
+			*val = serde_json::Value::String(truncated);
 		}
 		Ok(true)
 	}
@@ -296,11 +292,11 @@ pub struct Flatten {
 
 impl TransformStep for Flatten {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(serde_json::Value::Object(nested)) = obj.remove(&self.field) {
-				for (k, v) in nested {
-					obj.insert(k, v);
-				}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(serde_json::Value::Object(nested)) = obj.remove(&self.field)
+		{
+			for (k, v) in nested {
+				obj.insert(k, v);
 			}
 		}
 		Ok(true)
@@ -318,16 +314,16 @@ pub struct Hash {
 
 impl TransformStep for Hash {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
-		if let Some(obj) = data.as_object_mut() {
-			if let Some(val) = obj.get(&self.field) {
-				let input = match val {
-					serde_json::Value::String(s) => s.clone(),
-					other => other.to_string(),
-				};
-				use sha2::{Digest, Sha256};
-				let hash = hex::encode(Sha256::digest(input.as_bytes()));
-				obj.insert(self.field.clone(), serde_json::Value::String(hash));
-			}
+		if let Some(obj) = data.as_object_mut()
+			&& let Some(val) = obj.get(&self.field)
+		{
+			let input = match val {
+				serde_json::Value::String(s) => s.clone(),
+				other => other.to_string(),
+			};
+			use sha2::{Digest, Sha256};
+			let hash = hex::encode(Sha256::digest(input.as_bytes()));
+			obj.insert(self.field.clone(), serde_json::Value::String(hash));
 		}
 		Ok(true)
 	}
@@ -347,12 +343,12 @@ impl TransformStep for Coalesce {
 	fn apply(&self, data: &mut serde_json::Value) -> Result<bool, OversyncError> {
 		if let Some(obj) = data.as_object_mut() {
 			for field in &self.fields {
-				if let Some(val) = obj.get(field) {
-					if !val.is_null() {
-						let v = val.clone();
-						obj.insert(self.into.clone(), v);
-						return Ok(true);
-					}
+				if let Some(val) = obj.get(field)
+					&& !val.is_null()
+				{
+					let v = val.clone();
+					obj.insert(self.into.clone(), v);
+					return Ok(true);
 				}
 			}
 		}
@@ -405,10 +401,7 @@ impl TransformStep for SchemaFilter {
 	}
 }
 
-fn json_cmp(
-	a: &serde_json::Value,
-	b: &serde_json::Value,
-) -> Option<std::cmp::Ordering> {
+fn json_cmp(a: &serde_json::Value, b: &serde_json::Value) -> Option<std::cmp::Ordering> {
 	match (a, b) {
 		(serde_json::Value::Number(a), serde_json::Value::Number(b)) => {
 			a.as_f64()?.partial_cmp(&b.as_f64()?)
@@ -425,7 +418,10 @@ mod tests {
 	#[test]
 	fn rename_moves_field() {
 		let mut data = serde_json::json!({"old_name": "alice"});
-		let step = Rename { from: "old_name".into(), to: "new_name".into() };
+		let step = Rename {
+			from: "old_name".into(),
+			to: "new_name".into(),
+		};
 		assert!(step.apply(&mut data).unwrap());
 		assert_eq!(data, serde_json::json!({"new_name": "alice"}));
 	}
@@ -433,7 +429,10 @@ mod tests {
 	#[test]
 	fn rename_missing_field_is_noop() {
 		let mut data = serde_json::json!({"x": 1});
-		let step = Rename { from: "missing".into(), to: "y".into() };
+		let step = Rename {
+			from: "missing".into(),
+			to: "y".into(),
+		};
 		assert!(step.apply(&mut data).unwrap());
 		assert_eq!(data, serde_json::json!({"x": 1}));
 	}
@@ -441,7 +440,10 @@ mod tests {
 	#[test]
 	fn set_adds_field() {
 		let mut data = serde_json::json!({"x": 1});
-		let step = Set { field: "version".into(), value: serde_json::json!(2) };
+		let step = Set {
+			field: "version".into(),
+			value: serde_json::json!(2),
+		};
 		step.apply(&mut data).unwrap();
 		assert_eq!(data["version"], 2);
 	}
@@ -449,7 +451,10 @@ mod tests {
 	#[test]
 	fn set_overwrites_existing() {
 		let mut data = serde_json::json!({"x": 1});
-		let step = Set { field: "x".into(), value: serde_json::json!(99) };
+		let step = Set {
+			field: "x".into(),
+			value: serde_json::json!(99),
+		};
 		step.apply(&mut data).unwrap();
 		assert_eq!(data["x"], 99);
 	}
@@ -457,42 +462,67 @@ mod tests {
 	#[test]
 	fn upper_converts_string() {
 		let mut data = serde_json::json!({"name": "alice"});
-		Upper { field: "name".into() }.apply(&mut data).unwrap();
+		Upper {
+			field: "name".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["name"], "ALICE");
 	}
 
 	#[test]
 	fn upper_ignores_non_string() {
 		let mut data = serde_json::json!({"count": 42});
-		Upper { field: "count".into() }.apply(&mut data).unwrap();
+		Upper {
+			field: "count".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["count"], 42);
 	}
 
 	#[test]
 	fn lower_converts_string() {
 		let mut data = serde_json::json!({"name": "ALICE"});
-		Lower { field: "name".into() }.apply(&mut data).unwrap();
+		Lower {
+			field: "name".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["name"], "alice");
 	}
 
 	#[test]
 	fn remove_deletes_field() {
 		let mut data = serde_json::json!({"x": 1, "secret": "password"});
-		Remove { field: "secret".into() }.apply(&mut data).unwrap();
+		Remove {
+			field: "secret".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data, serde_json::json!({"x": 1}));
 	}
 
 	#[test]
 	fn remove_missing_is_noop() {
 		let mut data = serde_json::json!({"x": 1});
-		Remove { field: "missing".into() }.apply(&mut data).unwrap();
+		Remove {
+			field: "missing".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data, serde_json::json!({"x": 1}));
 	}
 
 	#[test]
 	fn copy_duplicates_value() {
 		let mut data = serde_json::json!({"src": "hello"});
-		Copy { from: "src".into(), to: "dst".into() }.apply(&mut data).unwrap();
+		Copy {
+			from: "src".into(),
+			to: "dst".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["src"], "hello");
 		assert_eq!(data["dst"], "hello");
 	}
@@ -500,56 +530,92 @@ mod tests {
 	#[test]
 	fn copy_missing_source_is_noop() {
 		let mut data = serde_json::json!({"x": 1});
-		Copy { from: "missing".into(), to: "dst".into() }.apply(&mut data).unwrap();
+		Copy {
+			from: "missing".into(),
+			to: "dst".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert!(!data.as_object().unwrap().contains_key("dst"));
 	}
 
 	#[test]
 	fn default_sets_when_absent() {
 		let mut data = serde_json::json!({"x": 1});
-		Default { field: "y".into(), value: serde_json::json!(42) }.apply(&mut data).unwrap();
+		Default {
+			field: "y".into(),
+			value: serde_json::json!(42),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["y"], 42);
 	}
 
 	#[test]
 	fn default_sets_when_null() {
 		let mut data = serde_json::json!({"x": null});
-		Default { field: "x".into(), value: serde_json::json!(0) }.apply(&mut data).unwrap();
+		Default {
+			field: "x".into(),
+			value: serde_json::json!(0),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["x"], 0);
 	}
 
 	#[test]
 	fn default_skips_when_present() {
 		let mut data = serde_json::json!({"x": 99});
-		Default { field: "x".into(), value: serde_json::json!(0) }.apply(&mut data).unwrap();
+		Default {
+			field: "x".into(),
+			value: serde_json::json!(0),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["x"], 99);
 	}
 
 	#[test]
 	fn filter_eq_keeps() {
 		let mut data = serde_json::json!({"status": "active"});
-		let step = Filter { field: "status".into(), op: FilterOp::Eq, value: serde_json::json!("active") };
+		let step = Filter {
+			field: "status".into(),
+			op: FilterOp::Eq,
+			value: serde_json::json!("active"),
+		};
 		assert!(step.apply(&mut data).unwrap());
 	}
 
 	#[test]
 	fn filter_eq_drops() {
 		let mut data = serde_json::json!({"status": "inactive"});
-		let step = Filter { field: "status".into(), op: FilterOp::Eq, value: serde_json::json!("active") };
+		let step = Filter {
+			field: "status".into(),
+			op: FilterOp::Eq,
+			value: serde_json::json!("active"),
+		};
 		assert!(!step.apply(&mut data).unwrap());
 	}
 
 	#[test]
 	fn filter_ne() {
 		let mut data = serde_json::json!({"status": "active"});
-		let step = Filter { field: "status".into(), op: FilterOp::Ne, value: serde_json::json!("deleted") };
+		let step = Filter {
+			field: "status".into(),
+			op: FilterOp::Ne,
+			value: serde_json::json!("deleted"),
+		};
 		assert!(step.apply(&mut data).unwrap());
 	}
 
 	#[test]
 	fn filter_gt_numeric() {
 		let mut data = serde_json::json!({"score": 80});
-		let step = Filter { field: "score".into(), op: FilterOp::Gt, value: serde_json::json!(50) };
+		let step = Filter {
+			field: "score".into(),
+			op: FilterOp::Gt,
+			value: serde_json::json!(50),
+		};
 		assert!(step.apply(&mut data).unwrap());
 
 		let mut data2 = serde_json::json!({"score": 30});
@@ -559,14 +625,22 @@ mod tests {
 	#[test]
 	fn filter_contains_string() {
 		let mut data = serde_json::json!({"email": "alice@example.com"});
-		let step = Filter { field: "email".into(), op: FilterOp::Contains, value: serde_json::json!("@example") };
+		let step = Filter {
+			field: "email".into(),
+			op: FilterOp::Contains,
+			value: serde_json::json!("@example"),
+		};
 		assert!(step.apply(&mut data).unwrap());
 	}
 
 	#[test]
 	fn filter_exists() {
 		let mut data = serde_json::json!({"name": "alice"});
-		let step = Filter { field: "name".into(), op: FilterOp::Exists, value: serde_json::json!(null) };
+		let step = Filter {
+			field: "name".into(),
+			op: FilterOp::Exists,
+			value: serde_json::json!(null),
+		};
 		assert!(step.apply(&mut data).unwrap());
 
 		let mut data2 = serde_json::json!({"other": 1});
@@ -576,7 +650,11 @@ mod tests {
 	#[test]
 	fn filter_missing_field_drops() {
 		let mut data = serde_json::json!({"x": 1});
-		let step = Filter { field: "y".into(), op: FilterOp::Eq, value: serde_json::json!(1) };
+		let step = Filter {
+			field: "y".into(),
+			op: FilterOp::Eq,
+			value: serde_json::json!(1),
+		};
 		assert!(!step.apply(&mut data).unwrap());
 	}
 
@@ -587,7 +665,10 @@ mod tests {
 		mapping.insert("D".into(), serde_json::json!("deleted"));
 		mapping.insert("U".into(), serde_json::json!("updated"));
 		mapping.insert("I".into(), serde_json::json!("inserted"));
-		let step = MapValue { field: "op_type".into(), mapping };
+		let step = MapValue {
+			field: "op_type".into(),
+			mapping,
+		};
 		step.apply(&mut data).unwrap();
 		assert_eq!(data["op_type"], "deleted");
 	}
@@ -597,7 +678,10 @@ mod tests {
 		let mut data = serde_json::json!({"op_type": "X"});
 		let mut mapping = serde_json::Map::new();
 		mapping.insert("D".into(), serde_json::json!("deleted"));
-		let step = MapValue { field: "op_type".into(), mapping };
+		let step = MapValue {
+			field: "op_type".into(),
+			mapping,
+		};
 		step.apply(&mut data).unwrap();
 		assert_eq!(data["op_type"], "X");
 	}
@@ -605,23 +689,36 @@ mod tests {
 	#[test]
 	fn truncate_shortens() {
 		let mut data = serde_json::json!({"desc": "a very long description text here"});
-		Truncate { field: "desc".into(), max_len: 10 }.apply(&mut data).unwrap();
+		Truncate {
+			field: "desc".into(),
+			max_len: 10,
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["desc"], "a very lon");
 	}
 
 	#[test]
 	fn truncate_short_string_unchanged() {
 		let mut data = serde_json::json!({"desc": "short"});
-		Truncate { field: "desc".into(), max_len: 100 }.apply(&mut data).unwrap();
+		Truncate {
+			field: "desc".into(),
+			max_len: 100,
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["desc"], "short");
 	}
 
 	#[test]
 	fn nest_groups_fields() {
 		let mut data = serde_json::json!({"city": "NYC", "zip": "10001", "name": "alice"});
-		Nest { fields: vec!["city".into(), "zip".into()], into: "address".into() }
-			.apply(&mut data)
-			.unwrap();
+		Nest {
+			fields: vec!["city".into(), "zip".into()],
+			into: "address".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["address"]["city"], "NYC");
 		assert_eq!(data["address"]["zip"], "10001");
 		assert_eq!(data["name"], "alice");
@@ -631,9 +728,12 @@ mod tests {
 	#[test]
 	fn nest_partial_fields() {
 		let mut data = serde_json::json!({"city": "NYC"});
-		Nest { fields: vec!["city".into(), "missing".into()], into: "addr".into() }
-			.apply(&mut data)
-			.unwrap();
+		Nest {
+			fields: vec!["city".into(), "missing".into()],
+			into: "addr".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["addr"]["city"], "NYC");
 		assert!(!data["addr"].as_object().unwrap().contains_key("missing"));
 	}
@@ -641,7 +741,11 @@ mod tests {
 	#[test]
 	fn flatten_inlines_nested() {
 		let mut data = serde_json::json!({"meta": {"source": "pg", "version": 2}, "id": 1});
-		Flatten { field: "meta".into() }.apply(&mut data).unwrap();
+		Flatten {
+			field: "meta".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["source"], "pg");
 		assert_eq!(data["version"], 2);
 		assert_eq!(data["id"], 1);
@@ -651,14 +755,22 @@ mod tests {
 	#[test]
 	fn flatten_missing_is_noop() {
 		let mut data = serde_json::json!({"id": 1});
-		Flatten { field: "meta".into() }.apply(&mut data).unwrap();
+		Flatten {
+			field: "meta".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data, serde_json::json!({"id": 1}));
 	}
 
 	#[test]
 	fn hash_sha256() {
 		let mut data = serde_json::json!({"email": "alice@example.com"});
-		Hash { field: "email".into() }.apply(&mut data).unwrap();
+		Hash {
+			field: "email".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		let hashed = data["email"].as_str().unwrap();
 		assert_eq!(hashed.len(), 64);
 		assert!(hashed.chars().all(|c| c.is_ascii_hexdigit()));
@@ -668,34 +780,47 @@ mod tests {
 	#[test]
 	fn hash_missing_is_noop() {
 		let mut data = serde_json::json!({"x": 1});
-		Hash { field: "missing".into() }.apply(&mut data).unwrap();
+		Hash {
+			field: "missing".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data, serde_json::json!({"x": 1}));
 	}
 
 	#[test]
 	fn coalesce_takes_first_non_null() {
 		let mut data = serde_json::json!({"a": null, "b": "found", "c": "also"});
-		Coalesce { fields: vec!["a".into(), "b".into(), "c".into()], into: "result".into() }
-			.apply(&mut data)
-			.unwrap();
+		Coalesce {
+			fields: vec!["a".into(), "b".into(), "c".into()],
+			into: "result".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["result"], "found");
 	}
 
 	#[test]
 	fn coalesce_all_null_no_write() {
 		let mut data = serde_json::json!({"a": null, "b": null});
-		Coalesce { fields: vec!["a".into(), "b".into()], into: "result".into() }
-			.apply(&mut data)
-			.unwrap();
+		Coalesce {
+			fields: vec!["a".into(), "b".into()],
+			into: "result".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert!(!data.as_object().unwrap().contains_key("result"));
 	}
 
 	#[test]
 	fn coalesce_missing_field_skipped() {
 		let mut data = serde_json::json!({"b": 42});
-		Coalesce { fields: vec!["missing".into(), "b".into()], into: "out".into() }
-			.apply(&mut data)
-			.unwrap();
+		Coalesce {
+			fields: vec!["missing".into(), "b".into()],
+			into: "out".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["out"], 42);
 	}
 

@@ -67,7 +67,7 @@ struct QueryResults {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TrinoColumn {
+pub(crate) struct TrinoColumn {
 	name: String,
 	#[allow(dead_code)] // Deserialized for future type-aware conversion
 	#[serde(rename = "type")]
@@ -115,15 +115,19 @@ impl TrinoClient {
 			.connect_timeout(Duration::from_secs(20))
 			.timeout(Duration::from_secs(config.timeout_secs));
 
-		if let Some(TrinoAuth::Basic { ref username, ref password }) = config.auth {
+		if let Some(TrinoAuth::Basic {
+			ref username,
+			ref password,
+		}) = config.auth
+		{
 			builder = builder.default_headers({
 				let mut h = reqwest::header::HeaderMap::new();
 				let creds = base64_encode(&format!("{username}:{password}"));
 				h.insert(
 					reqwest::header::AUTHORIZATION,
-					format!("Basic {creds}")
-						.parse()
-						.map_err(|e| OversyncError::Config(format!("trino basic auth header: {e}")))?,
+					format!("Basic {creds}").parse().map_err(|e| {
+						OversyncError::Config(format!("trino basic auth header: {e}"))
+					})?,
 				);
 				h
 			});
@@ -171,7 +175,10 @@ impl TrinoClient {
 			req = req.bearer_auth(token);
 		}
 		if let Some(ref creds) = self.extra_credentials {
-			req = req.header("X-Trino-Extra-Credential", build_extra_credential_header(creds));
+			req = req.header(
+				"X-Trino-Extra-Credential",
+				build_extra_credential_header(creds),
+			);
 		}
 
 		let resp = req
@@ -210,7 +217,6 @@ impl TrinoClient {
 			heartbeat_uri_tx: None,
 		})
 	}
-
 }
 
 fn base64_encode(s: &str) -> String {
@@ -276,7 +282,7 @@ impl QueryExecution {
 			match results.data {
 				Some(data) if !data.is_empty() => return Ok(Some(data)),
 				_ if self.next_uri.is_some() => continue, // progress page, keep polling
-				_ => return Ok(None),                      // done
+				_ => return Ok(None),                     // done
 			}
 		}
 	}
@@ -352,7 +358,7 @@ impl QueryExecution {
 		}
 
 		// First call — spawn heartbeat task
-		let (tx, mut rx) = watch::channel(next_uri.to_string());
+		let (tx, rx) = watch::channel(next_uri.to_string());
 		let http = self.http.clone();
 		self.heartbeat_uri_tx = Some(tx);
 		self.heartbeat_handle = Some(tokio::spawn(async move {
@@ -395,11 +401,8 @@ impl Drop for QueryExecution {
 			let http = self.http.clone();
 			let query_id = self.query_id.clone();
 			tokio::spawn(async move {
-				let result = tokio::time::timeout(
-					Duration::from_secs(5),
-					http.delete(&uri).send(),
-				)
-				.await;
+				let result =
+					tokio::time::timeout(Duration::from_secs(5), http.delete(&uri).send()).await;
 				match result {
 					Ok(Ok(_)) => {}
 					Ok(Err(e)) => {
@@ -416,7 +419,7 @@ impl Drop for QueryExecution {
 }
 
 fn should_retry(status: StatusCode) -> bool {
-	matches!(status.as_u16(), 502 | 503 | 504)
+	matches!(status.as_u16(), 502..=504)
 }
 
 fn is_transient(e: &reqwest::Error) -> bool {
@@ -454,7 +457,10 @@ fn rows_to_raw_rows(
 
 		let mut map = serde_json::Map::with_capacity(columns.len());
 		for (i, col) in columns.iter().enumerate() {
-			let val = row_values.get(i).cloned().unwrap_or(serde_json::Value::Null);
+			let val = row_values
+				.get(i)
+				.cloned()
+				.unwrap_or(serde_json::Value::Null);
 			map.insert(col.name.clone(), val);
 		}
 
@@ -506,11 +512,12 @@ impl OriginConnector for TrinoConnector {
 			let mut all_rows = Vec::new();
 			let mut pages = 0u32;
 
-			if let Some(data) = exec.take_initial_data() {
-				if !data.is_empty() && !exec.columns().is_empty() {
-					all_rows.extend(rows_to_raw_rows(exec.columns(), &data, key_column)?);
-					pages += 1;
-				}
+			if let Some(data) = exec.take_initial_data()
+				&& !data.is_empty()
+				&& !exec.columns().is_empty()
+			{
+				all_rows.extend(rows_to_raw_rows(exec.columns(), &data, key_column)?);
+				pages += 1;
 			}
 
 			while let Some(data) = exec.advance().await? {
@@ -545,15 +552,16 @@ impl OriginConnector for TrinoConnector {
 			let mut total = 0;
 			let mut pages = 0u32;
 
-			if let Some(data) = exec.take_initial_data() {
-				if !data.is_empty() && !exec.columns().is_empty() {
-					let rows = rows_to_raw_rows(exec.columns(), &data, key_column)?;
-					total += rows.len();
-					pages += 1;
-					tx.send(rows)
-						.await
-						.map_err(|_| OversyncError::Internal("channel closed".into()))?;
-				}
+			if let Some(data) = exec.take_initial_data()
+				&& !data.is_empty()
+				&& !exec.columns().is_empty()
+			{
+				let rows = rows_to_raw_rows(exec.columns(), &data, key_column)?;
+				total += rows.len();
+				pages += 1;
+				tx.send(rows)
+					.await
+					.map_err(|_| OversyncError::Internal("channel closed".into()))?;
 			}
 
 			while let Some(data) = exec.advance().await? {
@@ -674,8 +682,14 @@ mod tests {
 	#[test]
 	fn rows_to_raw_rows_basic() {
 		let cols = vec![
-			TrinoColumn { name: "id".into(), type_name: "varchar".into() },
-			TrinoColumn { name: "val".into(), type_name: "integer".into() },
+			TrinoColumn {
+				name: "id".into(),
+				type_name: "varchar".into(),
+			},
+			TrinoColumn {
+				name: "val".into(),
+				type_name: "integer".into(),
+			},
 		];
 		let data = vec![
 			vec![serde_json::json!("a"), serde_json::json!(42)],
@@ -690,7 +704,10 @@ mod tests {
 
 	#[test]
 	fn rows_to_raw_rows_missing_key_errors() {
-		let cols = vec![TrinoColumn { name: "id".into(), type_name: "varchar".into() }];
+		let cols = vec![TrinoColumn {
+			name: "id".into(),
+			type_name: "varchar".into(),
+		}];
 		let data = vec![vec![serde_json::json!("a")]];
 		let result = rows_to_raw_rows(&cols, &data, "nonexistent");
 		assert!(result.is_err());
@@ -698,7 +715,10 @@ mod tests {
 
 	#[test]
 	fn rows_to_raw_rows_numeric_key() {
-		let cols = vec![TrinoColumn { name: "id".into(), type_name: "bigint".into() }];
+		let cols = vec![TrinoColumn {
+			name: "id".into(),
+			type_name: "bigint".into(),
+		}];
 		let data = vec![vec![serde_json::json!(12345)]];
 		let rows = rows_to_raw_rows(&cols, &data, "id").unwrap();
 		assert_eq!(rows[0].row_key, "12345");
@@ -739,7 +759,10 @@ mod tests {
 			password: "p,a=ss%word".into(),
 		};
 		let header = build_extra_credential_header(&creds);
-		assert_eq!(header, "db.user=user%3Dadmin, db.password=p%2Ca%3Dss%25word");
+		assert_eq!(
+			header,
+			"db.user=user%3Dadmin, db.password=p%2Ca%3Dss%25word"
+		);
 	}
 
 	#[test]

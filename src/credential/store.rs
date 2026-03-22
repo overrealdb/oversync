@@ -1,7 +1,4 @@
-use aes_gcm::{
-	Aes256Gcm, KeyInit, Nonce,
-	aead::Aead,
-};
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use rand::RngCore;
@@ -49,15 +46,13 @@ impl AesGcmStore {
 	pub fn from_passphrase(passphrase: &str) -> Self {
 		use sha2::{Digest, Sha256};
 		let key = Sha256::digest(passphrase.as_bytes());
-		let cipher = Aes256Gcm::new_from_slice(&key)
-			.expect("SHA-256 always produces 32 bytes");
+		let cipher = Aes256Gcm::new_from_slice(&key).expect("SHA-256 always produces 32 bytes");
 		Self { cipher }
 	}
 
 	/// Create a store from a raw 32-byte key.
 	pub fn from_key(key: &[u8; 32]) -> Self {
-		let cipher = Aes256Gcm::new_from_slice(key)
-			.expect("32-byte key is valid for AES-256");
+		let cipher = Aes256Gcm::new_from_slice(key).expect("32-byte key is valid for AES-256");
 		Self { cipher }
 	}
 
@@ -94,10 +89,9 @@ impl AesGcmStore {
 		let (nonce_bytes, ciphertext) = combined.split_at(12);
 		let nonce = Nonce::from_slice(nonce_bytes);
 
-		let plaintext = self
-			.cipher
-			.decrypt(nonce, ciphertext)
-			.map_err(|_| OversyncError::Internal("decrypt failed (wrong key or corrupted data)".into()))?;
+		let plaintext = self.cipher.decrypt(nonce, ciphertext).map_err(|_| {
+			OversyncError::Internal("decrypt failed (wrong key or corrupted data)".into())
+		})?;
 
 		String::from_utf8(plaintext)
 			.map_err(|e| OversyncError::Internal(format!("decrypt utf8: {e}")))

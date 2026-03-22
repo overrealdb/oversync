@@ -12,10 +12,16 @@ use serde::{Deserialize, Serialize};
 	)
 )]
 pub struct OversyncConfig {
-	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_BIND", default_value = "0.0.0.0:4200"))]
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_BIND", default_value = "0.0.0.0:4200")
+	)]
 	pub bind: String,
 
-	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_LOG_LEVEL", default_value = "info"))]
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_LOG_LEVEL", default_value = "info")
+	)]
 	pub log_level: String,
 
 	#[cfg_attr(feature = "cli", command(flatten))]
@@ -27,20 +33,36 @@ pub struct OversyncConfig {
 pub struct SurrealDbConfig {
 	#[cfg_attr(
 		feature = "cli",
-		arg(long, env = "OVERSYNC_SURREALDB_URL", default_value = "http://127.0.0.1:8000")
+		arg(
+			long,
+			env = "OVERSYNC_SURREALDB_URL",
+			default_value = "http://127.0.0.1:8000"
+		)
 	)]
 	pub url: String,
 
-	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_USER", default_value = "root"))]
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_SURREALDB_USER", default_value = "root")
+	)]
 	pub user: String,
 
-	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_PASS", default_value = "root"))]
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_SURREALDB_PASS", default_value = "root")
+	)]
 	pub pass: String,
 
-	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_NS", default_value = "oversync"))]
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_SURREALDB_NS", default_value = "oversync")
+	)]
 	pub ns: String,
 
-	#[cfg_attr(feature = "cli", arg(long, env = "OVERSYNC_SURREALDB_DB", default_value = "sync"))]
+	#[cfg_attr(
+		feature = "cli",
+		arg(long, env = "OVERSYNC_SURREALDB_DB", default_value = "sync")
+	)]
 	pub db: String,
 }
 

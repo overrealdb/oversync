@@ -38,11 +38,9 @@ impl WasmStep {
 		let instance = wasmtime::Instance::new(&mut store, &module, &[])
 			.map_err(|e| OversyncError::Plugin(format!("wasm instantiate '{name}': {e}")))?;
 
-		let memory = instance
-			.get_memory(&mut store, "memory")
-			.ok_or_else(|| {
-				OversyncError::Plugin(format!("wasm '{name}': missing 'memory' export"))
-			})?;
+		let memory = instance.get_memory(&mut store, "memory").ok_or_else(|| {
+			OversyncError::Plugin(format!("wasm '{name}': missing 'memory' export"))
+		})?;
 
 		Ok(Self {
 			name: name.to_string(),
@@ -65,15 +63,18 @@ impl TransformStep for WasmStep {
 		let input = serde_json::to_vec(data)
 			.map_err(|e| OversyncError::Plugin(format!("wasm serialize: {e}")))?;
 
-		let mut store = self.store.lock().map_err(|e| {
-			OversyncError::Plugin(format!("wasm store lock: {e}"))
-		})?;
+		let mut store = self
+			.store
+			.lock()
+			.map_err(|e| OversyncError::Plugin(format!("wasm store lock: {e}")))?;
 
 		// Allocate input buffer in WASM memory
 		let alloc = self
 			.instance
 			.get_typed_func::<i32, i32>(&mut *store, "alloc")
-			.map_err(|e| OversyncError::Plugin(format!("wasm '{0}': missing 'alloc': {e}", self.name)))?;
+			.map_err(|e| {
+				OversyncError::Plugin(format!("wasm '{0}': missing 'alloc': {e}", self.name))
+			})?;
 
 		let input_ptr = alloc
 			.call(&mut *store, input.len() as i32)
@@ -84,7 +85,9 @@ impl TransformStep for WasmStep {
 		let start = input_ptr as usize;
 		let end = start + input.len();
 		if end > mem_data.len() {
-			return Err(OversyncError::Plugin("wasm: alloc returned out-of-bounds pointer".into()));
+			return Err(OversyncError::Plugin(
+				"wasm: alloc returned out-of-bounds pointer".into(),
+			));
 		}
 		mem_data[start..end].copy_from_slice(&input);
 
@@ -92,7 +95,9 @@ impl TransformStep for WasmStep {
 		let transform = self
 			.instance
 			.get_typed_func::<(i32, i32), i64>(&mut *store, "transform")
-			.map_err(|e| OversyncError::Plugin(format!("wasm '{0}': missing 'transform': {e}", self.name)))?;
+			.map_err(|e| {
+				OversyncError::Plugin(format!("wasm '{0}': missing 'transform': {e}", self.name))
+			})?;
 
 		let result = transform
 			.call(&mut *store, (input_ptr, input.len() as i32))
@@ -109,7 +114,9 @@ impl TransformStep for WasmStep {
 
 		let mem_data = self.memory.data(&*store);
 		if out_ptr + out_len > mem_data.len() {
-			return Err(OversyncError::Plugin("wasm: transform returned out-of-bounds result".into()));
+			return Err(OversyncError::Plugin(
+				"wasm: transform returned out-of-bounds result".into(),
+			));
 		}
 
 		let output_bytes = &mem_data[out_ptr..out_ptr + out_len];
@@ -117,7 +124,10 @@ impl TransformStep for WasmStep {
 			.map_err(|e| OversyncError::Plugin(format!("wasm output parse: {e}")))?;
 
 		// Free WASM memory
-		if let Ok(dealloc) = self.instance.get_typed_func::<(i32, i32), ()>(&mut *store, "dealloc") {
+		if let Ok(dealloc) = self
+			.instance
+			.get_typed_func::<(i32, i32), ()>(&mut *store, "dealloc")
+		{
 			let _ = dealloc.call(&mut *store, (out_ptr as i32, out_len as i32));
 		}
 

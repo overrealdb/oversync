@@ -17,7 +17,7 @@ use oversync::EmbeddedSync;
 use oversync::config::{QueryDef, SourceDef};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
-use oversync_core::traits::{Sink, OriginConnector, OriginFactory};
+use oversync_core::traits::{OriginConnector, OriginFactory, Sink};
 
 struct InMemoryConnector {
 	rows: Vec<RawRow>,
@@ -29,11 +29,7 @@ impl OriginConnector for InMemoryConnector {
 		"in-memory"
 	}
 
-	async fn fetch_all(
-		&self,
-		_sql: &str,
-		_key_column: &str,
-	) -> Result<Vec<RawRow>, OversyncError> {
+	async fn fetch_all(&self, _sql: &str, _key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
 		Ok(self.rows.clone())
 	}
 

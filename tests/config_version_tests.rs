@@ -1,8 +1,8 @@
 mod common;
 
 use common::surreal::TestSurrealContainer;
-use oversync::config::{SinkDef, SyncConfig, SurrealDbDef};
-use oversync::config_version::{save_version, list_versions, get_version};
+use oversync::config::{SinkDef, SurrealDbDef, SyncConfig};
+use oversync::config_version::{get_version, list_versions, save_version};
 
 fn test_config() -> SyncConfig {
 	SyncConfig {
@@ -49,8 +49,12 @@ async fn save_and_list_versions() {
 async fn get_specific_version() {
 	let surreal = TestSurrealContainer::new().await;
 
-	save_version(&surreal.client, &test_config(), "v1").await.unwrap();
-	save_version(&surreal.client, &test_config(), "v2").await.unwrap();
+	save_version(&surreal.client, &test_config(), "v1")
+		.await
+		.unwrap();
+	save_version(&surreal.client, &test_config(), "v2")
+		.await
+		.unwrap();
 
 	let v = get_version(&surreal.client, 1).await.unwrap();
 	assert_eq!(v.version, 1);

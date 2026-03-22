@@ -27,9 +27,7 @@ pub async fn health() -> Json<HealthResponse> {
 		(status = 200, description = "List configured sources", body = SourceListResponse)
 	)
 )]
-pub async fn list_sources(
-	State(state): State<Arc<ApiState>>,
-) -> Json<SourceListResponse> {
+pub async fn list_sources(State(state): State<Arc<ApiState>>) -> Json<SourceListResponse> {
 	Json(SourceListResponse {
 		sources: state.sources_info(),
 	})
@@ -67,9 +65,7 @@ pub async fn get_source(
 		(status = 200, description = "List configured sinks", body = SinkListResponse)
 	)
 )]
-pub async fn list_sinks(
-	State(state): State<Arc<ApiState>>,
-) -> Json<SinkListResponse> {
+pub async fn list_sinks(State(state): State<Arc<ApiState>>) -> Json<SinkListResponse> {
 	Json(SinkListResponse {
 		sinks: state.sinks_info(),
 	})
@@ -82,9 +78,7 @@ pub async fn list_sinks(
 		(status = 200, description = "List configured pipes", body = PipeListResponse)
 	)
 )]
-pub async fn list_pipes(
-	State(state): State<Arc<ApiState>>,
-) -> Json<PipeListResponse> {
+pub async fn list_pipes(State(state): State<Arc<ApiState>>) -> Json<PipeListResponse> {
 	Json(PipeListResponse {
 		pipes: state.pipes_info(),
 	})

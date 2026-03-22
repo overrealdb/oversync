@@ -9,8 +9,8 @@
 //! This shows a realistic setup: poll a postgres table every 60 seconds,
 //! detect changes via hash diff, and upsert deltas into SurrealDB.
 
-use oversync::config::*;
 use oversync::OversyncEngine;
+use oversync::config::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

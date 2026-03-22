@@ -78,9 +78,9 @@ async fn routing_subset_of_sinks() {
 
 #[tokio::test]
 async fn routing_resolve_pipe_query_sinks_filters() {
-	use std::collections::HashMap;
 	use oversync::config::{DeltaDef, DiffMode, OriginDef, PipeConfig, RetryDef, ScheduleDef};
 	use oversync_core::traits::Sink;
+	use std::collections::HashMap;
 
 	let sink_a = Arc::new(StdoutSink::new(false));
 	let sink_b = Arc::new(StdoutSink::new(false));

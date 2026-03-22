@@ -5,8 +5,8 @@
 //! Shows: HTTP source with Bearer auth and offset pagination delivering
 //! delta events to a webhook endpoint via the HTTP sink.
 
-use oversync::config::*;
 use oversync::OversyncEngine;
+use oversync::config::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
