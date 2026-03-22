@@ -22,10 +22,19 @@ pub enum DryRunMode {
 }
 
 /// Transient credentials for dry-run — NEVER persisted, only in-memory.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct TransientCredentials {
 	pub username: String,
 	pub password: String,
+}
+
+impl std::fmt::Debug for TransientCredentials {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("TransientCredentials")
+			.field("username", &self.username)
+			.field("password", &"***")
+			.finish()
+	}
 }
 
 /// Request to execute a dry-run of a pipe.
@@ -346,8 +355,8 @@ mod tests {
 			retry: RetryDef::default(),
 			filters: vec![],
 			transforms: vec![],
-			alert_webhook: None,
 			enabled: true,
+			alert_webhook: None,
 		}
 	}
 

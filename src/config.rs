@@ -327,6 +327,26 @@ pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
 			});
 		}
 
+		if matches!(pipe.delta.diff_mode, DiffMode::Memory) {
+			issues.push(ConfigIssue {
+				severity: Severity::Warning,
+				message: format!(
+					"pipe '{}': diff_mode 'memory' produces events without row_data (keys only). Use 'db' if sinks need full data.",
+					pipe.name
+				),
+			});
+		}
+
+		if pipe.delta.fail_safe_threshold < 0.0 || pipe.delta.fail_safe_threshold > 100.0 {
+			issues.push(ConfigIssue {
+				severity: Severity::Error,
+				message: format!(
+					"pipe '{}': fail_safe_threshold must be 0-100, got {}",
+					pipe.name, pipe.delta.fail_safe_threshold
+				),
+			});
+		}
+
 		if pipe.schedule.interval_secs == 0 {
 			issues.push(ConfigIssue {
 				severity: Severity::Error,

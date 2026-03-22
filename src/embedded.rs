@@ -42,7 +42,7 @@ pub struct EmbeddedSyncBuilder {
 
 pub struct EmbeddedSync {
 	delta_engine: Arc<DeltaEngine>,
-	pipes: Vec<PipeConfig>,
+	pipes: Arc<tokio::sync::RwLock<Vec<PipeConfig>>>,
 	sinks: HashMap<String, Arc<dyn Sink>>,
 	transform_hooks: HashMap<String, Arc<dyn TransformHook>>,
 	registry: PluginRegistry,
@@ -52,8 +52,9 @@ pub struct EmbeddedSync {
 
 impl std::fmt::Debug for EmbeddedSync {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let pipe_count = self.pipes.try_read().map(|p| p.len()).unwrap_or(0);
 		f.debug_struct("EmbeddedSync")
-			.field("pipes", &self.pipes.len())
+			.field("pipes", &pipe_count)
 			.field("sinks", &self.sinks.len())
 			.field("transform_hooks", &self.transform_hooks.len())
 			.finish()
@@ -80,22 +81,27 @@ impl EmbeddedSync {
 		pipe_name: &str,
 		query_id: &str,
 	) -> Result<DeltaResult, OversyncError> {
-		let pipe = self
-			.pipes
-			.iter()
-			.find(|p| p.name == pipe_name)
-			.ok_or_else(|| OversyncError::Config(format!("unknown pipe '{pipe_name}'")))?;
-
-		let query = pipe
-			.queries
-			.iter()
-			.find(|q| q.id == query_id)
-			.ok_or_else(|| {
-				OversyncError::Config(format!("pipe '{pipe_name}': unknown query '{query_id}'"))
-			})?;
+		// Clone pipe + query under read lock, then release immediately.
+		let (pipe, query) = {
+			let pipes = self.pipes.read().await;
+			let pipe = pipes
+				.iter()
+				.find(|p| p.name == pipe_name)
+				.ok_or_else(|| OversyncError::Config(format!("unknown pipe '{pipe_name}'")))?
+				.clone();
+			let query = pipe
+				.queries
+				.iter()
+				.find(|q| q.id == query_id)
+				.ok_or_else(|| {
+					OversyncError::Config(format!("pipe '{pipe_name}': unknown query '{query_id}'"))
+				})?
+				.clone();
+			(pipe, query)
+		};
 
 		let (eff_connector, eff_config) = if !pipe.origin.needs_trino_bridge() {
-			(pipe.origin.connector.as_str(), build_connector_config(pipe))
+			(pipe.origin.connector.clone(), build_connector_config(&pipe))
 		} else {
 			let trino_url = pipe
 				.origin
@@ -103,16 +109,16 @@ impl EmbeddedSync {
 				.as_deref()
 				.unwrap_or("http://localhost:8080");
 			(
-				"trino",
+				"trino".to_string(),
 				serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}),
 			)
 		};
 		let connector = self
 			.registry
-			.create_source(eff_connector, &pipe.name, &eff_config)
+			.create_source(&eff_connector, &pipe.name, &eff_config)
 			.await?;
 
-		let query_sinks = self.resolve_sinks(pipe, &query.sinks)?;
+		let query_sinks = self.resolve_sinks(&pipe, &query.sinks)?;
 
 		let cycle_config = CycleConfig {
 			origin_id: pipe.name.clone(),
@@ -156,7 +162,7 @@ impl EmbeddedSync {
 
 		let (shutdown_tx, shutdown_rx) = watch::channel(false);
 		let engine = Arc::clone(&self.delta_engine);
-		let pipes = self.pipes.clone();
+		let pipes = self.pipes.read().await.clone();
 		let sinks = self.sinks.clone();
 		let transform_hooks = self.transform_hooks.clone();
 		let registry = self.registry.clone();
@@ -174,6 +180,39 @@ impl EmbeddedSync {
 		if let Some(tx) = self.shutdown_tx.lock().unwrap().take() {
 			let _ = tx.send(true);
 		}
+	}
+
+	/// Register a new pipe at runtime. Returns error if name already exists.
+	pub async fn register_pipe(&self, pipe: PipeConfig) -> Result<(), OversyncError> {
+		let mut pipes = self.pipes.write().await;
+		if pipes.iter().any(|p| p.name == pipe.name) {
+			return Err(OversyncError::Config(format!(
+				"pipe '{}' already registered",
+				pipe.name
+			)));
+		}
+		info!(pipe = %pipe.name, "pipe registered at runtime");
+		pipes.push(pipe);
+		Ok(())
+	}
+
+	/// Unregister a pipe by name. Returns error if not found.
+	pub async fn unregister_pipe(&self, name: &str) -> Result<(), OversyncError> {
+		let mut pipes = self.pipes.write().await;
+		let len_before = pipes.len();
+		pipes.retain(|p| p.name != name);
+		if pipes.len() == len_before {
+			return Err(OversyncError::Config(format!(
+				"pipe '{name}' not found"
+			)));
+		}
+		info!(pipe = %name, "pipe unregistered");
+		Ok(())
+	}
+
+	/// List registered pipe names.
+	pub async fn pipe_names(&self) -> Vec<String> {
+		self.pipes.read().await.iter().map(|p| p.name.clone()).collect()
 	}
 
 	fn resolve_sinks(
@@ -289,7 +328,7 @@ impl EmbeddedSyncBuilder {
 
 		Ok(EmbeddedSync {
 			delta_engine,
-			pipes: self.pipes,
+			pipes: Arc::new(tokio::sync::RwLock::new(self.pipes)),
 			sinks: self.sinks,
 			transform_hooks: self.transform_hooks,
 			registry,

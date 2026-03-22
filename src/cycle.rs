@@ -254,6 +254,9 @@ impl<'a> CycleRunner<'a> {
 
 	/// Rust-native diff: read snapshot keys → fetch all → compute_diff (HashMap).
 	/// Fast but needs O(keys) memory. Best for datasets up to ~5M rows.
+	///
+	/// NOTE: events from memory diff have `row_data: Null` (keys + hashes only).
+	/// Use `diff_mode: db` if sinks need full row data.
 	async fn run_memory_diff(
 		&self,
 		config: &CycleConfig,

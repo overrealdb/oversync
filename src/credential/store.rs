@@ -26,11 +26,21 @@ impl std::fmt::Display for CredentialType {
 }
 
 /// A credential with a plaintext secret (in memory only, encrypted at rest).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Credential {
 	pub name: String,
 	pub credential_type: CredentialType,
 	pub secret: String,
+}
+
+impl std::fmt::Debug for Credential {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("Credential")
+			.field("name", &self.name)
+			.field("credential_type", &self.credential_type)
+			.field("secret", &"***")
+			.finish()
+	}
 }
 
 /// AES-256-GCM encryption/decryption for credential secrets.

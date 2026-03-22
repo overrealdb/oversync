@@ -45,7 +45,7 @@ async fn resolve_credential_into_pipe_dsn() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
-		enabled: true,
+		enabled: true, alert_webhook: None,
 	}];
 
 	// Resolve — should replace DSN with decrypted secret
@@ -80,7 +80,7 @@ async fn resolve_missing_credential_errors() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
-		enabled: true,
+		enabled: true, alert_webhook: None,
 	}];
 
 	let err = resolve_pipe_credentials(&mut pipes, &surreal.client, &store)
@@ -111,7 +111,7 @@ async fn resolve_no_credentials_is_noop() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
-		enabled: true,
+		enabled: true, alert_webhook: None,
 	}];
 
 	resolve_pipe_credentials(&mut pipes, &surreal.client, &store)

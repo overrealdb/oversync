@@ -20,6 +20,7 @@ pub enum AlertType {
 
 /// Send an alert to the configured webhook URL.
 /// Non-blocking — failures are logged but don't affect the pipeline.
+#[cfg(feature = "cli")]
 pub fn send_alert(webhook_url: &str, payload: AlertPayload) {
 	let url = webhook_url.to_string();
 	tokio::spawn(async move {
@@ -54,6 +55,16 @@ pub fn send_alert(webhook_url: &str, payload: AlertPayload) {
 			}
 		}
 	});
+}
+
+/// Stub when CLI feature is disabled — logs but doesn't send.
+#[cfg(not(feature = "cli"))]
+pub fn send_alert(_webhook_url: &str, payload: AlertPayload) {
+	info!(
+		pipe = %payload.pipe,
+		alert = ?payload.alert_type,
+		"alert would be sent (webhook disabled without cli feature)"
+	);
 }
 
 #[cfg(test)]

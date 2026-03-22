@@ -160,8 +160,13 @@ impl OversyncEngine {
 		if !has_credentials {
 			return Ok(());
 		}
-		let cred_key =
-			std::env::var("OVERSYNC_CREDENTIAL_KEY").unwrap_or_else(|_| "oversync-dev-key".into());
+		let cred_key = std::env::var("OVERSYNC_CREDENTIAL_KEY").map_err(|_| {
+			OversyncError::Config(
+				"OVERSYNC_CREDENTIAL_KEY env var is required when pipes reference credentials. \
+				 Set it to a strong passphrase (32+ chars)."
+					.into(),
+			)
+		})?;
 		let store = crate::credential::AesGcmStore::from_passphrase(&cred_key);
 		crate::credential::resolve_pipe_credentials(&mut config.pipes, &self.state_client, &store)
 			.await
@@ -249,26 +254,34 @@ impl OversyncEngine {
 			db: self.state_client.clone(),
 		});
 
-		base.route(
-			"/pipes/dry-run",
-			axum::routing::post(dry_run_handler).with_state(dry_run_state),
-		)
-		.route(
-			"/credentials",
-			axum::routing::get(list_credentials)
-				.post(create_credential)
-				.with_state(cred_state.clone()),
-		)
-		.route(
-			"/credentials/{name}",
-			axum::routing::delete(delete_credential).with_state(cred_state),
-		)
-		.route(
-			"/config/versions",
-			axum::routing::get(list_config_versions)
-				.with_state(Arc::new(self.state_client.clone())),
-		)
-		.route(
+		// Protected routes — require API key when configured
+		let engine_protected = axum::Router::new()
+			.route(
+				"/pipes/dry-run",
+				axum::routing::post(dry_run_handler).with_state(dry_run_state),
+			)
+			.route(
+				"/credentials",
+				axum::routing::get(list_credentials)
+					.post(create_credential)
+					.with_state(cred_state.clone()),
+			)
+			.route(
+				"/credentials/{name}",
+				axum::routing::delete(delete_credential).with_state(cred_state),
+			)
+			.route(
+				"/config/versions",
+				axum::routing::get(list_config_versions)
+					.with_state(Arc::new(self.state_client.clone())),
+			)
+			.route_layer(axum::middleware::from_fn_with_state(
+				api_state.clone(),
+				oversync_api::auth::require_api_key,
+			));
+
+		// Public route — no auth
+		base.merge(engine_protected).route(
 			"/metrics",
 			axum::routing::get(move || async move {
 				match prom_handle {

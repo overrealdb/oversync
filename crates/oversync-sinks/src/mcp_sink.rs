@@ -184,9 +184,9 @@ async fn recv(
 	reader: &mut BufReader<tokio::process::ChildStdout>,
 ) -> Result<serde_json::Value, OversyncError> {
 	let mut line = String::new();
-	let n = reader
-		.read_line(&mut line)
+	let n = tokio::time::timeout(std::time::Duration::from_secs(60), reader.read_line(&mut line))
 		.await
+		.map_err(|_| OversyncError::Sink("mcp read: timed out after 60s".into()))?
 		.map_err(|e| OversyncError::Sink(format!("mcp read: {e}")))?;
 	if n == 0 {
 		return Err(OversyncError::Sink("mcp sink: server closed stdout".into()));
