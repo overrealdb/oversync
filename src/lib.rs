@@ -21,6 +21,7 @@ pub mod config_db;
 pub mod config_version;
 pub mod credential;
 pub mod cycle;
+pub mod dlq;
 pub mod dry_run;
 pub mod embedded;
 pub mod engine;

@@ -208,6 +208,9 @@ impl<'a> CycleRunner<'a> {
 				.await?;
 
 			if !delivered {
+				// Events are in outbox (pending_events). They'll be retried on next cycle.
+				// If the cycle is itself being retried, this is already attempt N.
+				// The scheduler's retry loop handles repeated failures.
 				return Err(OversyncError::Sink(
 					"delivery failed, events pending".into(),
 				));

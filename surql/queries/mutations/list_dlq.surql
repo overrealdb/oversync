@@ -1,0 +1,1 @@
+SELECT * FROM dlq ORDER BY created_at DESC LIMIT 100;

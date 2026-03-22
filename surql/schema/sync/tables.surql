@@ -35,3 +35,14 @@ DEFINE FIELD OVERWRITE cycle_id    ON pending_event TYPE int;
 DEFINE FIELD OVERWRITE events_json ON pending_event TYPE string;
 DEFINE FIELD OVERWRITE created_at  ON pending_event TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_pending_source ON pending_event FIELDS origin_id, query_id;
+
+-- dlq: dead letter queue for events that failed delivery after all retries
+DEFINE TABLE OVERWRITE dlq SCHEMAFULL;
+DEFINE FIELD OVERWRITE pipe        ON dlq TYPE string;
+DEFINE FIELD OVERWRITE query       ON dlq TYPE string;
+DEFINE FIELD OVERWRITE cycle_id    ON dlq TYPE int;
+DEFINE FIELD OVERWRITE events_json ON dlq TYPE string;
+DEFINE FIELD OVERWRITE error       ON dlq TYPE string;
+DEFINE FIELD OVERWRITE attempts    ON dlq TYPE int;
+DEFINE FIELD OVERWRITE created_at  ON dlq TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE idx_dlq_pipe ON dlq FIELDS pipe;

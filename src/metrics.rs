@@ -28,6 +28,11 @@ pub fn record_rows_fetched(pipe: &str, query: &str, count: usize) {
 	counter!("oversync_rows_fetched_total", "pipe" => pipe.to_string(), "query" => query.to_string()).increment(count as u64);
 }
 
+pub fn record_dlq_entry(pipe: &str, query: &str, event_count: usize) {
+	counter!("oversync_dlq_entries_total", "pipe" => pipe.to_string(), "query" => query.to_string()).increment(1);
+	counter!("oversync_dlq_events_total", "pipe" => pipe.to_string(), "query" => query.to_string()).increment(event_count as u64);
+}
+
 pub fn record_pipe_stopped(pipe: &str) {
 	gauge!("oversync_pipe_running", "pipe" => pipe.to_string()).set(0.0);
 }
