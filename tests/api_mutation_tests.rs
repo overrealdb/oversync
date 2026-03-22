@@ -569,3 +569,180 @@ async fn create_source_without_db_errors() {
 	assert_eq!(status, StatusCode::OK);
 	assert!(json["error"].as_str().unwrap().contains("database"));
 }
+
+// ── Pipe CRUD ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn create_pipe_stores_in_db() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	let (status, json) = post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "catalog-sync",
+			"origin_connector": "postgres",
+			"origin_dsn": "postgres://localhost/db",
+			"targets": ["kafka"],
+			"schedule": {"interval_secs": 120}
+		}),
+	)
+	.await;
+
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+	assert!(json["message"].as_str().unwrap().contains("catalog-sync"));
+}
+
+#[tokio::test]
+async fn create_and_list_pipes() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "pipe-a",
+			"origin_connector": "postgres",
+			"origin_dsn": "postgres://a/db"
+		}),
+	)
+	.await;
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "pipe-b",
+			"origin_connector": "mysql",
+			"origin_dsn": "mysql://b/db"
+		}),
+	)
+	.await;
+
+	let (status, json) = get_json(&app, "/pipes").await;
+	assert_eq!(status, StatusCode::OK);
+	let pipes = json["pipes"].as_array().unwrap();
+	assert_eq!(pipes.len(), 2);
+}
+
+#[tokio::test]
+async fn update_pipe_modifies_db() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "my-pipe",
+			"origin_connector": "postgres",
+			"origin_dsn": "postgres://old"
+		}),
+	)
+	.await;
+
+	let (status, json) = put_json(
+		&app,
+		"/pipes/my-pipe",
+		serde_json::json!({
+			"origin_dsn": "postgres://new",
+			"enabled": false
+		}),
+	)
+	.await;
+
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+}
+
+#[tokio::test]
+async fn delete_pipe_removes_from_db() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "to-delete",
+			"origin_connector": "postgres",
+			"origin_dsn": "postgres://localhost/db"
+		}),
+	)
+	.await;
+
+	let (status, json) = delete_req(&app, "/pipes/to-delete").await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+
+	// Verify deleted
+	let (_, list) = get_json(&app, "/pipes").await;
+	let pipes = list["pipes"].as_array().unwrap();
+	assert!(pipes.is_empty());
+}
+
+#[tokio::test]
+async fn get_pipe_by_name() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "findme",
+			"origin_connector": "http",
+			"origin_dsn": "https://api.example.com",
+			"targets": ["stdout"]
+		}),
+	)
+	.await;
+
+	let (status, json) = get_json(&app, "/pipes/findme").await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["name"], "findme");
+	assert_eq!(json["origin_connector"], "http");
+	assert_eq!(json["targets"][0], "stdout");
+}
+
+#[tokio::test]
+async fn create_pipe_replaces_existing() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "dup",
+			"origin_connector": "postgres",
+			"origin_dsn": "postgres://v1"
+		}),
+	)
+	.await;
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "dup",
+			"origin_connector": "mysql",
+			"origin_dsn": "mysql://v2"
+		}),
+	)
+	.await;
+
+	let (_, json) = get_json(&app, "/pipes").await;
+	let pipes = json["pipes"].as_array().unwrap();
+	assert_eq!(pipes.len(), 1);
+	assert_eq!(pipes[0]["origin_connector"], "mysql");
+}
