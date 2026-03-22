@@ -6,23 +6,37 @@
 [![docs.rs](https://docs.rs/oversync/badge.svg)](https://docs.rs/oversync)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Lightweight data sync engine: poll sources, detect changes, deliver events.
+Lightweight poll-based data sync engine: fetch from any source, detect changes via SHA-256 hash diff, transform in-flight, deliver to any target.
 
-Alternative to Kafka Connect / Debezium for scenarios where WAL-based CDC is impossible or unnecessary (system catalogs, APIs, metadata).
+Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system catalogs, APIs, cross-platform metadata).
 
 ## Features
 
-- **Poll-based delta detection** — SHA-256 hash comparison, no WAL access required
-- **6 source connectors** — PostgreSQL, MySQL, HTTP REST, GraphQL (Relay pagination), Trino, Arrow Flight SQL
-- **4 sink types** — Kafka, HTTP webhook, SurrealDB, stdout
-- **SurrealDB state store** — snapshots, cycle logs, outbox pattern for crash-safe delivery
-- **Fail-safe** — aborts cycle if deletion exceeds threshold (prevents false mass-deletes)
-- **Dual mode** — embeddable library or standalone binary
-- **Full Config API** — CRUD sources/sinks, pause/resume sync, cycle history via REST
-- **Lifecycle management** — start, pause, resume, shutdown with hot config reload
-- **Compile-time SurrealQL validation** — invalid `.surql` files break the build
+- **Pipe-based architecture** — each pipeline is a first-class `PipeConfig`: origin + filters + delta + transforms + targets
+- **9 origin connectors** — PostgreSQL, MySQL, ClickHouse, Trino, HTTP REST, GraphQL, Arrow Flight SQL, MCP, + any JDBC database via Trino bridge
+- **6 target types** — Kafka, HTTP webhook, SurrealDB, MCP, stdout
+- **15 built-in transforms** — rename, set, upper/lower, remove, copy, default, filter, map_value, truncate, nest, flatten, hash, coalesce, schema_filter
+- **WASM plugins** — extend with custom transform steps via WebAssembly (wasmtime)
+- **Dry-run** — preview pipeline results without writing to targets or state (mock and live modes)
+- **Encrypted credentials** — AES-256-GCM at rest, transient credentials for dry-run (never persisted)
+- **Trino bridge** — non-native databases (MSSQL, Oracle, Hive, Iceberg, Snowflake) auto-route through Trino with per-query credential passthrough
+- **Pre-delta filters** — regex allow/deny patterns applied before delta detection (skip unwanted data at source)
+- **Env var interpolation** — `${VAR}` and `${VAR:-default}` in TOML configs
+- **Config validation** — errors block start, warnings logged
+- **Config versioning** — auto-save snapshots with rollback support
+- **Rate limiting** — token bucket per pipe to respect source API limits
+- **Fail-safe** — aborts cycle if deletion exceeds threshold
+- **Dual mode** — embeddable library (`cargo add oversync`) or standalone binary
+- **Full REST API** — CRUD pipes/sources/sinks/credentials, dry-run, lifecycle control, OpenAPI 3.1
 
 ## Quick Start
+
+### Docker
+
+```bash
+docker compose up -d
+curl http://localhost:4200/health
+```
 
 ### Embedded (library)
 
@@ -38,23 +52,13 @@ use oversync::OversyncEngine;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine = OversyncEngine::builder("http://localhost:8000")
         .namespace("myapp")
-        .database("sync_state")
         .credentials("root", "root")
         .build()
         .await?;
 
-    // Start from TOML config file
     engine.start_from_toml(std::path::Path::new("oversync.toml")).await?;
-
-    // Or start from config stored in SurrealDB
-    // engine.start_from_db().await?;
-
-    // Optional: mount REST API into your axum app
-    // let router = engine.api_router(); // requires "api" feature
-
-    // Lifecycle control
-    engine.pause().await;
-    engine.resume().await?;
+    // engine.pause().await;
+    // engine.resume().await?;
     engine.shutdown().await;
     Ok(())
 }
@@ -67,57 +71,67 @@ cargo install oversync --features cli
 oversync --config oversync.toml --bind 0.0.0.0:4200
 ```
 
-### Configuration (oversync.toml)
+## Configuration
+
+### Pipes (recommended)
 
 ```toml
 [surrealdb]
-url = "http://localhost:8000"
-namespace = "oversync"
-database = "sync"
+url = "${SURREALDB_URL:-http://localhost:8000}"
+username = "${SURREALDB_USER:-root}"
+password = "${SURREALDB_PASS:-root}"
 
-[[sources]]
-name = "pg-prod"
+[[pipes]]
+name = "catalog-sync"
+targets = ["kafka-main"]
+
+[pipes.origin]
 connector = "postgres"
-dsn = "postgres://readonly:pass@db:5432/app"
+dsn = "${PG_DSN}"
+# credential = "prod-pg"  # reference encrypted credential by name
+
+[pipes.schedule]
 interval_secs = 60
+missed_tick_policy = "skip"  # or "burst"
+# max_requests_per_minute = 30  # rate limiting
 
-[[sources.queries]]
-id = "users"
-sql = "SELECT id::text, name, email FROM users"
+[pipes.delta]
+diff_mode = "memory"  # or "db" (low memory)
+fail_safe_threshold = 25.0
+
+[[pipes.filters]]
+type = "schema_filter"
+field = "schema_name"
+allow = ["^public$", "^analytics$"]
+deny = ["^pg_catalog", "^information_schema"]
+
+[[pipes.transforms]]
+type = "rename"
+from = "entity_id"
+to = "id"
+
+[[pipes.transforms]]
+type = "upper"
+field = "name"
+
+[[pipes.transforms]]
+type = "set"
+field = "version"
+value = 1
+
+[[pipes.queries]]
+id = "tables"
+sql = "SELECT oid::text, relname, relkind FROM pg_class WHERE relnamespace = 2200"
+key_column = "oid"
+
+[[pipes.queries]]
+id = "columns"
+sql = "SELECT attrelid::text || '.' || attnum::text AS id, attname FROM pg_attribute"
 key_column = "id"
-
-[[sources]]
-name = "catalog-api"
-connector = "http"
-dsn = "https://api.example.com"
-interval_secs = 300
-
-[sources.config]
-response_path = "data.items"
-
-[sources.config.auth]
-type = "bearer"
-token = "sk-api-key"
-
-[sources.config.pagination]
-type = "offset"
-page_size = 100
-
-[[sources.queries]]
-id = "datasets"
-sql = "/v1/datasets"
-key_column = "id"
+sinks = ["kafka-main"]  # per-query sink routing
 
 [[sinks]]
-name = "webhook"
-type = "http"
-
-[sinks.config]
-url = "https://app.example.com/webhooks/sync"
-auth = { type = "bearer", token = "webhook-secret" }
-
-[[sinks]]
-name = "kafka"
+name = "kafka-main"
 type = "kafka"
 
 [sinks.config]
@@ -125,110 +139,147 @@ brokers = "kafka:9092"
 topic = "sync-events"
 ```
 
-## Source Connectors
+### Non-native databases via Trino
+
+```toml
+[[pipes]]
+name = "mssql-sync"
+
+[pipes.origin]
+connector = "mssql"         # auto-routes through Trino
+dsn = "host:1433/mydb"
+trino_url = "http://trino:8080"  # optional: use custom Trino instance
+```
+
+Oversync automatically creates a Trino catalog and routes queries through it. Supported via Trino: MSSQL, Oracle, Hive, Iceberg, Snowflake, Teradata, DB2, Greenplum, Redshift.
+
+### Legacy format (backward compatible)
+
+The `[[sources]]` format still works and is auto-converted to pipes internally.
+
+## Architecture
+
+```
+PipeConfig
+  │
+  ├── Origin (fetch)
+  │     Native: postgres, mysql, clickhouse, trino, http, graphql, flight_sql, mcp
+  │     Via Trino: mssql, oracle, hive, iceberg, snowflake, teradata, db2, ...
+  │
+  ├── Pre-delta Filters (regex allow/deny on RawRow)
+  │
+  ├── Delta Engine (SurrealDB)
+  │     SHA-256 hash comparison → created/updated/deleted events
+  │     Per-pipeline isolated tables (snapshot, cycle_log, pending_event)
+  │     Fail-safe: abort if deletion% > threshold
+  │
+  ├── Transform Chain (on EventEnvelope)
+  │     15 built-in steps + WASM plugins + custom TransformHook
+  │
+  └── Targets (deliver)
+        kafka, http, surrealdb, mcp, stdout
+        Per-query sink routing: query.sinks > pipe.targets > all sinks
+```
+
+## Origin Connectors
 
 | Connector | Type | Key Features |
 |-----------|------|-------------|
-| PostgreSQL | `postgres` | Type-aware decoding (jsonb, bool, numeric), streaming via sqlx |
+| PostgreSQL | `postgres` | Type-aware decoding, streaming via sqlx |
 | MySQL | `mysql` | Type-aware decoding, streaming via sqlx |
-| HTTP REST | `http` | Auth (Bearer/Basic/Header), offset & cursor pagination, response path navigation |
-| GraphQL | `graphql` | Relay cursor pagination, GraphQL error detection, response path navigation |
-| Trino | `trino` | REST protocol, query heartbeat, retry on 502/503/504 |
+| ClickHouse | `clickhouse` | HTTP API, JSONEachRow format |
+| Trino | `trino` | REST protocol, heartbeat, retry, per-query credentials |
+| HTTP REST | `http` | Auth (Bearer/Basic/Header), pagination (offset/cursor), response path |
+| GraphQL | `graphql` | Relay cursor pagination, error detection |
 | Arrow Flight SQL | `flight-sql` | gRPC streaming, Arrow record batch conversion |
+| MCP | `mcp` | JSON-RPC over stdio, tool call → data rows |
+| **Any JDBC** | via Trino | MSSQL, Oracle, Hive, Iceberg, Snowflake, Teradata, DB2, ... |
 
-## Sinks
+## Target Connectors
 
-| Sink | Type | Key Features |
-|------|------|-------------|
-| HTTP Webhook | `http` | POST/PUT, retry on 429/5xx with exponential backoff (capped at 60s), auth, custom headers |
+| Target | Type | Key Features |
+|--------|------|-------------|
 | Kafka | `kafka` | Native batch produce, message key = row key |
-| SurrealDB | `surrealdb` | UPSERT with `_meta` object, batch via FOR loop |
-| Stdout | `stdout` | JSON output for debugging, optional pretty-print |
+| HTTP Webhook | `http` | POST/PUT, retry with exponential backoff, auth |
+| SurrealDB | `surrealdb` | UPSERT with `_meta`, batch via FOR loop |
+| MCP | `mcp` | Deliver events via tool calls (JSON-RPC over stdio) |
+| Stdout | `stdout` | JSON output, optional pretty-print |
+
+## Transform Steps
+
+| Step | Params | Description |
+|------|--------|-------------|
+| `rename` | from, to | Move field |
+| `set` | field, value | Set constant value |
+| `upper` | field | Uppercase string |
+| `lower` | field | Lowercase string |
+| `remove` | field | Delete field |
+| `copy` | from, to | Duplicate value |
+| `default` | field, value | Set if absent/null |
+| `filter` | field, op, value | Drop records (eq/ne/gt/gte/lt/lte/contains/exists) |
+| `map_value` | field, mapping | Replace via lookup table |
+| `truncate` | field, max_len | Limit string length |
+| `nest` | fields, into | Group fields into sub-object |
+| `flatten` | field | Inline sub-object fields |
+| `hash` | field | SHA-256 hash replacement |
+| `coalesce` | fields, into | First non-null value |
+| `schema_filter` | field, allow, deny | Regex allow/deny patterns |
 
 ## REST API
-
-Available when using the standalone binary or `engine.api_router()` with the `api` feature.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| GET | `/sources` | List configured sources |
+| GET | `/pipes` | List pipes |
+| GET | `/pipes/{name}` | Get pipe details |
+| POST | `/pipes` | Create pipe |
+| PUT | `/pipes/{name}` | Update pipe |
+| DELETE | `/pipes/{name}` | Delete pipe |
+| POST | `/pipes/dry-run` | Preview pipeline (mock/live) |
+| GET | `/sources` | List sources (legacy) |
 | POST | `/sources` | Create source |
-| PUT | `/sources/{name}` | Update source |
-| DELETE | `/sources/{name}` | Delete source |
-| GET | `/sinks` | List configured sinks |
+| GET | `/sinks` | List sinks |
 | POST | `/sinks` | Create sink |
-| PUT | `/sinks/{name}` | Update sink |
-| DELETE | `/sinks/{name}` | Delete sink |
-| POST | `/sources/{name}/trigger` | Trigger immediate sync |
+| GET | `/credentials` | List credentials (no secrets) |
+| POST | `/credentials` | Store encrypted credential |
+| DELETE | `/credentials/{name}` | Delete credential |
+| GET | `/config/versions` | Config version history |
 | POST | `/sync/pause` | Pause all sync |
 | POST | `/sync/resume` | Resume sync |
 | GET | `/sync/status` | Running/paused state |
 | GET | `/history` | Last 100 cycle results |
 | GET | `/openapi.json` | OpenAPI 3.1 spec |
 
-## Architecture
-
-```
-Source (PostgreSQL, API, GraphQL, ...)
-    |
-    v  fetch_all(sql, key_column) -> Vec<RawRow>
-    |
-    v  compute_diff(previous_hashes, current_rows) -> DeltaResult
-    |        |
-    |    ABORT if deleted% > fail_safe_threshold
-    |
-    v  EventEnvelope { meta, data }
-    |
-    +---> Kafka sink
-    +---> HTTP webhook sink
-    +---> SurrealDB sink
-    +---> stdout sink
-    |
-    v  cycle_log (audit trail in SurrealDB)
-```
-
-See [docs/architecture.md](docs/architecture.md) for internals.
-
-## Examples
-
-```bash
-cargo run --example basic_stdout              # Minimal embedded engine
-cargo run --example custom_connector          # Custom SourceFactory registration
-cargo run --example http_api --features api   # Engine with REST API
-cargo run --example postgres_to_surrealdb     # Postgres -> SurrealDB (needs infra)
-cargo run --example graphql_source            # GraphQL with Relay pagination
-cargo run --example http_to_webhook           # REST API -> webhook delivery
-cargo run --example multi_source_kafka        # Multi-source with sink routing
-```
-
-## Custom Connectors
-
-Implement `SourceFactory` + `SourceConnector` and register with the engine:
-
-```rust,no_run
-use oversync::OversyncEngine;
-
-let engine = OversyncEngine::builder("mem://")
-    .register_source(Box::new(MyCustomSourceFactory))
-    .register_sink(Box::new(MyCustomSinkFactory))
-    .build()
-    .await?;
-```
-
-See `examples/custom_connector.rs` for a complete example.
-
 ## Crate Structure
 
 | Crate | Purpose |
 |-------|---------|
-| `oversync` | Engine, config, scheduler, lifecycle, cycle runner |
-| `oversync-core` | Types (`RawRow`, `DeltaEvent`, `AuthConfig`), traits (`SourceConnector`, `Sink`), errors |
-| `oversync-connectors` | Source implementations (Postgres, MySQL, HTTP, GraphQL, Trino, FlightSQL) |
-| `oversync-sinks` | Sink implementations (Kafka, HTTP, SurrealDB, stdout) |
+| `oversync` | Engine, config, scheduler, lifecycle, dry-run, credentials, rate limiting |
+| `oversync-core` | Types (`RawRow`, `DeltaEvent`), traits (`OriginConnector`, `Sink`, `TransformHook`), errors |
+| `oversync-connectors` | Origin implementations (Postgres, MySQL, HTTP, GraphQL, Trino, ClickHouse, FlightSQL, MCP) |
+| `oversync-sinks` | Target implementations (Kafka, HTTP, SurrealDB, MCP, stdout) |
+| `oversync-transforms` | Transform step library + WASM plugin support |
 | `oversync-delta` | DeltaEngine (SurrealDB state operations) |
 | `oversync-api` | Axum REST API (CRUD, operations, OpenAPI) |
 | `oversync-links` | Entity linking (stub) |
+
+## Feature Flags
+
+| Feature | What it enables |
+|---------|----------------|
+| (default) | Core engine + all connectors + all sinks + transforms |
+| `schema` | Schema apply via overshift on engine build |
+| `api` | REST API via `engine.api_router()` |
+| `cli` | Standalone binary (api + schema + clap + otel) |
+| `wasm` | WASM transform plugins via wasmtime |
+
+## Development
+
+```bash
+cargo make check      # compilation check
+cargo make test       # unit + integration tests (requires Docker)
+cargo make ci         # full CI: check + test + clippy + fmt + coverage
+```
 
 ## License
 

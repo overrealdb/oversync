@@ -1,0 +1,47 @@
+services:
+  oversync:
+    build: .
+    ports:
+      - "4200:4200"
+    environment:
+      OVERSYNC_BIND: "0.0.0.0:4200"
+      OVERSYNC_LOG_LEVEL: "info"
+      OVERSYNC_SURREALDB_URL: "http://surrealdb:8000"
+      OVERSYNC_SURREALDB_NS: "oversync"
+      OVERSYNC_SURREALDB_DB: "sync"
+      OVERSYNC_CREDENTIAL_KEY: "${OVERSYNC_CREDENTIAL_KEY:-change-me-in-production}"
+    depends_on:
+      surrealdb:
+        condition: service_healthy
+    volumes:
+      - ./oversync.toml:/app/oversync.toml:ro
+
+  surrealdb:
+    image: surrealdb/surrealdb:v3
+    command: start --log info --user root --pass root
+    ports:
+      - "8000:8000"
+    volumes:
+      - surrealdb-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional: Trino as JDBC bridge for non-native connectors
+  # Uncomment to enable mssql, oracle, hive, iceberg, etc.
+  #
+  # trino:
+  #   image: trinodb/trino:479
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./trino/catalog:/etc/trino/catalog:ro
+  #   environment:
+  #     # Allow per-query credential passthrough
+  #     JAVA_TOOL_OPTIONS: >-
+  #       -Dhttp-server.authentication.allow-extra-credential=db.user,db.password
+
+volumes:
+  surrealdb-data:
