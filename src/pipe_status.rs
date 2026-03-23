@@ -162,4 +162,18 @@ mod tests {
 		let all = tracker.all().await;
 		assert_eq!(all.len(), 2);
 	}
+
+	#[tokio::test]
+	async fn tracker_success_clears_error() {
+		let tracker = PipeStatusTracker::new();
+		tracker.set_running("pipe-a").await;
+		tracker.set_errored("pipe-a", "db down").await;
+		assert!(tracker.get("pipe-a").await.unwrap().last_error.is_some());
+
+		tracker.set_success("pipe-a").await;
+		let status = tracker.get("pipe-a").await.unwrap();
+		assert!(status.last_error.is_none(), "success should clear last_error");
+		assert_eq!(status.total_errors, 1, "error count preserved");
+		assert_eq!(status.total_cycles, 1);
+	}
 }

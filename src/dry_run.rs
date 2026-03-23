@@ -160,10 +160,11 @@ pub async fn execute_dry_run(
 			let pipe_engine = engine.for_source(&req.pipe.name);
 			pipe_engine
 				.read_snapshot_keys_paged(&req.pipe.name, &req.query_id)
-				.await
-				.unwrap_or_default()
+				.await?
 		} else {
-			HashMap::new()
+			return Err(OversyncError::Config(
+				"use_existing_state requires state_db to be provided".into(),
+			));
 		}
 	} else {
 		HashMap::new()
@@ -306,24 +307,32 @@ async fn create_connector(
 		.await
 }
 
+/// URL-encode a credential component for DSN injection.
+fn url_encode_credential(s: &str) -> String {
+	s.replace('%', "%25")
+		.replace('@', "%40")
+		.replace(':', "%3A")
+		.replace('/', "%2F")
+		.replace('#', "%23")
+		.replace('?', "%3F")
+}
+
 /// Inject username:password into a DSN URL (postgres://user:pass@host/db).
+/// Credentials are URL-encoded to handle special characters.
 fn inject_credentials_into_dsn(dsn: &str, username: &str, password: &str) -> String {
+	let enc_user = url_encode_credential(username);
+	let enc_pass = url_encode_credential(password);
 	if let Some(rest) = dsn.strip_prefix("postgres://") {
 		if let Some(at_pos) = rest.find('@') {
-			return format!(
-				"postgres://{}:{}@{}",
-				username,
-				password,
-				&rest[at_pos + 1..]
-			);
+			return format!("postgres://{}:{}@{}", enc_user, enc_pass, &rest[at_pos + 1..]);
 		}
-		return format!("postgres://{}:{}@{}", username, password, rest);
+		return format!("postgres://{}:{}@{}", enc_user, enc_pass, rest);
 	}
 	if let Some(rest) = dsn.strip_prefix("mysql://") {
 		if let Some(at_pos) = rest.find('@') {
-			return format!("mysql://{}:{}@{}", username, password, &rest[at_pos + 1..]);
+			return format!("mysql://{}:{}@{}", enc_user, enc_pass, &rest[at_pos + 1..]);
 		}
-		return format!("mysql://{}:{}@{}", username, password, rest);
+		return format!("mysql://{}:{}@{}", enc_user, enc_pass, rest);
 	}
 	dsn.to_string()
 }
@@ -588,6 +597,16 @@ mod tests {
 		let dsn = "http://api.example.com";
 		let result = inject_credentials_into_dsn(dsn, "user", "pass");
 		assert_eq!(result, "http://api.example.com");
+	}
+
+	#[test]
+	fn inject_special_chars_url_encoded() {
+		let dsn = "postgres://db.prod:5432/app";
+		let result = inject_credentials_into_dsn(dsn, "user@domain", "p@ss:word/slash");
+		assert_eq!(
+			result,
+			"postgres://user%40domain:p%40ss%3Aword%2Fslash@db.prod:5432/app"
+		);
 	}
 
 	#[test]
