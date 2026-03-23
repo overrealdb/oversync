@@ -1,0 +1,6 @@
+apiVersion: v2
+name: trino
+description: Trino JDBC bridge for oversync non-native connectors
+type: application
+version: 0.1.0
+appVersion: "479"

@@ -1,0 +1,59 @@
+image:
+  repository: trinodb/trino
+  tag: "479"
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+# ── JDBC Drivers ─────────────────────────────────────────
+# Init container downloads drivers at startup.
+jdbcDrivers:
+  # Maven repository for downloading drivers.
+  # Default: Maven Central. For corporate air-gapped environments:
+  #   repository: https://artifactory.company.com/artifactory/maven-remote
+  repository: https://repo1.maven.org/maven2
+
+  # Alternatively, mount pre-loaded drivers from a volume:
+  # localPath: /mnt/jdbc-drivers
+
+  # List of JDBC drivers to download
+  drivers:
+    - name: sqlserver
+      groupId: com.microsoft.sqlserver
+      artifactId: mssql-jdbc
+      version: "12.8.1.jre11"
+    - name: oracle
+      groupId: com.oracle.database.jdbc
+      artifactId: ojdbc11
+      version: "23.6.0.24.10"
+    - name: mysql
+      groupId: com.mysql
+      artifactId: mysql-connector-j
+      version: "9.1.0"
+    - name: postgresql
+      groupId: org.postgresql
+      artifactId: postgresql
+      version: "42.7.5"
+
+# ── Catalogs ─────────────────────────────────────────────
+# Each entry generates a .properties file in /etc/trino/catalog/
+catalogs:
+  # Example: SQL Server with per-query credential passthrough
+  # sqlserver:
+  #   connector.name: sqlserver
+  #   connection-url: "jdbc:sqlserver://mssql-host:1433;database=prod"
+  #   user-credential-name: db.user
+  #   password-credential-name: db.password
+
+# ── Server Config ────────────────────────────────────────
+config:
+  # Allow per-query credential passthrough via X-Trino-Extra-Credential header
+  extraCredentials: "db.user,db.password"
+  # JVM memory
+  jvmMaxHeap: "2G"

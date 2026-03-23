@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-trino-catalogs
+data:
+  {{- range $name, $props := .Values.catalogs }}
+  {{ $name }}.properties: |
+    {{- range $key, $value := $props }}
+    {{ $key }}={{ $value }}
+    {{- end }}
+  {{- end }}

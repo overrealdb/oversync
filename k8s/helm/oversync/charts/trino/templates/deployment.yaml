@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-trino
+  labels:
+    app.kubernetes.io/name: trino
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: trino
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: trino
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      initContainers:
+        {{- if not .Values.jdbcDrivers.localPath }}
+        - name: download-drivers
+          image: curlimages/curl:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              {{- range .Values.jdbcDrivers.drivers }}
+              echo "Downloading {{ .name }} driver..."
+              GROUP_PATH=$(echo "{{ .groupId }}" | tr '.' '/')
+              URL="{{ $.Values.jdbcDrivers.repository }}/${GROUP_PATH}/{{ .artifactId }}/{{ .version }}/{{ .artifactId }}-{{ .version }}.jar"
+              curl -fsSL -o /drivers/{{ .name }}/{{ .artifactId }}-{{ .version }}.jar "$URL" && echo "OK: {{ .name }}" || echo "FAIL: {{ .name }}"
+              {{- end }}
+          volumeMounts:
+            - name: jdbc-drivers
+              mountPath: /drivers
+        {{- end }}
+      containers:
+        - name: trino
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: >-
+                -Xmx{{ .Values.config.jvmMaxHeap }}
+                -Dhttp-server.authentication.allow-extra-credential={{ .Values.config.extraCredentials }}
+          readinessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: catalog-config
+              mountPath: /etc/trino/catalog
+              readOnly: true
+            {{- if .Values.jdbcDrivers.localPath }}
+            - name: jdbc-drivers-local
+              mountPath: /usr/lib/trino/plugin/jdbc
+              readOnly: true
+            {{- else }}
+            - name: jdbc-drivers
+              mountPath: /usr/lib/trino/plugin/jdbc
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: catalog-config
+          configMap:
+            name: {{ .Release.Name }}-trino-catalogs
+        {{- if .Values.jdbcDrivers.localPath }}
+        - name: jdbc-drivers-local
+          hostPath:
+            path: {{ .Values.jdbcDrivers.localPath }}
+        {{- else }}
+        - name: jdbc-drivers
+          emptyDir: {}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-trino
+spec:
+  selector:
+    app.kubernetes.io/name: trino
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - port: 8080
+      targetPort: 8080
