@@ -32,15 +32,21 @@ impl PipeLock {
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("lock acquire: {e}")))?;
 
-		let rows: Vec<serde_json::Value> = resp
-			.take(0)
-			.map_err(|e| OversyncError::SurrealDb(format!("lock acquire take: {e}")))?;
-
-		let acquired = rows
-			.first()
-			.and_then(|r| r.get("acquired"))
-			.and_then(|v| v.as_bool())
-			.unwrap_or(false);
+		// Multi-statement query: LET, LET, LET, IF{..RETURN..}
+		// The RETURN result is at the last statement index.
+		// Try indices until we find the result.
+		let mut acquired_val = None;
+		for idx in 0..10 {
+			if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(idx) {
+				if let Some(first) = rows.first() {
+					if first.get("acquired").is_some() {
+						acquired_val = first.get("acquired").and_then(|v| v.as_bool());
+						break;
+					}
+				}
+			}
+		}
+		let acquired = acquired_val.unwrap_or(false);
 
 		if acquired {
 			debug!(pipe = %pipe, instance = %self.instance_id, "lock acquired");
