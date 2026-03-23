@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oversync
+  labels:
+    app: oversync
+spec:
+  replicas: 2  # horizontal scaling — distributed lock ensures one instance per pipe
+  selector:
+    matchLabels:
+      app: oversync
+  template:
+    metadata:
+      labels:
+        app: oversync
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4200"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: oversync
+          image: oversync:latest
+          ports:
+            - containerPort: 4200
+              name: http
+          env:
+            - name: OVERSYNC_BIND
+              value: "0.0.0.0:4200"
+            - name: OVERSYNC_SURREALDB_URL
+              value: "http://surrealdb:8000"
+            - name: OVERSYNC_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name  # unique per pod
+            - name: OVERSYNC_CREDENTIAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: oversync-secrets
+                  key: credential-key
+            - name: OVERSYNC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: oversync-secrets
+                  key: api-key
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4200
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4200
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /app/oversync.toml
+              subPath: oversync.toml
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: oversync-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oversync
+spec:
+  selector:
+    app: oversync
+  ports:
+    - port: 4200
+      targetPort: 4200
+      name: http

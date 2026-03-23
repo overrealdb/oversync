@@ -72,6 +72,10 @@ impl DeltaEngine {
 		&self.tables
 	}
 
+	pub fn state_client(&self) -> &Surreal<Any> {
+		&self.state_client
+	}
+
 	/// Ensure the per-pipeline tables exist in SurrealDB (idempotent).
 	pub async fn ensure_tables(&self) -> Result<(), OversyncError> {
 		let ddl = self.tables.create_ddl();

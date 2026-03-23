@@ -36,6 +36,14 @@ DEFINE FIELD OVERWRITE events_json ON pending_event TYPE string;
 DEFINE FIELD OVERWRITE created_at  ON pending_event TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_pending_source ON pending_event FIELDS origin_id, query_id;
 
+-- pipe_lock: distributed lock for horizontal scaling (one instance per pipe)
+DEFINE TABLE OVERWRITE pipe_lock SCHEMAFULL;
+DEFINE FIELD OVERWRITE pipe        ON pipe_lock TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE instance    ON pipe_lock TYPE string;
+DEFINE FIELD OVERWRITE acquired_at ON pipe_lock TYPE datetime;
+DEFINE FIELD OVERWRITE expires_at  ON pipe_lock TYPE datetime;
+DEFINE INDEX OVERWRITE idx_pipe_lock ON pipe_lock FIELDS pipe UNIQUE;
+
 -- dlq: dead letter queue for events that failed delivery after all retries
 DEFINE TABLE OVERWRITE dlq SCHEMAFULL;
 DEFINE FIELD OVERWRITE pipe        ON dlq TYPE string;
