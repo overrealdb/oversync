@@ -1,1 +1,1 @@
-DELETE dlq WHERE id = $id;
+DELETE FROM dlq WHERE meta::id(id) = $id;

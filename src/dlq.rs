@@ -77,7 +77,10 @@ pub async fn list_dlq(db: &Surreal<Any>) -> Result<Vec<DlqEntry>, OversyncError>
 			Some(DlqEntry {
 				id: r
 					.get("id")
-					.map(|v| v.to_string().trim_matches('"').to_string())
+					.map(|v| {
+						let s = v.to_string().trim_matches('"').to_string();
+						s.strip_prefix("dlq:").unwrap_or(&s).to_string()
+					})
 					.unwrap_or_default(),
 				pipe: r.get("pipe")?.as_str()?.to_string(),
 				query: r.get("query")?.as_str()?.to_string(),
