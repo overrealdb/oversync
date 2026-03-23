@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "oversync.fullname" . }}
+  labels:
+    {{- include "oversync.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "oversync.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.metrics.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4200"
+        prometheus.io/path: "/metrics"
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "oversync.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: oversync
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 4200
+          env:
+            - name: OVERSYNC_BIND
+              value: "0.0.0.0:4200"
+            - name: OVERSYNC_SURREALDB_URL
+              value: {{ .Values.surrealdb.url | quote }}
+            - name: OVERSYNC_SURREALDB_USER
+              value: {{ .Values.surrealdb.user | quote }}
+            - name: OVERSYNC_SURREALDB_NS
+              value: {{ .Values.surrealdb.namespace | quote }}
+            - name: OVERSYNC_SURREALDB_DB
+              value: {{ .Values.surrealdb.database | quote }}
+            - name: OVERSYNC_SURREALDB_PASS
+              {{- if .Values.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: surrealdb-pass
+                  optional: true
+              {{- else }}
+              value: {{ .Values.surrealdb.pass | quote }}
+              {{- end }}
+            - name: OVERSYNC_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if or .Values.credentialKey .Values.existingSecret }}
+            - name: OVERSYNC_CREDENTIAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "oversync.fullname" .)) }}
+                  key: credential-key
+            {{- end }}
+            {{- if or .Values.apiKey .Values.existingSecret }}
+            - name: OVERSYNC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret | default (printf "%s-secrets" (include "oversync.fullname" .)) }}
+                  key: api-key
+                  optional: true
+            {{- end }}
+            {{- if .Values.otelEndpoint }}
+            - name: OVERSYNC_OTEL_ENDPOINT
+              value: {{ .Values.otelEndpoint | quote }}
+            {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/oversync.toml
+              subPath: oversync.toml
+              readOnly: true
+        {{- if .Values.trino.enabled }}
+        - name: trino
+          image: "{{ .Values.trino.image.repository }}:{{ .Values.trino.image.tag }}"
+          ports:
+            - name: trino
+              containerPort: 8080
+          {{- with .Values.trino.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.trino.catalogConfigMap }}
+          volumeMounts:
+            - name: trino-catalogs
+              mountPath: /etc/trino/catalog
+              readOnly: true
+          {{- end }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Values.config.existingConfigMap | default (printf "%s-config" (include "oversync.fullname" .)) }}
+        {{- if and .Values.trino.enabled .Values.trino.catalogConfigMap }}
+        - name: trino-catalogs
+          configMap:
+            name: {{ .Values.trino.catalogConfigMap }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,119 @@
+# ── Image ─────────────────────────────────────────────────
+image:
+  # DockerHub by default. For private registry / Artifactory:
+  #   repository: artifactory.company.com/docker-local/oversync
+  repository: overrealdb/oversync
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Private registry credentials (e.g. Artifactory, corporate registry)
+imagePullSecrets: []
+  # - name: artifactory-creds
+  # - name: dockerhub-creds
+
+# ── Replicas & Scaling ───────────────────────────────────
+replicaCount: 2
+
+# ── Config ───────────────────────────────────────────────
+config:
+  # Inline TOML config — mounted as /app/oversync.toml
+  # Alternatively use existingConfigMap
+  toml: |
+    [surrealdb]
+    url = "${OVERSYNC_SURREALDB_URL}"
+    username = "${OVERSYNC_SURREALDB_USER:-root}"
+    password = "${OVERSYNC_SURREALDB_PASS:-root}"
+
+  # Use existing ConfigMap instead of inline toml
+  existingConfigMap: ""
+
+# ── SurrealDB ────────────────────────────────────────────
+surrealdb:
+  url: "http://surrealdb:8000"
+  user: "root"
+  pass: "root"
+  namespace: "oversync"
+  database: "sync"
+
+# ── Security ─────────────────────────────────────────────
+credentialKey: ""  # REQUIRED for credential-backed pipes. Override via --set or secret.
+apiKey: ""         # When set, mutation endpoints require auth.
+
+# Use existing secret for credentialKey and apiKey
+existingSecret: ""
+  # Secret must have keys: credential-key, api-key
+
+# ── Observability ────────────────────────────────────────
+otelEndpoint: ""  # e.g. "http://otel-collector:4317"
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    namespace: ""
+
+# ── Service ──────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 4200
+
+# ── Ingress ──────────────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: oversync.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── Resources ────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# ── Probes ───────────────────────────────────────────────
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+# ── Pod configuration ────────────────────────────────────
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+
+# ── Optional: Trino sidecar ──────────────────────────────
+trino:
+  enabled: false
+  image:
+    repository: trinodb/trino
+    tag: "479"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  # Mount catalog configs from ConfigMap
+  catalogConfigMap: ""

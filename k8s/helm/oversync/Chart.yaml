@@ -1,0 +1,16 @@
+apiVersion: v2
+name: oversync
+description: Lightweight poll-based data sync engine
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - data-sync
+  - delta
+  - surrealdb
+  - etl
+home: https://github.com/overrealdb/oversync
+sources:
+  - https://github.com/overrealdb/oversync
+maintainers:
+  - name: overrealdb

@@ -1,0 +1,11 @@
+{{- if not .Values.config.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "oversync.fullname" . }}-config
+  labels:
+    {{- include "oversync.labels" . | nindent 4 }}
+data:
+  oversync.toml: |
+    {{- .Values.config.toml | nindent 4 }}
+{{- end }}
