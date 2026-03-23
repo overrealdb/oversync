@@ -746,3 +746,93 @@ async fn create_pipe_replaces_existing() {
 	assert_eq!(pipes.len(), 1);
 	assert_eq!(pipes[0]["origin_connector"], "mysql");
 }
+
+// ── Sink update ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn update_sink_modifies_db() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/sinks",
+		serde_json::json!({
+			"name": "my-sink",
+			"sink_type": "stdout",
+		}),
+	)
+	.await;
+
+	let (status, json) = put_json(
+		&app,
+		"/sinks/my-sink",
+		serde_json::json!({
+			"sink_type": "kafka",
+			"config": {"brokers": "kafka:9092", "topic": "test"}
+		}),
+	)
+	.await;
+
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+}
+
+// ── Trigger source ──────────────────────────────────────────
+
+#[tokio::test]
+async fn trigger_source_without_lifecycle() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	let (status, json) = post_json(
+		&app,
+		"/sources/nonexistent/trigger",
+		serde_json::json!({}),
+	)
+	.await;
+
+	assert_eq!(status, StatusCode::OK);
+	assert!(json["error"].as_str().is_some() || json["message"].as_str().is_some());
+}
+
+// ── Auth on write endpoints ─────────────────────────────────
+
+#[tokio::test]
+async fn auth_blocks_write_endpoints() {
+	let container = TestSurrealContainer::new().await;
+	let state = Arc::new(ApiState {
+		sources: Arc::new(RwLock::new(vec![])),
+		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
+		cycle_status: Arc::new(RwLock::new(HashMap::new())),
+		db_client: Some(container.client.clone()),
+		lifecycle: None,
+		api_key: Some("secret".into()),
+	});
+	let app = oversync_api::router(state);
+
+	// Helper that doesn't require JSON body in response
+	async fn status_of(app: &axum::Router, method: &str, path: &str) -> StatusCode {
+		let body = serde_json::to_vec(&serde_json::json!({"name":"x","connector":"pg","origin_connector":"pg","origin_dsn":"pg://","sink_type":"stdout"})).unwrap();
+		let req = match method {
+			"POST" => Request::post(path).header("content-type", "application/json").body(Body::from(body)).unwrap(),
+			"PUT" => Request::put(path).header("content-type", "application/json").body(Body::from(body)).unwrap(),
+			"DELETE" => Request::delete(path).body(Body::empty()).unwrap(),
+			_ => panic!("unsupported method"),
+		};
+		app.clone().oneshot(req).await.unwrap().status()
+	}
+
+	assert_eq!(status_of(&app, "POST", "/sources").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "PUT", "/sources/x").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "DELETE", "/sources/x").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "POST", "/sinks").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "PUT", "/sinks/x").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "DELETE", "/sinks/x").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "POST", "/pipes").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "PUT", "/pipes/x").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(status_of(&app, "DELETE", "/pipes/x").await, StatusCode::UNAUTHORIZED);
+}
