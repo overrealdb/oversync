@@ -70,6 +70,7 @@ hex = "0.4"
 aes-gcm = "0.10"
 rand = "0.9"
 base64 = "0.22"
+hostname = "0.4"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 wasmtime = "29"
@@ -126,6 +127,7 @@ toml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 metrics = { workspace = true }
+hostname = { workspace = true }
 metrics-exporter-prometheus = { workspace = true, optional = true }
 aes-gcm = { workspace = true }
 rand = { workspace = true }

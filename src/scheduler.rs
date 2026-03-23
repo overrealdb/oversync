@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::watch;
 use tokio::time::MissedTickBehavior;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{OriginConnector, Sink};
@@ -214,6 +214,16 @@ async fn run_pipe_query(
 	let interval_secs = pipe.schedule.interval_secs.max(1);
 	let interval = Duration::from_secs(interval_secs);
 
+	// Distributed lock for horizontal scaling
+	let instance_id = std::env::var("OVERSYNC_INSTANCE_ID")
+		.unwrap_or_else(|_| hostname::get().map(|h| h.to_string_lossy().into()).unwrap_or_else(|_| "unknown".into()));
+	let pipe_lock = crate::distributed_lock::PipeLock::new(
+		engine.state_client().clone(),
+		instance_id,
+	);
+	let lock_key = format!("{}:{}", pipe.name, query.id);
+	let lock_ttl = interval_secs.saturating_mul(3).max(60); // 3x interval or 60s min
+
 	info!(
 		pipe = %pipe.name,
 		query = %query.id,
@@ -231,15 +241,21 @@ async fn run_pipe_query(
 	if let Some(ref mut rl) = rate_limiter {
 		rl.acquire().await;
 	}
-	run_timed_cycle(
-		&pipe_engine,
-		connector.as_ref(),
-		&sinks,
-		&pipe,
-		&query,
-		interval,
-	)
-	.await;
+	match pipe_lock.try_acquire(&lock_key, lock_ttl).await {
+		Ok(true) => {
+			run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
+			if let Err(e) = pipe_lock.release(&lock_key).await {
+				warn!(pipe = %pipe.name, error = %e, "failed to release lock (will expire via TTL)");
+			}
+		}
+		Ok(false) => {
+			debug!(pipe = %pipe.name, "initial cycle skipped — lock held by another instance");
+		}
+		Err(e) => {
+			warn!(pipe = %pipe.name, error = %e, "lock acquire failed — running without lock");
+			run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
+		}
+	}
 
 	let mut ticker = tokio::time::interval(interval);
 	ticker.tick().await;
@@ -256,6 +272,10 @@ async fn run_pipe_query(
 	loop {
 		tokio::select! {
 			_ = ticker.tick() => {
+				if !pipe_lock.try_acquire(&lock_key, lock_ttl).await.unwrap_or(false) {
+					debug!(pipe = %pipe.name, query = %query.id, "skipping cycle — lock held by another instance");
+					continue;
+				}
 				if let Some(ref mut rl) = rate_limiter {
 					rl.acquire().await;
 				}
@@ -267,9 +287,11 @@ async fn run_pipe_query(
 					&query,
 					interval,
 				).await;
+				let _ = pipe_lock.release(&lock_key).await;
 			}
 			_ = shutdown.changed() => {
 				info!(pipe = %pipe.name, query = %query.id, "shutting down");
+				let _ = pipe_lock.release(&lock_key).await;
 				break;
 			}
 		}
