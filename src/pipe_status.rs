@@ -58,21 +58,31 @@ impl PipeStatusTracker {
 
 	pub async fn set_success(&self, pipe: &str) {
 		let mut map = self.inner.write().await;
-		if let Some(entry) = map.get_mut(pipe) {
-			entry.state = PipeState::Idle;
-			entry.last_cycle_at = Some(Utc::now());
-			entry.total_cycles += 1;
-			entry.last_error = None;
-		}
+		let entry = map.entry(pipe.to_string()).or_insert_with(|| PipeStatus {
+			state: PipeState::Idle,
+			last_cycle_at: None,
+			last_error: None,
+			total_cycles: 0,
+			total_errors: 0,
+		});
+		entry.state = PipeState::Idle;
+		entry.last_cycle_at = Some(Utc::now());
+		entry.total_cycles += 1;
+		entry.last_error = None;
 	}
 
 	pub async fn set_errored(&self, pipe: &str, error: &str) {
 		let mut map = self.inner.write().await;
-		if let Some(entry) = map.get_mut(pipe) {
-			entry.state = PipeState::Errored;
-			entry.last_error = Some(error.to_string());
-			entry.total_errors += 1;
-		}
+		let entry = map.entry(pipe.to_string()).or_insert_with(|| PipeStatus {
+			state: PipeState::Errored,
+			last_cycle_at: None,
+			last_error: None,
+			total_cycles: 0,
+			total_errors: 0,
+		});
+		entry.state = PipeState::Errored;
+		entry.last_error = Some(error.to_string());
+		entry.total_errors += 1;
 	}
 
 	pub async fn set_disabled(&self, pipe: &str) {

@@ -269,11 +269,12 @@ async fn create_connector(
 			serde_json::Value::Object(map),
 		)
 	} else {
-		let trino_url = pipe
-			.origin
-			.trino_url
-			.as_deref()
-			.unwrap_or("http://localhost:8080");
+		let trino_url = pipe.origin.trino_url.as_deref().ok_or_else(|| {
+			OversyncError::Config(format!(
+				"pipe '{}': connector '{}' requires trino_url",
+				pipe.name, pipe.origin.connector
+			))
+		})?;
 		// Merge credentials into Trino config
 		if let Some(creds) = credentials {
 			map.clear();

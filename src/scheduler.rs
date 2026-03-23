@@ -165,11 +165,17 @@ async fn run_pipe_query(
 			serde_json::Value::Object(map),
 		)
 	} else {
-		let trino_url = pipe
-			.origin
-			.trino_url
-			.as_deref()
-			.unwrap_or("http://localhost:8080");
+		let trino_url = match pipe.origin.trino_url.as_deref() {
+			Some(url) => url,
+			None => {
+				error!(
+					pipe = %pipe.name,
+					connector = %pipe.origin.connector,
+					"non-native connector requires trino_url in origin config"
+				);
+				return;
+			}
+		};
 		info!(
 			pipe = %pipe.name,
 			connector = %pipe.origin.connector,

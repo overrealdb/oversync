@@ -268,13 +268,15 @@ fn other_type_name(v: &serde_json::Value) -> &'static str {
 fn data_to_rows(data: &[serde_json::Value], key_field: &str) -> Result<Vec<RawRow>, OversyncError> {
 	let mut rows = Vec::with_capacity(data.len());
 	for (i, item) in data.iter().enumerate() {
-		let key = item
-			.get(key_field)
-			.map(|v| match v {
-				serde_json::Value::String(s) => s.clone(),
-				other => other.to_string(),
-			})
-			.unwrap_or_else(|| i.to_string());
+		let key = match item.get(key_field) {
+			Some(serde_json::Value::String(s)) => s.clone(),
+			Some(other) => other.to_string(),
+			None => {
+				return Err(OversyncError::Connector(format!(
+					"mcp: row {i} missing key field '{key_field}'"
+				)));
+			}
+		};
 
 		rows.push(RawRow {
 			row_key: key,
@@ -412,14 +414,13 @@ mod tests {
 	}
 
 	#[test]
-	fn data_to_rows_missing_key_uses_index() {
+	fn data_to_rows_missing_key_errors() {
 		let data = vec![
 			serde_json::json!({"name": "alice"}),
 			serde_json::json!({"name": "bob"}),
 		];
-		let rows = data_to_rows(&data, "id").unwrap();
-		assert_eq!(rows[0].row_key, "0");
-		assert_eq!(rows[1].row_key, "1");
+		let err = data_to_rows(&data, "id").unwrap_err();
+		assert!(err.to_string().contains("missing key field"));
 	}
 
 	#[test]

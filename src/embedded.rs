@@ -81,8 +81,22 @@ impl EmbeddedSync {
 		pipe_name: &str,
 		query_id: &str,
 	) -> Result<DeltaResult, OversyncError> {
-		// Clone pipe + query under read lock, then release immediately.
-		let (pipe, query) = {
+		self.run_once_with_dsn(pipe_name, query_id, None).await
+	}
+
+	/// Run one sync cycle with an optional DSN override.
+	///
+	/// When `dsn_override` is set, the pipe's `origin.dsn` is replaced before
+	/// creating the connector. This allows callers (e.g. datacat) to resolve
+	/// credentials externally and pass the decrypted DSN without modifying
+	/// the stored pipe config.
+	pub async fn run_once_with_dsn(
+		&self,
+		pipe_name: &str,
+		query_id: &str,
+		dsn_override: Option<&str>,
+	) -> Result<DeltaResult, OversyncError> {
+		let (mut pipe, query) = {
 			let pipes = self.pipes.read().await;
 			let pipe = pipes
 				.iter()
@@ -100,14 +114,19 @@ impl EmbeddedSync {
 			(pipe, query)
 		};
 
+		if let Some(dsn) = dsn_override {
+			pipe.origin.dsn = dsn.to_string();
+		}
+
 		let (eff_connector, eff_config) = if !pipe.origin.needs_trino_bridge() {
 			(pipe.origin.connector.clone(), build_connector_config(&pipe))
 		} else {
-			let trino_url = pipe
-				.origin
-				.trino_url
-				.as_deref()
-				.unwrap_or("http://localhost:8080");
+			let trino_url = pipe.origin.trino_url.as_deref().ok_or_else(|| {
+				OversyncError::Config(format!(
+					"pipe '{}': connector '{}' requires trino_url",
+					pipe.name, pipe.origin.connector
+				))
+			})?;
 			(
 				"trino".to_string(),
 				serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}),
@@ -402,11 +421,13 @@ async fn run_embedded_pipe_query(
 	let (effective_connector, connector_config) = if !pipe.origin.needs_trino_bridge() {
 		(pipe.origin.connector.clone(), build_connector_config(&pipe))
 	} else {
-		let trino_url = pipe
-			.origin
-			.trino_url
-			.as_deref()
-			.unwrap_or("http://localhost:8080");
+		let trino_url = match pipe.origin.trino_url.as_deref() {
+			Some(url) => url,
+			None => {
+				error!(pipe = %pipe.name, connector = %pipe.origin.connector, "non-native connector requires trino_url");
+				return;
+			}
+		};
 		info!(pipe = %pipe.name, connector = %pipe.origin.connector, "routing through Trino");
 		(
 			"trino".to_string(),
