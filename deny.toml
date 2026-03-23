@@ -4,7 +4,16 @@ all-features = false
 
 [advisories]
 version = 2
-ignore = []
+ignore = [
+	# rsa timing side-channel — no fix available, transitive via sqlx-mysql + jsonwebtoken
+	"RUSTSEC-2023-0071",
+	# bincode unmaintained — transitive via surrealdb-core
+	"RUSTSEC-2025-0141",
+	# paste unmaintained — transitive via wasmtime + arrow-flight
+	"RUSTSEC-2024-0436",
+	# astral-tokio-tar PAX extensions — transitive via testcontainers (dev-only)
+	"RUSTSEC-2026-0066",
+]
 
 [licenses]
 version = 2
@@ -22,6 +31,9 @@ allow = [
 	"OpenSSL",
 	"BSL-1.0",
 	"MPL-2.0",
+	"Unlicense",
+	"BUSL-1.1",
+	"CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.8
 
