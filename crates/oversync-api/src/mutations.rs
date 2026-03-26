@@ -481,7 +481,7 @@ pub async fn delete_pipe(
 fn require_db(
 	state: &ApiState,
 ) -> Result<&surrealdb::Surreal<surrealdb::engine::any::Any>, Json<ErrorResponse>> {
-	state.db_client.as_ref().ok_or_else(|| {
+	state.db_client.as_deref().ok_or_else(|| {
 		Json(ErrorResponse {
 			error: "database not configured".into(),
 		})

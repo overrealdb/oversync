@@ -70,7 +70,8 @@ pub struct OversyncEngineBuilder {
 #[derive(Clone)]
 pub struct OversyncEngine {
 	lifecycle: Arc<LifecycleManager>,
-	state_client: Surreal<Any>,
+	state_client: Arc<Surreal<Any>>,
+	health_cancel: tokio_util::sync::CancellationToken,
 	surreal_def: SurrealDbDef,
 	#[allow(dead_code)] // used by api_router() behind #[cfg(feature = "api")]
 	api_key: Option<String>,
@@ -174,6 +175,7 @@ impl OversyncEngine {
 
 	/// Stop all sync tasks and clear config.
 	pub async fn shutdown(&self) {
+		self.health_cancel.cancel();
 		self.lifecycle.shutdown().await;
 	}
 
@@ -199,7 +201,7 @@ impl OversyncEngine {
 		self.lifecycle.current_config().await
 	}
 
-	pub fn state_client(&self) -> &Surreal<Any> {
+	pub fn state_client(&self) -> &Arc<Surreal<Any>> {
 		&self.state_client
 	}
 
@@ -234,7 +236,7 @@ impl OversyncEngine {
 			.install_recorder()
 			.ok();
 
-		let base = oversync_api::router(api_state);
+		let base = oversync_api::router(api_state.clone());
 
 		let registry = crate::engine::default_registry();
 		let dry_run_state = Arc::new(DryRunState { registry });
@@ -273,7 +275,7 @@ impl OversyncEngine {
 			.route(
 				"/config/versions",
 				axum::routing::get(list_config_versions)
-					.with_state(Arc::new(self.state_client.clone())),
+					.with_state(self.state_client.clone()),
 			)
 			.route_layer(axum::middleware::from_fn_with_state(
 				api_state.clone(),
@@ -335,7 +337,7 @@ async fn dry_run_handler(
 #[cfg(feature = "api")]
 struct CredentialState {
 	store: crate::credential::AesGcmStore,
-	db: surrealdb::Surreal<surrealdb::engine::any::Any>,
+	db: Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>,
 }
 
 #[cfg(feature = "api")]
@@ -544,29 +546,46 @@ impl OversyncEngineBuilder {
 
 	/// Build the engine: connect to SurrealDB, apply schema, register factories.
 	pub async fn build(self) -> Result<OversyncEngine, OversyncError> {
-		let state_client = surrealdb::engine::any::connect(&self.url)
-			.await
-			.map_err(|e| OversyncError::SurrealDb(format!("connect: {e}")))?;
-		if !self.url.starts_with("mem://") {
-			state_client
-				.signin(surrealdb::opt::auth::Root {
+		let health_cancel = tokio_util::sync::CancellationToken::new();
+		let is_mem = self.url.starts_with("mem://");
+
+		let state_client: Arc<Surreal<Any>> = if is_mem {
+			let db = surrealdb::engine::any::connect(&self.url)
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("connect: {e}")))?;
+			db.use_ns(&self.namespace)
+				.use_db(&self.database)
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("use ns/db: {e}")))?;
+
+			#[cfg(feature = "schema")]
+			if !self.skip_schema {
+				apply_schema(&db, &self.namespace, &self.database).await?;
+			}
+
+			Arc::new(db)
+		} else {
+			let rdb = crate::resilient_db::ResilientDb::connect(
+				crate::resilient_db::ResilientDbConfig {
+					url: self.url.clone(),
 					username: self.username.clone(),
 					password: self.password.clone(),
-				})
-				.await
-				.map_err(|e| OversyncError::SurrealDb(format!("signin: {e}")))?;
-		}
-
-		#[cfg(feature = "schema")]
-		if !self.skip_schema {
-			apply_schema(&state_client, &self.namespace, &self.database).await?;
-		}
-
-		state_client
-			.use_ns(&self.namespace)
-			.use_db(&self.database)
+					namespace: self.namespace.clone(),
+					database: self.database.clone(),
+					health_interval: std::time::Duration::from_secs(1),
+				},
+			)
 			.await
-			.map_err(|e| OversyncError::SurrealDb(format!("use ns/db: {e}")))?;
+			.map_err(|e| OversyncError::SurrealDb(format!("resilient connect: {e}")))?;
+
+			#[cfg(feature = "schema")]
+			if !self.skip_schema {
+				apply_schema(&rdb.client(), &self.namespace, &self.database).await?;
+			}
+
+			rdb.start_health_loop(health_cancel.clone());
+			rdb.client()
+		};
 
 		let snapshot_client = match &self.snapshot_url {
 			Some(url) => {
@@ -621,7 +640,7 @@ impl OversyncEngineBuilder {
 			}
 		};
 
-		let delta_engine = DeltaEngine::new(state_client.clone(), snapshot_client);
+		let delta_engine = DeltaEngine::new(Arc::clone(&state_client), snapshot_client);
 
 		let mut registry = if self.skip_defaults {
 			PluginRegistry::new()
@@ -655,6 +674,7 @@ impl OversyncEngineBuilder {
 		Ok(OversyncEngine {
 			lifecycle,
 			state_client,
+			health_cancel,
 			surreal_def,
 			api_key: self.api_key,
 		})

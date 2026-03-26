@@ -32,6 +32,7 @@ pub mod metrics;
 pub mod pipe_status;
 pub mod rate_limit;
 pub mod registry;
+pub mod resilient_db;
 pub mod scheduler;
 
 pub use config::SyncConfig;

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
@@ -32,13 +33,13 @@ const LOG_CYCLE_FINISH_SQL: &str =
 	include_str!("../../../surql/queries/delta/log_cycle_finish.surql");
 
 pub struct DeltaEngine {
-	state_client: Surreal<Any>,
+	state_client: Arc<Surreal<Any>>,
 	snapshot_client: Surreal<Any>,
 	tables: TableNames,
 }
 
 impl DeltaEngine {
-	pub fn new(state_client: Surreal<Any>, snapshot_client: Surreal<Any>) -> Self {
+	pub fn new(state_client: Arc<Surreal<Any>>, snapshot_client: Surreal<Any>) -> Self {
 		Self {
 			state_client,
 			snapshot_client,
@@ -48,7 +49,7 @@ impl DeltaEngine {
 
 	pub fn single(client: Surreal<Any>) -> Self {
 		Self {
-			state_client: client.clone(),
+			state_client: Arc::new(client.clone()),
 			snapshot_client: client,
 			tables: TableNames::default_shared(),
 		}
@@ -62,7 +63,7 @@ impl DeltaEngine {
 	/// Create a new engine sharing the same DB connections but with different table names.
 	pub fn for_source(&self, source_name: &str) -> Self {
 		Self {
-			state_client: self.state_client.clone(),
+			state_client: Arc::clone(&self.state_client),
 			snapshot_client: self.snapshot_client.clone(),
 			tables: TableNames::for_source(source_name),
 		}
@@ -72,7 +73,7 @@ impl DeltaEngine {
 		&self.tables
 	}
 
-	pub fn state_client(&self) -> &Surreal<Any> {
+	pub fn state_client(&self) -> &Arc<Surreal<Any>> {
 		&self.state_client
 	}
 

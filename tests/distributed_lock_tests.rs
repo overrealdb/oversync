@@ -1,12 +1,13 @@
 mod common;
 
 use common::surreal::TestSurrealContainer;
+use std::sync::Arc;
 use oversync::distributed_lock::PipeLock;
 
 #[tokio::test]
 async fn lock_acquire_and_release() {
 	let surreal = TestSurrealContainer::new().await;
-	let lock = PipeLock::new(surreal.client.clone(), "instance-1".into());
+	let lock = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
 
 	let acquired = lock.try_acquire("pipe-a:q1", 60).await.unwrap();
 	assert!(acquired);
@@ -17,8 +18,8 @@ async fn lock_acquire_and_release() {
 #[tokio::test]
 async fn lock_prevents_double_acquire() {
 	let surreal = TestSurrealContainer::new().await;
-	let lock1 = PipeLock::new(surreal.client.clone(), "instance-1".into());
-	let lock2 = PipeLock::new(surreal.client.clone(), "instance-2".into());
+	let lock1 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
+	let lock2 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-2".into());
 
 	let acquired1 = lock1.try_acquire("pipe-a:q1", 300).await.unwrap();
 	assert!(acquired1);
@@ -30,7 +31,7 @@ async fn lock_prevents_double_acquire() {
 #[tokio::test]
 async fn lock_same_instance_can_reacquire() {
 	let surreal = TestSurrealContainer::new().await;
-	let lock = PipeLock::new(surreal.client.clone(), "instance-1".into());
+	let lock = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
 
 	let acquired1 = lock.try_acquire("pipe-a:q1", 300).await.unwrap();
 	assert!(acquired1);
@@ -42,8 +43,8 @@ async fn lock_same_instance_can_reacquire() {
 #[tokio::test]
 async fn lock_release_allows_other_instance() {
 	let surreal = TestSurrealContainer::new().await;
-	let lock1 = PipeLock::new(surreal.client.clone(), "instance-1".into());
-	let lock2 = PipeLock::new(surreal.client.clone(), "instance-2".into());
+	let lock1 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
+	let lock2 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-2".into());
 
 	lock1.try_acquire("pipe-a:q1", 300).await.unwrap();
 	lock1.release("pipe-a:q1").await.unwrap();
@@ -55,8 +56,8 @@ async fn lock_release_allows_other_instance() {
 #[tokio::test]
 async fn lock_expired_can_be_taken() {
 	let surreal = TestSurrealContainer::new().await;
-	let lock1 = PipeLock::new(surreal.client.clone(), "instance-1".into());
-	let lock2 = PipeLock::new(surreal.client.clone(), "instance-2".into());
+	let lock1 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
+	let lock2 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-2".into());
 
 	// Acquire with 1 second TTL
 	lock1.try_acquire("pipe-a:q1", 1).await.unwrap();
@@ -71,8 +72,8 @@ async fn lock_expired_can_be_taken() {
 #[tokio::test]
 async fn lock_different_pipes_independent() {
 	let surreal = TestSurrealContainer::new().await;
-	let lock1 = PipeLock::new(surreal.client.clone(), "instance-1".into());
-	let lock2 = PipeLock::new(surreal.client.clone(), "instance-2".into());
+	let lock1 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
+	let lock2 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-2".into());
 
 	let a = lock1.try_acquire("pipe-a:q1", 300).await.unwrap();
 	let b = lock2.try_acquire("pipe-b:q1", 300).await.unwrap();

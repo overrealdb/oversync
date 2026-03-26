@@ -218,7 +218,7 @@ async fn run_pipe_query(
 	let instance_id = std::env::var("OVERSYNC_INSTANCE_ID")
 		.unwrap_or_else(|_| hostname::get().map(|h| h.to_string_lossy().into()).unwrap_or_else(|_| "unknown".into()));
 	let pipe_lock = crate::distributed_lock::PipeLock::new(
-		engine.state_client().clone(),
+		std::sync::Arc::clone(engine.state_client()),
 		instance_id,
 	);
 	let lock_key = format!("{}:{}", pipe.name, query.id);

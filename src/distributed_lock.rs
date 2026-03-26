@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use oversync_core::error::OversyncError;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
@@ -11,12 +13,12 @@ const SQL_RELEASE: &str = include_str!("../surql/queries/mutations/lock_release.
 /// Ensures only one oversync instance processes a given pipe at a time.
 /// Uses a `pipe_lock` table with TTL-based expiry for crash recovery.
 pub struct PipeLock {
-	db: Surreal<Any>,
+	db: Arc<Surreal<Any>>,
 	instance_id: String,
 }
 
 impl PipeLock {
-	pub fn new(db: Surreal<Any>, instance_id: String) -> Self {
+	pub fn new(db: Arc<Surreal<Any>>, instance_id: String) -> Self {
 		Self { db, instance_id }
 	}
 

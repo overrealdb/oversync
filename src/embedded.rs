@@ -335,7 +335,7 @@ impl EmbeddedSyncBuilder {
 			}
 		};
 
-		let delta_engine = Arc::new(DeltaEngine::new(state_db, snapshot_db));
+		let delta_engine = Arc::new(DeltaEngine::new(Arc::new(state_db), snapshot_db));
 
 		let mut registry = crate::engine::default_registry();
 		for factory in self.extra_sources {

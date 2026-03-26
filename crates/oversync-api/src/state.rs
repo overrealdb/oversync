@@ -10,7 +10,7 @@ pub struct ApiState {
 	pub sinks: Arc<RwLock<Vec<SinkConfig>>>,
 	pub pipes: Arc<RwLock<Vec<PipeConfigCache>>>,
 	pub cycle_status: Arc<RwLock<HashMap<String, SourceStatus>>>,
-	pub db_client: Option<surrealdb::Surreal<surrealdb::engine::any::Any>>,
+	pub db_client: Option<Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>>,
 	pub lifecycle: Option<Arc<dyn LifecycleControl>>,
 	pub api_key: Option<String>,
 }
