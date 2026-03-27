@@ -51,6 +51,7 @@ dependencies = ["clippy", "fmt-check", "deny"]
 # ─── Coverage ───
 
 [tasks.coverage]
+clear = true
 description = "Generate code coverage report"
 command = "cargo"
 args = ["llvm-cov", "--workspace", "--lcov", "--output-path", "lcov.info"]
