@@ -42,7 +42,7 @@ async fn start_and_shutdown() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 	let snap = surrealdb::engine::any::connect("mem://").await.unwrap();
-	let engine = DeltaEngine::new(container.client.clone(), snap);
+	let engine = DeltaEngine::new(container.client.clone().into(), snap);
 
 	let lm = LifecycleManager::new(engine, test_registry());
 	assert!(!lm.is_running().await);
@@ -60,7 +60,7 @@ async fn pause_and_resume() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 	let snap = surrealdb::engine::any::connect("mem://").await.unwrap();
-	let engine = DeltaEngine::new(container.client.clone(), snap);
+	let engine = DeltaEngine::new(container.client.clone().into(), snap);
 
 	let lm = LifecycleManager::new(engine, test_registry());
 	lm.start(make_config(&def)).await.unwrap();
@@ -90,7 +90,7 @@ async fn restart_replaces_scheduler() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 	let snap = surrealdb::engine::any::connect("mem://").await.unwrap();
-	let engine = DeltaEngine::new(container.client.clone(), snap);
+	let engine = DeltaEngine::new(container.client.clone().into(), snap);
 
 	let lm = LifecycleManager::new(engine, test_registry());
 	lm.start(make_config(&def)).await.unwrap();
@@ -117,7 +117,7 @@ async fn config_update_while_paused_applies_on_resume() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 	let snap = surrealdb::engine::any::connect("mem://").await.unwrap();
-	let engine = DeltaEngine::new(container.client.clone(), snap);
+	let engine = DeltaEngine::new(container.client.clone().into(), snap);
 
 	let lm = LifecycleManager::new(engine, test_registry());
 	lm.start(make_config(&def)).await.unwrap();

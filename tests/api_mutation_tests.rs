@@ -18,7 +18,7 @@ fn test_state_with_db(client: surrealdb::Surreal<surrealdb::engine::any::Any>) -
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
-		db_client: Some(client),
+		db_client: Some(client.into()),
 		lifecycle: None,
 		api_key: None,
 	})
@@ -481,7 +481,7 @@ async fn auth_key_blocks_unauthorized_requests() {
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
-		db_client: Some(container.client.clone()),
+		db_client: Some(container.client.clone().into()),
 		lifecycle: None,
 		api_key: Some("secret-key".into()),
 	});
@@ -505,7 +505,7 @@ async fn auth_key_allows_authorized_requests() {
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
-		db_client: Some(container.client.clone()),
+		db_client: Some(container.client.clone().into()),
 		lifecycle: None,
 		api_key: Some("secret-key".into()),
 	});
@@ -808,7 +808,7 @@ async fn auth_blocks_write_endpoints() {
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		cycle_status: Arc::new(RwLock::new(HashMap::new())),
-		db_client: Some(container.client.clone()),
+		db_client: Some(container.client.clone().into()),
 		lifecycle: None,
 		api_key: Some("secret".into()),
 	});
