@@ -320,11 +320,17 @@ async fn concurrent_reads_writes_during_recovery() {
 			if wcancel.is_cancelled() {
 				break;
 			}
-			if writer_db
+			let committed = match writer_db
 				.query("UPDATE rw_test:counter SET value += 1")
 				.await
-				.is_ok()
 			{
+				Ok(mut resp) => {
+					let rows: Result<Vec<serde_json::Value>, _> = resp.take(0);
+					rows.map(|r| !r.is_empty()).unwrap_or(false)
+				}
+				Err(_) => false,
+			};
+			if committed {
 				wc.fetch_add(1, Ordering::Relaxed);
 			}
 			tokio::time::sleep(Duration::from_millis(20)).await;
