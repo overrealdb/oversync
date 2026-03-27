@@ -22,7 +22,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            overrealdb/oversync
+            22fx/oversync
             ghcr.io/overrealdb/oversync
           tags: |
             type=match,pattern=oversync-v(.*),group=1
