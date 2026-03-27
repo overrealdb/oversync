@@ -33,13 +33,13 @@ license = "Apache-2.0"
 rust-version = "1.94"
 
 [workspace.dependencies]
-oversync-core = { path = "crates/oversync-core" }
-oversync-connectors = { path = "crates/oversync-connectors" }
-oversync-delta = { path = "crates/oversync-delta" }
-oversync-links = { path = "crates/oversync-links" }
-oversync-sinks = { path = "crates/oversync-sinks" }
-oversync-api = { path = "crates/oversync-api" }
-oversync-transforms = { path = "crates/oversync-transforms" }
+oversync-core = { version = "0.1.0", path = "crates/oversync-core" }
+oversync-connectors = { version = "0.1.0", path = "crates/oversync-connectors" }
+oversync-delta = { version = "0.1.0", path = "crates/oversync-delta" }
+oversync-links = { version = "0.1.0", path = "crates/oversync-links" }
+oversync-sinks = { version = "0.1.0", path = "crates/oversync-sinks" }
+oversync-api = { version = "0.1.0", path = "crates/oversync-api" }
+oversync-transforms = { version = "0.1.0", path = "crates/oversync-transforms" }
 
 overshift = "0.2"
 surql-parser = { version = "0.1.4", features = ["build"] }
