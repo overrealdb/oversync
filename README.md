@@ -34,9 +34,18 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 ### Docker
 
 ```bash
+# DockerHub
+docker pull 22fx/oversync:latest
+
+# GitHub Container Registry
+docker pull ghcr.io/overrealdb/oversync:latest
+
+# Or run with docker compose
 docker compose up -d
 curl http://localhost:4200/health
 ```
+
+The image is distroless (no shell, nonroot uid 65534) — minimal attack surface.
 
 ### Embedded (library)
 

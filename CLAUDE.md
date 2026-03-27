@@ -22,6 +22,8 @@ crates/
   oversync-sinks/      — Kafka, HTTP webhook, SurrealDB, stdout
   oversync-api/        — Axum REST API (CRUD, auth middleware, OpenAPI)
   oversync-links/      — Entity linking (stub)
+  oversync-transforms/ — Built-in + WASM transform pipeline
+  oversync-queries/    — All .surql files + typed query constants (crates.io-publishable)
 ```
 
 Data flow: Source → `Vec<RawRow>` → `compute_diff(prev_hashes, current)` → `DeltaResult{created,updated,deleted}` → fail-safe check → `EventEnvelope` → Sink
@@ -71,16 +73,26 @@ cargo make ci-full        # CI + Docker validation + cargo-deny
 
 ## SurrealQL in Files (MANDATORY)
 
-All SurrealQL code lives in `.surql` files. Never embed SQL strings in Rust code.
+All SurrealQL code lives in `.surql` files under `crates/oversync-queries/surql/`.
+Never embed SQL strings in Rust code.
 
 - Schema (declarative): `surql/schema/{domain}/tables.surql` — uses `DEFINE ... OVERWRITE`
 - Migrations (imperative): `surql/migrations/v001_*.surql`, `v002_*.surql`, ... — uses `IF NOT EXISTS`
 - Functions: `surql/schema/{domain}/fn.surql`
-- Queries: `surql/queries/{delta,config,sink}/*.surql` — loaded via `include_str!()`
+- Queries: `surql/queries/{delta,config,sink,mutations}/*.surql`
 - Manifest: `surql/manifest.toml` — overshift manifest (ns, db, modules)
 - Generated: `surql/generated/current.surql` — auto-generated schema snapshot (do not edit)
 - Bootstrap managed by **overshift** (distributed lock, migration tracking in `_system` DB)
-- Compile-time validation via `surql_parser::build::validate_schema()` in `build.rs`
+- Compile-time validation via `surql_parser::build::validate_schema()` in `oversync-queries/build.rs`
+
+### Query access pattern
+
+Sub-crates import query constants from `oversync-queries`, not `include_str!` directly:
+```rust
+use oversync_queries::delta;
+const SQL: &str = delta::BATCH_UPSERT;
+```
+This ensures all .surql files live inside `oversync-queries` (required for crates.io publishing).
 
 ## Crate Structure
 
@@ -92,9 +104,12 @@ All SurrealQL code lives in `.surql` files. Never embed SQL strings in Rust code
 | `oversync-sinks` | Kafka, HTTP webhook, SurrealDB, stdout |
 | `oversync-delta` | DeltaEngine (SurrealDB state operations) |
 | `oversync-api` | Axum REST API (CRUD, auth, operations, OpenAPI) |
+| `oversync-queries` | All `.surql` files as typed Rust constants |
 | `oversync-links` | Entity linking (stub) |
-| External: `overshift` | Migration engine |
-| External: `surql-parser` | Compile-time `.surql` validation |
+| `oversync-transforms` | Built-in + WASM transform pipeline |
+| External: `overshift` v0.2 | Migration engine (distributed lock, checksums, dry-run) |
+| External: `surql-parser` v0.1.4 | Compile-time `.surql` validation |
+| External: `surql-macros` v0.1.1 | `#[surql_function]`, `surql_check!`, `surql_query!` proc-macros |
 
 ## Feature Flags
 
