@@ -1,13 +1,13 @@
 name: Docker
 
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   build-push:
@@ -20,7 +20,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: overrealdb/oversync
+          images: |
+            overrealdb/oversync
+            ghcr.io/overrealdb/oversync
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -34,6 +36,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6

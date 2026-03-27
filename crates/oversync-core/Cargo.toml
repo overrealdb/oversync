@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Core types, traits, and config for the oversync data sync engine."
+repository = "https://github.com/overrealdb/oversync"
 
 [features]
 default = []

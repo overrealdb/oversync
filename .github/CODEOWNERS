@@ -1,0 +1,10 @@
+# Require review for anything that touches the release/CI pipeline
+/.github/         @overrealdb/maintainers
+/Dockerfile       @overrealdb/maintainers
+/Cargo.toml       @overrealdb/maintainers
+/Cargo.lock       @overrealdb/maintainers
+/release-plz.toml @overrealdb/maintainers
+/cliff.toml       @overrealdb/maintainers
+/build.rs         @overrealdb/maintainers
+/surql/schema/    @overrealdb/maintainers
+/surql/migrations/ @overrealdb/maintainers

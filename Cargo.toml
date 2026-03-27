@@ -41,9 +41,9 @@ oversync-sinks = { path = "crates/oversync-sinks" }
 oversync-api = { path = "crates/oversync-api" }
 oversync-transforms = { path = "crates/oversync-transforms" }
 
-overshift = "0.1"
-surql-parser = { version = "0.1", features = ["build"] }
-surql-macros = "0.1"
+overshift = "0.2"
+surql-parser = { version = "0.1.4", features = ["build"] }
+surql-macros = "0.1.1"
 
 axum = "0.8"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
@@ -104,6 +104,7 @@ cli = [
 	"schema",
 	"oversync-core/cli",
 	"dep:clap",
+	"dep:reqwest",
 	"dep:opentelemetry",
 	"dep:opentelemetry_sdk",
 	"dep:opentelemetry-otlp",
