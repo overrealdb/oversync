@@ -13,7 +13,7 @@ LABEL org.opencontainers.image.description="oversync - a lightweight data sync e
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 COPY --from=builder /build/target/release/oversync /usr/local/bin/oversync
-COPY --from=builder /build/surql/ /app/surql/
+COPY --from=builder /build/crates/oversync-queries/surql/ /app/surql/
 COPY --from=builder /usr/lib/*-linux-gnu/libz.so.1 /usr/lib/
 COPY --from=builder /usr/lib/*-linux-gnu/libssl.so.3 /usr/lib/
 COPY --from=builder /usr/lib/*-linux-gnu/libcrypto.so.3 /usr/lib/
