@@ -39,13 +39,12 @@ impl PipeLock {
 		// Try indices until we find the result.
 		let mut acquired_val = None;
 		for idx in 0..10 {
-			if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(idx) {
-				if let Some(first) = rows.first() {
-					if first.get("acquired").is_some() {
-						acquired_val = first.get("acquired").and_then(|v| v.as_bool());
-						break;
-					}
-				}
+			if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(idx)
+				&& let Some(first) = rows.first()
+				&& first.get("acquired").is_some()
+			{
+				acquired_val = first.get("acquired").and_then(|v| v.as_bool());
+				break;
 			}
 		}
 		let acquired = acquired_val.unwrap_or(false);

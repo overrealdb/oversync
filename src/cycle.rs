@@ -473,14 +473,13 @@ impl<'a> CycleRunner<'a> {
 			}
 		}
 
-		if max_delivered > 0 {
-			if let Err(e) = self
+		if max_delivered > 0
+			&& let Err(e) = self
 				.engine
 				.delete_pending_events(&config.origin_id, &config.query_id, max_delivered)
 				.await
-			{
-				warn!(error = %e, "failed to delete delivered pending events — may cause duplicate delivery");
-			}
+		{
+			warn!(error = %e, "failed to delete delivered pending events — may cause duplicate delivery");
 		}
 	}
 }
