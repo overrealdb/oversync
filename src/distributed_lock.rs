@@ -3,7 +3,7 @@ use std::sync::Arc;
 use oversync_core::error::OversyncError;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
-use tracing::{debug, warn};
+use tracing::debug;
 
 const SQL_TRY_ACQUIRE: &str = include_str!("../surql/queries/mutations/lock_try_acquire.surql");
 const SQL_RELEASE: &str = include_str!("../surql/queries/mutations/lock_release.surql");

@@ -1,5 +1,7 @@
 use serde::Serialize;
-use tracing::{error, info};
+use tracing::info;
+#[cfg(feature = "cli")]
+use tracing::error;
 
 #[derive(Debug, Serialize)]
 pub struct AlertPayload {

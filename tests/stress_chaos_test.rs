@@ -5,7 +5,6 @@
 
 mod common;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -27,6 +26,7 @@ fn row_count() -> usize {
 
 // ── Controllable sink that records all events ────────────────
 
+#[allow(dead_code)]
 struct VerifySink {
 	available: Arc<AtomicBool>,
 	events: std::sync::Mutex<Vec<EventEnvelope>>,
@@ -141,9 +141,9 @@ async fn stress_two_tables_join_full_lifecycle() {
 	let connector = oversync_connectors::PostgresConnector::from_pool("stress-pg", pg.pool.clone());
 
 	let sink_on = Arc::new(AtomicBool::new(true));
-	let sink = Arc::new(VerifySink::new(sink_on.clone()));
+	let _sink = Arc::new(VerifySink::new(sink_on.clone()));
 	// Need to share sink between the sinks vec and our reference
-	let sink2 = Arc::new(VerifySink::new(sink_on.clone()));
+	let _sink2 = Arc::new(VerifySink::new(sink_on.clone()));
 	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(VerifySink::new(sink_on.clone()))];
 
 	let config = make_config(s, 30.0);

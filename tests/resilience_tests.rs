@@ -48,6 +48,7 @@ impl OriginConnector for FailingConnector {
 	}
 }
 
+#[allow(dead_code)]
 struct FailingSink {
 	fail_count: AtomicUsize,
 	delivered: std::sync::Mutex<Vec<EventEnvelope>>,
@@ -88,6 +89,7 @@ impl Sink for FailingSink {
 	}
 }
 
+#[allow(dead_code)]
 struct CountingSink {
 	count: AtomicUsize,
 }

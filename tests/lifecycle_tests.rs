@@ -1,7 +1,7 @@
 mod common;
 
 use common::surreal::TestSurrealContainer;
-use oversync::config::{SinkDef, SourceDef, SurrealDbDef, SyncConfig};
+use oversync::config::{SinkDef, SurrealDbDef, SyncConfig};
 use oversync::lifecycle::LifecycleManager;
 use oversync::registry::PluginRegistry;
 use oversync_delta::DeltaEngine;
