@@ -54,6 +54,7 @@ struct FailingSink {
 	delivered: std::sync::Mutex<Vec<EventEnvelope>>,
 }
 
+#[allow(dead_code)]
 impl FailingSink {
 	fn new(fail_n_times: usize) -> Self {
 		Self {
@@ -94,6 +95,7 @@ struct CountingSink {
 	count: AtomicUsize,
 }
 
+#[allow(dead_code)]
 impl CountingSink {
 	fn new() -> Self {
 		Self {

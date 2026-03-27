@@ -685,7 +685,7 @@ mod tests {
 		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
 		db.use_ns("t").use_db("t").await.unwrap();
 
-		let engine = DeltaEngine::new(db.clone(), db).with_tables(TableNames::for_source("my-src"));
+		let engine = DeltaEngine::new(db.clone().into(), db).with_tables(TableNames::for_source("my-src"));
 		engine.ensure_tables().await.unwrap();
 
 		let rows = vec![
@@ -709,7 +709,7 @@ mod tests {
 		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
 		db.use_ns("t").use_db("t").await.unwrap();
 
-		let base = DeltaEngine::new(db.clone(), db);
+		let base = DeltaEngine::new(db.clone().into(), db);
 		let eng_a = base.for_source("source-a");
 		let eng_b = base.for_source("source-b");
 		eng_a.ensure_tables().await.unwrap();
@@ -736,7 +736,7 @@ mod tests {
 		db.use_ns("t").use_db("t").await.unwrap();
 
 		let engine =
-			DeltaEngine::new(db.clone(), db).with_tables(TableNames::for_source("test-src"));
+			DeltaEngine::new(db.clone().into(), db).with_tables(TableNames::for_source("test-src"));
 		engine.ensure_tables().await.unwrap();
 
 		// Cycle 1: create rows

@@ -33,6 +33,7 @@ struct VerifySink {
 	batch_count: AtomicUsize,
 }
 
+#[allow(dead_code)]
 impl VerifySink {
 	fn new(available: Arc<AtomicBool>) -> Self {
 		Self {
