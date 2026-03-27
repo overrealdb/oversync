@@ -7,9 +7,8 @@ use oversync_core::error::OversyncError;
 use oversync_core::model::EventEnvelope;
 use oversync_core::traits::Sink;
 
-const UPSERT_EVENT_SQL: &str = include_str!("../../../surql/queries/sink/upsert_event.surql");
-const BATCH_UPSERT_EVENTS_SQL: &str =
-	include_str!("../../../surql/queries/sink/batch_upsert_events.surql");
+const UPSERT_EVENT_SQL: &str = oversync_queries::sink::UPSERT_EVENT;
+const BATCH_UPSERT_EVENTS_SQL: &str = oversync_queries::sink::BATCH_UPSERT_EVENTS;
 
 pub struct SurrealDbSink {
 	client: Surreal<Any>,

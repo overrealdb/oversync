@@ -5,8 +5,8 @@ use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use tracing::debug;
 
-const SQL_TRY_ACQUIRE: &str = include_str!("../surql/queries/mutations/lock_try_acquire.surql");
-const SQL_RELEASE: &str = include_str!("../surql/queries/mutations/lock_release.surql");
+const SQL_TRY_ACQUIRE: &str = oversync_queries::mutations::LOCK_TRY_ACQUIRE;
+const SQL_RELEASE: &str = oversync_queries::mutations::LOCK_RELEASE;
 
 /// Distributed lock per pipe, backed by SurrealDB.
 ///

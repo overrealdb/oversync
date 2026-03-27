@@ -13,7 +13,7 @@ async fn declarative_schema_overwrites_field_definition() {
 		.unwrap();
 
 	// Re-apply schema via overshift — OVERWRITE should restore original type
-	let mut manifest = overshift::Manifest::load("surql/").expect("manifest");
+	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest");
 	manifest.meta.ns = t.ns.clone();
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.unwrap();
@@ -32,7 +32,7 @@ async fn declarative_schema_overwrites_field_definition() {
 #[tokio::test]
 async fn schema_applies_successfully() {
 	let t = TestSurrealContainer::new_raw().await;
-	let mut manifest = overshift::Manifest::load("surql/").expect("manifest load");
+	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest load");
 	manifest.meta.ns = t.ns.clone();
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.expect("plan");
@@ -44,7 +44,7 @@ async fn schema_applies_successfully() {
 #[tokio::test]
 async fn schema_is_idempotent() {
 	let t = TestSurrealContainer::new().await;
-	let mut manifest = overshift::Manifest::load("surql/").expect("manifest load");
+	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest load");
 	manifest.meta.ns = t.ns.clone();
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.expect("plan");
@@ -60,7 +60,7 @@ async fn apply_instance_id_is_unique() {
 	let t1 = TestSurrealContainer::new_raw().await;
 	let t2 = TestSurrealContainer::new_raw().await;
 
-	let mut m1 = overshift::Manifest::load("surql/").expect("manifest");
+	let mut m1 = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest");
 	m1.meta.ns = t1.ns.clone();
 	m1.meta.db = t1.db.clone();
 	let r1 = overshift::plan(&t1.client, &m1)
@@ -70,7 +70,7 @@ async fn apply_instance_id_is_unique() {
 		.await
 		.unwrap();
 
-	let mut m2 = overshift::Manifest::load("surql/").expect("manifest");
+	let mut m2 = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest");
 	m2.meta.ns = t2.ns.clone();
 	m2.meta.db = t2.db.clone();
 	let r2 = overshift::plan(&t2.client, &m2)

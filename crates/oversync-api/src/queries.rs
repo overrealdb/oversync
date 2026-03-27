@@ -6,17 +6,14 @@ use axum::extract::{Path, State};
 use crate::state::ApiState;
 use crate::types::*;
 
-const SQL_LIST_QUERIES: &str =
-	include_str!("../../../surql/queries/query_config/list_by_source.surql");
-const SQL_DELETE_QUERY: &str = include_str!("../../../surql/queries/query_config/delete_one.surql");
-const SQL_UPDATE_QUERY_SQL: &str =
-	include_str!("../../../surql/queries/query_config/update_query.surql");
-const SQL_UPDATE_QUERY_KEY: &str =
-	include_str!("../../../surql/queries/query_config/update_key_column.surql");
-const SQL_UPDATE_QUERY_SINKS: &str =
-	include_str!("../../../surql/queries/query_config/update_sinks.surql");
-const SQL_UPDATE_QUERY_ENABLED: &str =
-	include_str!("../../../surql/queries/query_config/update_enabled.surql");
+use oversync_queries::query_config;
+
+const SQL_LIST_QUERIES: &str = query_config::LIST_BY_SOURCE;
+const SQL_DELETE_QUERY: &str = query_config::DELETE_ONE;
+const SQL_UPDATE_QUERY_SQL: &str = query_config::UPDATE_QUERY;
+const SQL_UPDATE_QUERY_KEY: &str = query_config::UPDATE_KEY_COLUMN;
+const SQL_UPDATE_QUERY_SINKS: &str = query_config::UPDATE_SINKS;
+const SQL_UPDATE_QUERY_ENABLED: &str = query_config::UPDATE_ENABLED;
 
 fn db_err(e: surrealdb::Error) -> Json<ErrorResponse> {
 	Json(ErrorResponse {

@@ -11,26 +11,24 @@ use oversync_core::model::{
 };
 use oversync_core::table_names::TableNames;
 
-const READ_SNAPSHOT_KEYS_SQL: &str =
-	include_str!("../../../surql/queries/delta/read_snapshot_keys.surql");
-const READ_SNAPSHOT_KEYS_PAGED_SQL: &str =
-	include_str!("../../../surql/queries/delta/read_snapshot_keys_paged.surql");
-const BATCH_UPSERT_SQL: &str = include_str!("../../../surql/queries/delta/batch_upsert.surql");
-const DELETE_STALE_SQL: &str = include_str!("../../../surql/queries/delta/delete_stale.surql");
-const PREP_PREV_HASH_SQL: &str = include_str!("../../../surql/queries/delta/prep_prev_hash.surql");
-const FIND_CREATED_SQL: &str = include_str!("../../../surql/queries/delta/find_created.surql");
-const FIND_UPDATED_SQL: &str = include_str!("../../../surql/queries/delta/find_updated.surql");
-const FIND_DELETED_SQL: &str = include_str!("../../../surql/queries/delta/find_deleted.surql");
-const SAVE_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/save_pending.surql");
-const READ_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/read_pending.surql");
-const DELETE_PENDING_SQL: &str = include_str!("../../../surql/queries/delta/delete_pending.surql");
+use oversync_queries::delta;
+
+const READ_SNAPSHOT_KEYS_SQL: &str = delta::READ_SNAPSHOT_KEYS;
+const READ_SNAPSHOT_KEYS_PAGED_SQL: &str = delta::READ_SNAPSHOT_KEYS_PAGED;
+const BATCH_UPSERT_SQL: &str = delta::BATCH_UPSERT;
+const DELETE_STALE_SQL: &str = delta::DELETE_STALE;
+const PREP_PREV_HASH_SQL: &str = delta::PREP_PREV_HASH;
+const FIND_CREATED_SQL: &str = delta::FIND_CREATED;
+const FIND_UPDATED_SQL: &str = delta::FIND_UPDATED;
+const FIND_DELETED_SQL: &str = delta::FIND_DELETED;
+const SAVE_PENDING_SQL: &str = delta::SAVE_PENDING;
+const READ_PENDING_SQL: &str = delta::READ_PENDING;
+const DELETE_PENDING_SQL: &str = delta::DELETE_PENDING;
 
 const BATCH_SIZE: usize = 500;
-const NEXT_CYCLE_ID_SQL: &str = include_str!("../../../surql/queries/delta/next_cycle_id.surql");
-const LOG_CYCLE_START_SQL: &str =
-	include_str!("../../../surql/queries/delta/log_cycle_start.surql");
-const LOG_CYCLE_FINISH_SQL: &str =
-	include_str!("../../../surql/queries/delta/log_cycle_finish.surql");
+const NEXT_CYCLE_ID_SQL: &str = delta::NEXT_CYCLE_ID;
+const LOG_CYCLE_START_SQL: &str = delta::LOG_CYCLE_START;
+const LOG_CYCLE_FINISH_SQL: &str = delta::LOG_CYCLE_FINISH;
 
 pub struct DeltaEngine {
 	state_client: Arc<Surreal<Any>>,

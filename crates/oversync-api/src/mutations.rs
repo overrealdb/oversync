@@ -6,51 +6,32 @@ use axum::extract::{Path, State};
 use crate::state::ApiState;
 use crate::types::*;
 
-// ── Source mutations ────────────────────────────────────────
-const SQL_DELETE_SOURCE: &str =
-	include_str!("../../../surql/queries/mutations/delete_source.surql");
-const SQL_CREATE_SOURCE: &str =
-	include_str!("../../../surql/queries/mutations/create_source.surql");
-const SQL_UPDATE_SOURCE_CONNECTOR: &str =
-	include_str!("../../../surql/queries/mutations/update_source_connector.surql");
-const SQL_UPDATE_SOURCE_ENABLED: &str =
-	include_str!("../../../surql/queries/mutations/update_source_enabled.surql");
-const SQL_UPDATE_SOURCE_CONFIG: &str =
-	include_str!("../../../surql/queries/mutations/update_source_config.surql");
-const SQL_DELETE_SOURCE_QUERIES: &str =
-	include_str!("../../../surql/queries/mutations/delete_source_queries.surql");
+use oversync_queries::mutations;
 
-// ── Sink mutations ──────────────────────────────────────────
-const SQL_DELETE_SINK: &str = include_str!("../../../surql/queries/mutations/delete_sink.surql");
-const SQL_CREATE_SINK: &str = include_str!("../../../surql/queries/mutations/create_sink.surql");
-const SQL_UPDATE_SINK_TYPE: &str =
-	include_str!("../../../surql/queries/mutations/update_sink_type.surql");
-const SQL_UPDATE_SINK_ENABLED: &str =
-	include_str!("../../../surql/queries/mutations/update_sink_enabled.surql");
-const SQL_UPDATE_SINK_CONFIG: &str =
-	include_str!("../../../surql/queries/mutations/update_sink_config.surql");
+const SQL_DELETE_SOURCE: &str = mutations::DELETE_SOURCE;
+const SQL_CREATE_SOURCE: &str = mutations::CREATE_SOURCE;
+const SQL_UPDATE_SOURCE_CONNECTOR: &str = mutations::UPDATE_SOURCE_CONNECTOR;
+const SQL_UPDATE_SOURCE_ENABLED: &str = mutations::UPDATE_SOURCE_ENABLED;
+const SQL_UPDATE_SOURCE_CONFIG: &str = mutations::UPDATE_SOURCE_CONFIG;
+const SQL_DELETE_SOURCE_QUERIES: &str = mutations::DELETE_SOURCE_QUERIES;
 
-// ── Pipe mutations ──────────────────────────────────────────
-const SQL_DELETE_PIPE: &str = include_str!("../../../surql/queries/mutations/delete_pipe.surql");
-const SQL_CREATE_PIPE: &str = include_str!("../../../surql/queries/mutations/create_pipe.surql");
-const SQL_DELETE_PIPE_QUERIES: &str =
-	include_str!("../../../surql/queries/mutations/delete_pipe_queries.surql");
-const SQL_UPDATE_PIPE_ORIGIN_CONNECTOR: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_origin_connector.surql");
-const SQL_UPDATE_PIPE_ORIGIN_DSN: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_origin_dsn.surql");
-const SQL_UPDATE_PIPE_ORIGIN_CONFIG: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_origin_config.surql");
-const SQL_UPDATE_PIPE_TARGETS: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_targets.surql");
-const SQL_UPDATE_PIPE_SCHEDULE: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_schedule.surql");
-const SQL_UPDATE_PIPE_DELTA: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_delta.surql");
-const SQL_UPDATE_PIPE_RETRY: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_retry.surql");
-const SQL_UPDATE_PIPE_ENABLED: &str =
-	include_str!("../../../surql/queries/mutations/update_pipe_enabled.surql");
+const SQL_DELETE_SINK: &str = mutations::DELETE_SINK;
+const SQL_CREATE_SINK: &str = mutations::CREATE_SINK;
+const SQL_UPDATE_SINK_TYPE: &str = mutations::UPDATE_SINK_TYPE;
+const SQL_UPDATE_SINK_ENABLED: &str = mutations::UPDATE_SINK_ENABLED;
+const SQL_UPDATE_SINK_CONFIG: &str = mutations::UPDATE_SINK_CONFIG;
+
+const SQL_DELETE_PIPE: &str = mutations::DELETE_PIPE;
+const SQL_CREATE_PIPE: &str = mutations::CREATE_PIPE;
+const SQL_DELETE_PIPE_QUERIES: &str = mutations::DELETE_PIPE_QUERIES;
+const SQL_UPDATE_PIPE_ORIGIN_CONNECTOR: &str = mutations::UPDATE_PIPE_ORIGIN_CONNECTOR;
+const SQL_UPDATE_PIPE_ORIGIN_DSN: &str = mutations::UPDATE_PIPE_ORIGIN_DSN;
+const SQL_UPDATE_PIPE_ORIGIN_CONFIG: &str = mutations::UPDATE_PIPE_ORIGIN_CONFIG;
+const SQL_UPDATE_PIPE_TARGETS: &str = mutations::UPDATE_PIPE_TARGETS;
+const SQL_UPDATE_PIPE_SCHEDULE: &str = mutations::UPDATE_PIPE_SCHEDULE;
+const SQL_UPDATE_PIPE_DELTA: &str = mutations::UPDATE_PIPE_DELTA;
+const SQL_UPDATE_PIPE_RETRY: &str = mutations::UPDATE_PIPE_RETRY;
+const SQL_UPDATE_PIPE_ENABLED: &str = mutations::UPDATE_PIPE_ENABLED;
 
 #[utoipa::path(
 	post,
@@ -513,12 +494,9 @@ async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
 async fn refresh_read_cache(state: &ApiState) {
 	let Some(db) = &state.db_client else { return };
 
-	const SQL_READ_SOURCES_CACHE: &str =
-		include_str!("../../../surql/queries/config/read_sources_cache.surql");
-	const SQL_READ_SINKS_CACHE: &str =
-		include_str!("../../../surql/queries/config/read_sinks_cache.surql");
-	const SQL_READ_PIPES_CACHE: &str =
-		include_str!("../../../surql/queries/config/read_pipes_cache.surql");
+	const SQL_READ_SOURCES_CACHE: &str = oversync_queries::config::READ_SOURCES_CACHE;
+	const SQL_READ_SINKS_CACHE: &str = oversync_queries::config::READ_SINKS_CACHE;
+	const SQL_READ_PIPES_CACHE: &str = oversync_queries::config::READ_PIPES_CACHE;
 
 	if let Ok(mut resp) = db.query(SQL_READ_SOURCES_CACHE).await
 		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)

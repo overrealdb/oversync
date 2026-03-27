@@ -33,8 +33,7 @@ pub async fn resolve_pipe_credentials(
 			None => continue,
 		};
 
-		const SQL_LOOKUP: &str =
-			include_str!("../../surql/queries/credential/lookup_credential.surql");
+		const SQL_LOOKUP: &str = oversync_queries::credential::LOOKUP_CREDENTIAL;
 
 		let mut resp = db
 			.query(SQL_LOOKUP)

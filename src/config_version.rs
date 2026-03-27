@@ -5,11 +5,10 @@ use surrealdb::engine::any::Any;
 
 use oversync_core::error::OversyncError;
 
-const SQL_NEXT_VERSION: &str = include_str!("../surql/queries/config_version/next_version.surql");
-const SQL_CREATE_VERSION: &str =
-	include_str!("../surql/queries/config_version/create_version.surql");
-const SQL_LIST_VERSIONS: &str = include_str!("../surql/queries/config_version/list_versions.surql");
-const SQL_GET_VERSION: &str = include_str!("../surql/queries/config_version/get_version.surql");
+const SQL_NEXT_VERSION: &str = oversync_queries::config_version::NEXT_VERSION;
+const SQL_CREATE_VERSION: &str = oversync_queries::config_version::CREATE_VERSION;
+const SQL_LIST_VERSIONS: &str = oversync_queries::config_version::LIST_VERSIONS;
+const SQL_GET_VERSION: &str = oversync_queries::config_version::GET_VERSION;
 
 /// A saved config snapshot with version number.
 #[derive(Debug, Clone, Serialize)]

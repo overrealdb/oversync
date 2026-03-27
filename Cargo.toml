@@ -24,6 +24,7 @@ members = [
 	"crates/oversync-sinks",
 	"crates/oversync-api",
 	"crates/oversync-transforms",
+	"crates/oversync-queries",
 ]
 
 [workspace.package]
@@ -40,6 +41,7 @@ oversync-links = { version = "0.1.0", path = "crates/oversync-links" }
 oversync-sinks = { version = "0.1.0", path = "crates/oversync-sinks" }
 oversync-api = { version = "0.1.0", path = "crates/oversync-api" }
 oversync-transforms = { version = "0.1.0", path = "crates/oversync-transforms" }
+oversync-queries = { version = "0.1.0", path = "crates/oversync-queries" }
 
 overshift = "0.2"
 surql-parser = { version = "0.1.4", features = ["build"] }
@@ -118,6 +120,7 @@ oversync-connectors = { workspace = true }
 oversync-delta = { workspace = true }
 oversync-sinks = { workspace = true }
 oversync-transforms = { workspace = true }
+oversync-queries = { workspace = true }
 surql-macros = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }

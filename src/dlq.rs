@@ -4,9 +4,9 @@ use serde::Serialize;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 
-const SQL_CREATE_DLQ: &str = include_str!("../surql/queries/mutations/create_dlq_entry.surql");
-const SQL_LIST_DLQ: &str = include_str!("../surql/queries/mutations/list_dlq.surql");
-const SQL_DELETE_DLQ: &str = include_str!("../surql/queries/mutations/delete_dlq_entry.surql");
+const SQL_CREATE_DLQ: &str = oversync_queries::mutations::CREATE_DLQ_ENTRY;
+const SQL_LIST_DLQ: &str = oversync_queries::mutations::LIST_DLQ;
+const SQL_DELETE_DLQ: &str = oversync_queries::mutations::DELETE_DLQ_ENTRY;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DlqEntry {

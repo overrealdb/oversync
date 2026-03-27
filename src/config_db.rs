@@ -9,10 +9,10 @@ use crate::config::{
 	SinkDef, SourceDef, SurrealDbDef, SyncConfig,
 };
 
-const LOAD_SOURCES_SQL: &str = include_str!("../surql/queries/config/load_sources.surql");
-const LOAD_QUERIES_SQL: &str = include_str!("../surql/queries/config/load_queries.surql");
-const LOAD_SINKS_SQL: &str = include_str!("../surql/queries/config/load_sinks.surql");
-const LOAD_PIPES_SQL: &str = include_str!("../surql/queries/config/load_pipes.surql");
+const LOAD_SOURCES_SQL: &str = oversync_queries::config::LOAD_SOURCES;
+const LOAD_QUERIES_SQL: &str = oversync_queries::config::LOAD_QUERIES;
+const LOAD_SINKS_SQL: &str = oversync_queries::config::LOAD_SINKS;
+const LOAD_PIPES_SQL: &str = oversync_queries::config::LOAD_PIPES;
 
 pub async fn load_config_from_db(
 	client: &Surreal<Any>,

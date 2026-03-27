@@ -354,9 +354,8 @@ async fn create_credential(
 		})
 	})?;
 
-	const SQL_DEL_CRED: &str = include_str!("../surql/queries/credential/delete_credential.surql");
-	const SQL_CREATE_CRED: &str =
-		include_str!("../surql/queries/credential/create_credential.surql");
+	const SQL_DEL_CRED: &str = oversync_queries::credential::DELETE_CREDENTIAL;
+	const SQL_CREATE_CRED: &str = oversync_queries::credential::CREATE_CREDENTIAL;
 
 	state
 		.db
@@ -395,7 +394,7 @@ async fn list_credentials(
 	axum::Json<oversync_api::types::CredentialListResponse>,
 	axum::Json<oversync_api::types::ErrorResponse>,
 > {
-	const SQL_LIST_CREDS: &str = include_str!("../surql/queries/credential/list_credentials.surql");
+	const SQL_LIST_CREDS: &str = oversync_queries::credential::LIST_CREDENTIALS;
 
 	let mut resp = state.db.query(SQL_LIST_CREDS).await.map_err(|e| {
 		axum::Json(oversync_api::types::ErrorResponse {
@@ -433,7 +432,7 @@ async fn delete_credential(
 	axum::Json<oversync_api::types::MutationResponse>,
 	axum::Json<oversync_api::types::ErrorResponse>,
 > {
-	const SQL_DEL: &str = include_str!("../surql/queries/credential/delete_credential.surql");
+	const SQL_DEL: &str = oversync_queries::credential::DELETE_CREDENTIAL;
 
 	state
 		.db
@@ -705,7 +704,7 @@ pub(crate) async fn apply_schema(
 	ns: &str,
 	db_name: &str,
 ) -> Result<(), OversyncError> {
-	let mut manifest = overshift::Manifest::load("surql/")
+	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/")
 		.map_err(|e| OversyncError::Migration(format!("load manifest: {e}")))?;
 	manifest.meta.ns = ns.to_string();
 	manifest.meta.db = db_name.to_string();

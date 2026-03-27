@@ -8,6 +8,7 @@ repository = "https://github.com/overrealdb/oversync"
 
 [dependencies]
 oversync-core = { workspace = true }
+oversync-queries = { workspace = true }
 axum = { workspace = true }
 utoipa = { workspace = true }
 serde = { workspace = true }

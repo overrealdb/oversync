@@ -1,0 +1,10 @@
+[package]
+name = "oversync-queries"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Embedded SurrealQL query constants for oversync."
+repository = "https://github.com/overrealdb/oversync"
+
+[build-dependencies]
+surql-parser = { workspace = true }

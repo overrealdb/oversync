@@ -8,6 +8,7 @@ repository = "https://github.com/overrealdb/oversync"
 
 [dependencies]
 oversync-core = { workspace = true }
+oversync-queries = { workspace = true }
 surrealdb = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

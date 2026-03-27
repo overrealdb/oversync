@@ -102,8 +102,7 @@ pub async fn get_history(
 		})
 	})?;
 
-	const SQL_CYCLE_HISTORY: &str =
-		include_str!("../../../surql/queries/delta/list_cycle_history.surql");
+	const SQL_CYCLE_HISTORY: &str = oversync_queries::delta::LIST_CYCLE_HISTORY;
 
 	let mut response = db.query(SQL_CYCLE_HISTORY).await.map_err(|e| {
 		Json(ErrorResponse {
