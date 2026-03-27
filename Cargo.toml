@@ -60,7 +60,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 opentelemetry = "0.28"
 opentelemetry_sdk = { version = "0.28", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic"] }
-tracing-opentelemetry = "0.29"
+tracing-opentelemetry = "0.32"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1"
