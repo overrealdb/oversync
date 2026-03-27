@@ -25,9 +25,9 @@ jobs:
             overrealdb/oversync
             ghcr.io/overrealdb/oversync
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=match,pattern=oversync-v(.*),group=1
+            type=match,pattern=oversync-v(\d+\.\d+),group=1
+            type=raw,value=latest
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
