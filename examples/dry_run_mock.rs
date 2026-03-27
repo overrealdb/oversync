@@ -4,9 +4,9 @@
 
 use std::sync::Arc;
 
+use oversync::PluginRegistry;
 use oversync::config::*;
 use oversync::dry_run::*;
-use oversync::PluginRegistry;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -82,7 +82,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	println!("  Created: {}", result.changes.created);
 	println!("  Updated: {}", result.changes.updated);
 	println!("  Deleted: {}", result.changes.deleted);
-	println!("\nAfter transforms ({} events):", result.after_transform.len());
+	println!(
+		"\nAfter transforms ({} events):",
+		result.after_transform.len()
+	);
 	for env in &result.after_transform {
 		println!("  {} [{}] → {}", env.meta.key, env.meta.op, env.data);
 	}

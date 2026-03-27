@@ -77,7 +77,9 @@ async fn delete_dlq_entry_removes() {
 	let entries = list_dlq(&surreal.client).await.unwrap();
 	assert_eq!(entries.len(), 1);
 
-	delete_dlq_entry(&surreal.client, &entries[0].id).await.unwrap();
+	delete_dlq_entry(&surreal.client, &entries[0].id)
+		.await
+		.unwrap();
 
 	let after = list_dlq(&surreal.client).await.unwrap();
 	assert!(after.is_empty());

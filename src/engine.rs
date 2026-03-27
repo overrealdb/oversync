@@ -274,8 +274,7 @@ impl OversyncEngine {
 			)
 			.route(
 				"/config/versions",
-				axum::routing::get(list_config_versions)
-					.with_state(self.state_client.clone()),
+				axum::routing::get(list_config_versions).with_state(self.state_client.clone()),
 			)
 			.route_layer(axum::middleware::from_fn_with_state(
 				api_state.clone(),
@@ -564,18 +563,17 @@ impl OversyncEngineBuilder {
 
 			Arc::new(db)
 		} else {
-			let rdb = crate::resilient_db::ResilientDb::connect(
-				crate::resilient_db::ResilientDbConfig {
+			let rdb =
+				crate::resilient_db::ResilientDb::connect(crate::resilient_db::ResilientDbConfig {
 					url: self.url.clone(),
 					username: self.username.clone(),
 					password: self.password.clone(),
 					namespace: self.namespace.clone(),
 					database: self.database.clone(),
 					health_interval: std::time::Duration::from_secs(1),
-				},
-			)
-			.await
-			.map_err(|e| OversyncError::SurrealDb(format!("resilient connect: {e}")))?;
+				})
+				.await
+				.map_err(|e| OversyncError::SurrealDb(format!("resilient connect: {e}")))?;
 
 			#[cfg(feature = "schema")]
 			if !self.skip_schema {

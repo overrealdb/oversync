@@ -324,7 +324,12 @@ fn inject_credentials_into_dsn(dsn: &str, username: &str, password: &str) -> Str
 	let enc_pass = url_encode_credential(password);
 	if let Some(rest) = dsn.strip_prefix("postgres://") {
 		if let Some(at_pos) = rest.find('@') {
-			return format!("postgres://{}:{}@{}", enc_user, enc_pass, &rest[at_pos + 1..]);
+			return format!(
+				"postgres://{}:{}@{}",
+				enc_user,
+				enc_pass,
+				&rest[at_pos + 1..]
+			);
 		}
 		return format!("postgres://{}:{}@{}", enc_user, enc_pass, rest);
 	}

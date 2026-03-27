@@ -16,9 +16,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
-use surrealdb::Surreal;
 use tokio_util::sync::CancellationToken;
 
 pub struct ResilientDbConfig {
@@ -68,10 +68,7 @@ impl ResilientDb {
 		&self.supervisor
 	}
 
-	pub fn start_health_loop(
-		&self,
-		cancel: CancellationToken,
-	) -> tokio::task::JoinHandle<()> {
+	pub fn start_health_loop(&self, cancel: CancellationToken) -> tokio::task::JoinHandle<()> {
 		let primary = Arc::clone(&self.primary);
 		let supervisor_clone = self.supervisor.clone();
 		let interval = self.config.health_interval;
@@ -110,9 +107,7 @@ impl ResilientDb {
 				}
 
 				// Strategy 2: get fresh JWT from supervisor, apply to primary
-				tracing::warn!(
-					"ResilientDb: direct re-auth failed, using supervisor fallback"
-				);
+				tracing::warn!("ResilientDb: direct re-auth failed, using supervisor fallback");
 				let _ = supervisor_clone.invalidate().await;
 				match supervisor_clone
 					.signin(Root {
@@ -126,19 +121,17 @@ impl ResilientDb {
 							tracing::error!(error = %e, "ResilientDb: authenticate with supervisor JWT failed");
 							continue;
 						}
-						if let Err(e) =
-							primary.use_ns(&namespace).use_db(&database).await
-						{
+						if let Err(e) = primary.use_ns(&namespace).use_db(&database).await {
 							tracing::error!(error = %e, "ResilientDb: use_ns/use_db after supervisor JWT failed");
 							continue;
 						}
 						Self::ensure_probe(&primary).await;
 						if Self::probe_healthy(&primary).await {
-							tracing::info!(
-								"ResilientDb: primary recovered (supervisor JWT)"
-							);
+							tracing::info!("ResilientDb: primary recovered (supervisor JWT)");
 						} else {
-							tracing::error!("ResilientDb: primary still unhealthy after supervisor JWT");
+							tracing::error!(
+								"ResilientDb: primary still unhealthy after supervisor JWT"
+							);
 						}
 					}
 					Err(e) => {

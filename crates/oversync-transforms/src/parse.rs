@@ -182,24 +182,19 @@ fn req_str_array(
 	key: &str,
 	idx: usize,
 ) -> Result<Vec<String>, OversyncError> {
-	let arr = obj
-		.get(key)
-		.and_then(|v| v.as_array())
-		.ok_or_else(|| {
-			OversyncError::Config(format!(
-				"transform step {idx}: missing '{key}' (string array)"
-			))
-		})?;
+	let arr = obj.get(key).and_then(|v| v.as_array()).ok_or_else(|| {
+		OversyncError::Config(format!(
+			"transform step {idx}: missing '{key}' (string array)"
+		))
+	})?;
 	arr.iter()
 		.enumerate()
 		.map(|(j, v)| {
-			v.as_str()
-				.map(String::from)
-				.ok_or_else(|| {
-					OversyncError::Config(format!(
-						"transform step {idx}: '{key}[{j}]' must be a string"
-					))
-				})
+			v.as_str().map(String::from).ok_or_else(|| {
+				OversyncError::Config(format!(
+					"transform step {idx}: '{key}[{j}]' must be a string"
+				))
+			})
 		})
 		.collect()
 }

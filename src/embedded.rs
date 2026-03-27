@@ -221,9 +221,7 @@ impl EmbeddedSync {
 		let len_before = pipes.len();
 		pipes.retain(|p| p.name != name);
 		if pipes.len() == len_before {
-			return Err(OversyncError::Config(format!(
-				"pipe '{name}' not found"
-			)));
+			return Err(OversyncError::Config(format!("pipe '{name}' not found")));
 		}
 		info!(pipe = %name, "pipe unregistered");
 		Ok(())
@@ -231,7 +229,12 @@ impl EmbeddedSync {
 
 	/// List registered pipe names.
 	pub async fn pipe_names(&self) -> Vec<String> {
-		self.pipes.read().await.iter().map(|p| p.name.clone()).collect()
+		self.pipes
+			.read()
+			.await
+			.iter()
+			.map(|p| p.name.clone())
+			.collect()
 	}
 
 	fn resolve_sinks(

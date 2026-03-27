@@ -6,8 +6,8 @@
 
 mod common;
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use oversync::resilient_db::{ResilientDb, ResilientDbConfig};
@@ -263,10 +263,7 @@ async fn pipe_lock_survives_session_loss() {
 		.await
 		.unwrap();
 
-	let lock = oversync::distributed_lock::PipeLock::new(
-		Arc::clone(&db),
-		"test-instance".into(),
-	);
+	let lock = oversync::distributed_lock::PipeLock::new(Arc::clone(&db), "test-instance".into());
 
 	// Acquire lock
 	let acquired = lock.try_acquire("test-pipe:q1", 60).await.unwrap();
@@ -377,10 +374,7 @@ async fn concurrent_reads_writes_during_recovery() {
 	assert!(reads > 50, "expected >50 valid reads, got {reads}");
 
 	// Final consistency check — counter value should equal successful writes
-	let row: Option<serde_json::Value> = db
-		.select(("rw_test", "counter"))
-		.await
-		.unwrap();
+	let row: Option<serde_json::Value> = db.select(("rw_test", "counter")).await.unwrap();
 	let final_value = row.unwrap()["value"].as_u64().unwrap();
 	assert_eq!(
 		final_value, writes,

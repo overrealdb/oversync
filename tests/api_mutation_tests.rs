@@ -787,12 +787,8 @@ async fn trigger_source_without_lifecycle() {
 	let state = test_state_with_db(container.client.clone());
 	let app = oversync_api::router(state);
 
-	let (status, json) = post_json(
-		&app,
-		"/sources/nonexistent/trigger",
-		serde_json::json!({}),
-	)
-	.await;
+	let (status, json) =
+		post_json(&app, "/sources/nonexistent/trigger", serde_json::json!({})).await;
 
 	assert_eq!(status, StatusCode::OK);
 	assert!(json["error"].as_str().is_some() || json["message"].as_str().is_some());
@@ -818,21 +814,54 @@ async fn auth_blocks_write_endpoints() {
 	async fn status_of(app: &axum::Router, method: &str, path: &str) -> StatusCode {
 		let body = serde_json::to_vec(&serde_json::json!({"name":"x","connector":"pg","origin_connector":"pg","origin_dsn":"pg://","sink_type":"stdout"})).unwrap();
 		let req = match method {
-			"POST" => Request::post(path).header("content-type", "application/json").body(Body::from(body)).unwrap(),
-			"PUT" => Request::put(path).header("content-type", "application/json").body(Body::from(body)).unwrap(),
+			"POST" => Request::post(path)
+				.header("content-type", "application/json")
+				.body(Body::from(body))
+				.unwrap(),
+			"PUT" => Request::put(path)
+				.header("content-type", "application/json")
+				.body(Body::from(body))
+				.unwrap(),
 			"DELETE" => Request::delete(path).body(Body::empty()).unwrap(),
 			_ => panic!("unsupported method"),
 		};
 		app.clone().oneshot(req).await.unwrap().status()
 	}
 
-	assert_eq!(status_of(&app, "POST", "/sources").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "PUT", "/sources/x").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "DELETE", "/sources/x").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "POST", "/sinks").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "PUT", "/sinks/x").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "DELETE", "/sinks/x").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "POST", "/pipes").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "PUT", "/pipes/x").await, StatusCode::UNAUTHORIZED);
-	assert_eq!(status_of(&app, "DELETE", "/pipes/x").await, StatusCode::UNAUTHORIZED);
+	assert_eq!(
+		status_of(&app, "POST", "/sources").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "PUT", "/sources/x").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "DELETE", "/sources/x").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "POST", "/sinks").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "PUT", "/sinks/x").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "DELETE", "/sinks/x").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "POST", "/pipes").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "PUT", "/pipes/x").await,
+		StatusCode::UNAUTHORIZED
+	);
+	assert_eq!(
+		status_of(&app, "DELETE", "/pipes/x").await,
+		StatusCode::UNAUTHORIZED
+	);
 }

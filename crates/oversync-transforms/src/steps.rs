@@ -927,7 +927,12 @@ mod tests {
 	#[test]
 	fn rename_overwrites_existing_target() {
 		let mut data = serde_json::json!({"old": "moved", "new": "existing"});
-		Rename { from: "old".into(), to: "new".into() }.apply(&mut data).unwrap();
+		Rename {
+			from: "old".into(),
+			to: "new".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["new"], "moved");
 		assert!(!data.as_object().unwrap().contains_key("old"));
 	}
@@ -935,7 +940,11 @@ mod tests {
 	#[test]
 	fn flatten_overwrites_parent_on_collision() {
 		let mut data = serde_json::json!({"id": 1, "meta": {"id": "nested", "extra": "val"}});
-		Flatten { field: "meta".into() }.apply(&mut data).unwrap();
+		Flatten {
+			field: "meta".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert_eq!(data["id"], "nested"); // parent overwritten
 		assert_eq!(data["extra"], "val");
 	}
@@ -943,7 +952,12 @@ mod tests {
 	#[test]
 	fn nest_overwrites_existing_target() {
 		let mut data = serde_json::json!({"a": 1, "b": 2, "target": "old"});
-		Nest { fields: vec!["a".into(), "b".into()], into: "target".into() }.apply(&mut data).unwrap();
+		Nest {
+			fields: vec!["a".into(), "b".into()],
+			into: "target".into(),
+		}
+		.apply(&mut data)
+		.unwrap();
 		assert!(data["target"].is_object()); // overwritten with nested object
 		assert_eq!(data["target"]["a"], 1);
 	}

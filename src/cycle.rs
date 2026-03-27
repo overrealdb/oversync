@@ -107,7 +107,11 @@ impl<'a> CycleRunner<'a> {
 				);
 			}
 			Err(e) => {
-				crate::metrics::record_cycle_failure(&config.origin_id, &config.query_id, metrics_start);
+				crate::metrics::record_cycle_failure(
+					&config.origin_id,
+					&config.query_id,
+					metrics_start,
+				);
 				let status = if e.to_string().contains("fail-safe") {
 					CycleStatus::Aborted
 				} else {

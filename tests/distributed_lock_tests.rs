@@ -1,8 +1,8 @@
 mod common;
 
 use common::surreal::TestSurrealContainer;
-use std::sync::Arc;
 use oversync::distributed_lock::PipeLock;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn lock_acquire_and_release() {
@@ -25,7 +25,10 @@ async fn lock_prevents_double_acquire() {
 	assert!(acquired1);
 
 	let acquired2 = lock2.try_acquire("pipe-a:q1", 300).await.unwrap();
-	assert!(!acquired2, "second instance should NOT acquire lock held by first");
+	assert!(
+		!acquired2,
+		"second instance should NOT acquire lock held by first"
+	);
 }
 
 #[tokio::test]
@@ -66,7 +69,10 @@ async fn lock_expired_can_be_taken() {
 	tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
 	let acquired = lock2.try_acquire("pipe-a:q1", 300).await.unwrap();
-	assert!(acquired, "expired lock should be acquirable by other instance");
+	assert!(
+		acquired,
+		"expired lock should be acquirable by other instance"
+	);
 }
 
 #[tokio::test]

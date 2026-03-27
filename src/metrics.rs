@@ -8,7 +8,14 @@ pub fn record_cycle_start(pipe: &str, query: &str) -> Instant {
 	Instant::now()
 }
 
-pub fn record_cycle_success(pipe: &str, query: &str, start: Instant, created: usize, updated: usize, deleted: usize) {
+pub fn record_cycle_success(
+	pipe: &str,
+	query: &str,
+	start: Instant,
+	created: usize,
+	updated: usize,
+	deleted: usize,
+) {
 	let duration = start.elapsed().as_secs_f64();
 	counter!("oversync_cycles_total", "pipe" => pipe.to_string(), "query" => query.to_string(), "status" => "success").increment(1);
 	histogram!("oversync_cycle_duration_seconds", "pipe" => pipe.to_string(), "query" => query.to_string()).record(duration);
@@ -21,7 +28,8 @@ pub fn record_cycle_failure(pipe: &str, query: &str, start: Instant) {
 	let duration = start.elapsed().as_secs_f64();
 	counter!("oversync_cycles_total", "pipe" => pipe.to_string(), "query" => query.to_string(), "status" => "failed").increment(1);
 	histogram!("oversync_cycle_duration_seconds", "pipe" => pipe.to_string(), "query" => query.to_string()).record(duration);
-	counter!("oversync_errors_total", "pipe" => pipe.to_string(), "query" => query.to_string()).increment(1);
+	counter!("oversync_errors_total", "pipe" => pipe.to_string(), "query" => query.to_string())
+		.increment(1);
 }
 
 pub fn record_rows_fetched(pipe: &str, query: &str, count: usize) {
@@ -30,7 +38,8 @@ pub fn record_rows_fetched(pipe: &str, query: &str, count: usize) {
 
 pub fn record_dlq_entry(pipe: &str, query: &str, event_count: usize) {
 	counter!("oversync_dlq_entries_total", "pipe" => pipe.to_string(), "query" => query.to_string()).increment(1);
-	counter!("oversync_dlq_events_total", "pipe" => pipe.to_string(), "query" => query.to_string()).increment(event_count as u64);
+	counter!("oversync_dlq_events_total", "pipe" => pipe.to_string(), "query" => query.to_string())
+		.increment(event_count as u64);
 }
 
 pub fn record_pipe_stopped(pipe: &str) {

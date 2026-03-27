@@ -172,7 +172,10 @@ mod tests {
 
 		tracker.set_success("pipe-a").await;
 		let status = tracker.get("pipe-a").await.unwrap();
-		assert!(status.last_error.is_none(), "success should clear last_error");
+		assert!(
+			status.last_error.is_none(),
+			"success should clear last_error"
+		);
 		assert_eq!(status.total_errors, 1, "error count preserved");
 		assert_eq!(status.total_cycles, 1);
 	}

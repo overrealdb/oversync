@@ -13,7 +13,8 @@ async fn declarative_schema_overwrites_field_definition() {
 		.unwrap();
 
 	// Re-apply schema via overshift — OVERWRITE should restore original type
-	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest");
+	let mut manifest =
+		overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest");
 	manifest.meta.ns = t.ns.clone();
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.unwrap();
@@ -32,7 +33,8 @@ async fn declarative_schema_overwrites_field_definition() {
 #[tokio::test]
 async fn schema_applies_successfully() {
 	let t = TestSurrealContainer::new_raw().await;
-	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest load");
+	let mut manifest =
+		overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest load");
 	manifest.meta.ns = t.ns.clone();
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.expect("plan");
@@ -44,7 +46,8 @@ async fn schema_applies_successfully() {
 #[tokio::test]
 async fn schema_is_idempotent() {
 	let t = TestSurrealContainer::new().await;
-	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest load");
+	let mut manifest =
+		overshift::Manifest::load("crates/oversync-queries/surql/").expect("manifest load");
 	manifest.meta.ns = t.ns.clone();
 	manifest.meta.db = t.db.clone();
 	let plan = overshift::plan(&t.client, &manifest).await.expect("plan");

@@ -107,7 +107,8 @@ async fn routing_resolve_pipe_query_sinks_filters() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
-		enabled: true, alert_webhook: None,
+		enabled: true,
+		alert_webhook: None,
 	};
 
 	let make_query = |sinks: Option<Vec<String>>| oversync::config::QueryDef {

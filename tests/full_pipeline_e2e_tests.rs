@@ -101,10 +101,13 @@ async fn full_pipeline_origin_to_sink() {
 	let sync = EmbeddedSync::builder()
 		.state_db(surreal.client.clone())
 		.skip_schema()
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
-		.add_sink("recorder", Arc::new(RecordingSink { events: events.clone() }))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
+		.add_sink(
+			"recorder",
+			Arc::new(RecordingSink {
+				events: events.clone(),
+			}),
+		)
 		.add_pipe(PipeConfig {
 			name: "e2e-pipe".into(),
 			origin: OriginDef {
@@ -137,8 +140,16 @@ async fn full_pipeline_origin_to_sink() {
 	// First run: all 3 rows created
 	sync.run_once("e2e-pipe", "q1").await.unwrap();
 	let delivered = events.lock().await;
-	assert_eq!(delivered.len(), 3, "first run should deliver 3 created events");
-	assert!(delivered.iter().all(|e| e.meta.op == oversync_core::model::OpType::Created));
+	assert_eq!(
+		delivered.len(),
+		3,
+		"first run should deliver 3 created events"
+	);
+	assert!(
+		delivered
+			.iter()
+			.all(|e| e.meta.op == oversync_core::model::OpType::Created)
+	);
 }
 
 #[tokio::test]
@@ -149,10 +160,13 @@ async fn full_pipeline_with_transforms() {
 	let sync = EmbeddedSync::builder()
 		.state_db(surreal.client.clone())
 		.skip_schema()
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
-		.add_sink("recorder", Arc::new(RecordingSink { events: events.clone() }))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
+		.add_sink(
+			"recorder",
+			Arc::new(RecordingSink {
+				events: events.clone(),
+			}),
+		)
 		.add_pipe(PipeConfig {
 			name: "transform-pipe".into(),
 			origin: OriginDef {
@@ -201,10 +215,13 @@ async fn full_pipeline_with_pre_delta_filters() {
 	let sync = EmbeddedSync::builder()
 		.state_db(surreal.client.clone())
 		.skip_schema()
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
-		.add_sink("recorder", Arc::new(RecordingSink { events: events.clone() }))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
+		.add_sink(
+			"recorder",
+			Arc::new(RecordingSink {
+				events: events.clone(),
+			}),
+		)
 		.add_pipe(PipeConfig {
 			name: "filter-pipe".into(),
 			origin: OriginDef {
@@ -225,14 +242,12 @@ async fn full_pipeline_with_pre_delta_filters() {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
-			filters: vec![
-				serde_json::json!({
-					"type": "filter",
-					"field": "schema",
-					"op": "eq",
-					"value": "public"
-				}),
-			],
+			filters: vec![serde_json::json!({
+				"type": "filter",
+				"field": "schema",
+				"op": "eq",
+				"value": "public"
+			})],
 			transforms: vec![],
 			alert_webhook: None,
 			enabled: true,
@@ -244,7 +259,11 @@ async fn full_pipeline_with_pre_delta_filters() {
 	sync.run_once("filter-pipe", "q1").await.unwrap();
 	let delivered = events.lock().await;
 	// Only "public" rows: alice (id=1) and charlie (id=3)
-	assert_eq!(delivered.len(), 2, "filter should keep only public schema rows");
+	assert_eq!(
+		delivered.len(),
+		2,
+		"filter should keep only public schema rows"
+	);
 	let keys: Vec<&str> = delivered.iter().map(|e| e.meta.key.as_str()).collect();
 	assert!(keys.contains(&"1"));
 	assert!(keys.contains(&"3"));
@@ -259,10 +278,13 @@ async fn full_pipeline_second_run_no_changes() {
 	let sync = EmbeddedSync::builder()
 		.state_db(surreal.client.clone())
 		.skip_schema()
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
-		.add_sink("recorder", Arc::new(RecordingSink { events: events.clone() }))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
+		.add_sink(
+			"recorder",
+			Arc::new(RecordingSink {
+				events: events.clone(),
+			}),
+		)
 		.add_pipe(PipeConfig {
 			name: "idempotent-pipe".into(),
 			origin: OriginDef {
@@ -299,7 +321,11 @@ async fn full_pipeline_second_run_no_changes() {
 	// Second run: same data → no changes
 	events.lock().await.clear();
 	sync.run_once("idempotent-pipe", "q1").await.unwrap();
-	assert_eq!(events.lock().await.len(), 0, "same data should produce zero events");
+	assert_eq!(
+		events.lock().await.len(),
+		0,
+		"same data should produce zero events"
+	);
 }
 
 #[tokio::test]
@@ -310,10 +336,13 @@ async fn full_pipeline_filters_plus_transforms() {
 	let sync = EmbeddedSync::builder()
 		.state_db(surreal.client.clone())
 		.skip_schema()
-		.register_source(Box::new(StaticOriginFactory {
-			rows: test_rows(),
-		}))
-		.add_sink("recorder", Arc::new(RecordingSink { events: events.clone() }))
+		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
+		.add_sink(
+			"recorder",
+			Arc::new(RecordingSink {
+				events: events.clone(),
+			}),
+		)
 		.add_pipe(PipeConfig {
 			name: "full-pipe".into(),
 			origin: OriginDef {
@@ -353,5 +382,8 @@ async fn full_pipeline_filters_plus_transforms() {
 	assert_eq!(delivered.len(), 2, "only public rows");
 	// Transforms applied: name uppercased, schema removed
 	assert_eq!(delivered[0].data["name"], "ALICE");
-	assert!(delivered[0].data.get("schema").is_none(), "schema should be removed by transform");
+	assert!(
+		delivered[0].data.get("schema").is_none(),
+		"schema should be removed by transform"
+	);
 }

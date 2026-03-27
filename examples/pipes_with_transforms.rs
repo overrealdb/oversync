@@ -60,7 +60,11 @@ key_column = "id"
 	let config = SyncConfig::from_str(toml).unwrap();
 	let pipes = config.effective_pipes();
 
-	println!("Parsed {} pipe(s), {} sink(s)\n", pipes.len(), config.sinks.len());
+	println!(
+		"Parsed {} pipe(s), {} sink(s)\n",
+		pipes.len(),
+		config.sinks.len()
+	);
 
 	for pipe in &pipes {
 		println!("Pipe: {}", pipe.name);

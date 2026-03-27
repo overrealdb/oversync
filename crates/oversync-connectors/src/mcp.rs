@@ -311,10 +311,13 @@ async fn read_message(
 	reader: &mut BufReader<tokio::process::ChildStdout>,
 ) -> Result<serde_json::Value, OversyncError> {
 	let mut line = String::new();
-	let n = tokio::time::timeout(std::time::Duration::from_secs(60), reader.read_line(&mut line))
-		.await
-		.map_err(|_| OversyncError::Connector("mcp read: timed out after 60s".into()))?
-		.map_err(|e| OversyncError::Connector(format!("mcp read: {e}")))?;
+	let n = tokio::time::timeout(
+		std::time::Duration::from_secs(60),
+		reader.read_line(&mut line),
+	)
+	.await
+	.map_err(|_| OversyncError::Connector("mcp read: timed out after 60s".into()))?
+	.map_err(|e| OversyncError::Connector(format!("mcp read: {e}")))?;
 
 	if n == 0 {
 		return Err(OversyncError::Connector("mcp: server closed stdout".into()));

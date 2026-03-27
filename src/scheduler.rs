@@ -215,8 +215,11 @@ async fn run_pipe_query(
 	let interval = Duration::from_secs(interval_secs);
 
 	// Distributed lock for horizontal scaling
-	let instance_id = std::env::var("OVERSYNC_INSTANCE_ID")
-		.unwrap_or_else(|_| hostname::get().map(|h| h.to_string_lossy().into()).unwrap_or_else(|_| "unknown".into()));
+	let instance_id = std::env::var("OVERSYNC_INSTANCE_ID").unwrap_or_else(|_| {
+		hostname::get()
+			.map(|h| h.to_string_lossy().into())
+			.unwrap_or_else(|_| "unknown".into())
+	});
 	let pipe_lock = crate::distributed_lock::PipeLock::new(
 		std::sync::Arc::clone(engine.state_client()),
 		instance_id,
@@ -243,7 +246,15 @@ async fn run_pipe_query(
 	}
 	match pipe_lock.try_acquire(&lock_key, lock_ttl).await {
 		Ok(true) => {
-			run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
+			run_timed_cycle(
+				&pipe_engine,
+				connector.as_ref(),
+				&sinks,
+				&pipe,
+				&query,
+				interval,
+			)
+			.await;
 			if let Err(e) = pipe_lock.release(&lock_key).await {
 				warn!(pipe = %pipe.name, error = %e, "failed to release lock (will expire via TTL)");
 			}
@@ -253,7 +264,15 @@ async fn run_pipe_query(
 		}
 		Err(e) => {
 			warn!(pipe = %pipe.name, error = %e, "lock acquire failed — running without lock");
-			run_timed_cycle(&pipe_engine, connector.as_ref(), &sinks, &pipe, &query, interval).await;
+			run_timed_cycle(
+				&pipe_engine,
+				connector.as_ref(),
+				&sinks,
+				&pipe,
+				&query,
+				interval,
+			)
+			.await;
 		}
 	}
 
