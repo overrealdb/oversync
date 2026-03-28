@@ -3952,7 +3952,7 @@ dependencies = [
 
 [[package]]
 name = "oversync"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -4001,7 +4001,7 @@ dependencies = [
 
 [[package]]
 name = "oversync-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "axum 0.8.8",
@@ -4020,7 +4020,7 @@ dependencies = [
 
 [[package]]
 name = "oversync-connectors"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arrow",
  "arrow-flight",
@@ -4039,7 +4039,7 @@ dependencies = [
 
 [[package]]
 name = "oversync-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4054,7 +4054,7 @@ dependencies = [
 
 [[package]]
 name = "oversync-delta"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "oversync-core",
@@ -4067,21 +4067,21 @@ dependencies = [
 
 [[package]]
 name = "oversync-links"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "oversync-core",
 ]
 
 [[package]]
 name = "oversync-queries"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "surql-parser",
 ]
 
 [[package]]
 name = "oversync-sinks"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4098,7 +4098,7 @@ dependencies = [
 
 [[package]]
 name = "oversync-transforms"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
