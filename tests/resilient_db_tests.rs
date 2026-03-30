@@ -402,12 +402,17 @@ async fn recovers_from_expired_jwt_deadlock() {
 	let db = rdb.client();
 
 	// Write test data while healthy
+	db.query("DEFINE TABLE IF NOT EXISTS deadlock_test SCHEMALESS")
+		.await
+		.unwrap();
 	db.query("CREATE deadlock_test:1 SET value = 42")
 		.await
 		.unwrap();
 
-	let row: Option<serde_json::Value> = db.select(("deadlock_test", "1")).await.unwrap();
-	assert!(row.is_some(), "should read data when healthy");
+	// Verify data is readable
+	let mut resp = db.query("SELECT * FROM deadlock_test:1").await.unwrap();
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert!(!rows.is_empty(), "should read data when healthy");
 
 	// Corrupt the session by authenticating with a fabricated expired JWT.
 	// This simulates what happens when a real JWT expires — the client's
@@ -423,15 +428,16 @@ async fn recovers_from_expired_jwt_deadlock() {
 	tokio::time::sleep(Duration::from_secs(3)).await;
 
 	// After recovery, queries must work
-	let recovered: Option<serde_json::Value> = db
-		.select(("deadlock_test", "1"))
+	let mut resp = db
+		.query("SELECT * FROM deadlock_test:1")
 		.await
 		.expect("query must succeed after deadlock recovery");
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
 	assert!(
-		recovered.is_some(),
+		!rows.is_empty(),
 		"data must be readable after deadlock recovery"
 	);
-	assert_eq!(recovered.unwrap()["value"], 42);
+	assert_eq!(rows[0]["value"], 42);
 
 	cancel.cancel();
 }
