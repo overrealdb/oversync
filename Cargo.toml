@@ -45,7 +45,7 @@ oversync-queries = { version = "0.1.1", path = "crates/oversync-queries" }
 
 overshift = "0.2"
 surql-parser = { version = "0.1.4", features = ["build"] }
-surql-macros = "0.1.1"
+surql-macros = "0.1.2"
 
 axum = "0.8"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
