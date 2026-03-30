@@ -571,6 +571,7 @@ impl OversyncEngineBuilder {
 					namespace: self.namespace.clone(),
 					database: self.database.clone(),
 					health_interval: std::time::Duration::from_secs(1),
+					token_refresh_interval: Some(std::time::Duration::from_secs(3000)),
 				})
 				.await
 				.map_err(|e| OversyncError::SurrealDb(format!("resilient connect: {e}")))?;

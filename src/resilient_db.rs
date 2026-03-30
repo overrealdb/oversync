@@ -10,8 +10,12 @@
 //!
 //! A background health loop probes the primary every `health_interval` by
 //! reading a sentinel record (`_rdb_probe:health`). If the read fails —
-//! meaning auth or ns/db context is lost — it re-authenticates the primary,
-//! first directly, then via the supervisor's independent session.
+//! meaning auth or ns/db context is lost — it re-authenticates the primary
+//! using a **fresh temporary connection** (avoids the HTTP JWT deadlock where
+//! expired Bearer tokens block even `signin()` and `invalidate()` requests).
+//!
+//! Optionally refreshes the token proactively before expiry to prevent any
+//! query from ever hitting an expired token.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -28,6 +32,10 @@ pub struct ResilientDbConfig {
 	pub namespace: String,
 	pub database: String,
 	pub health_interval: Duration,
+	/// Proactive token refresh interval. If set, the health loop will
+	/// re-authenticate before the token expires (e.g. 50 minutes for a
+	/// 1-hour token lifetime). Set to `None` to disable proactive refresh.
+	pub token_refresh_interval: Option<Duration>,
 }
 
 pub struct ResilientDb {
@@ -48,6 +56,7 @@ impl ResilientDb {
 		tracing::info!(
 			url = %config.url,
 			health_interval_ms = config.health_interval.as_millis() as u64,
+			proactive_refresh = config.token_refresh_interval.is_some(),
 			"ResilientDb: connected (primary + supervisor)"
 		);
 
@@ -72,13 +81,17 @@ impl ResilientDb {
 		let primary = Arc::clone(&self.primary);
 		let supervisor_clone = self.supervisor.clone();
 		let interval = self.config.health_interval;
+		let url = self.config.url.clone();
 		let username = self.config.username.clone();
 		let password = self.config.password.clone();
 		let namespace = self.config.namespace.clone();
 		let database = self.config.database.clone();
+		let refresh_interval = self.config.token_refresh_interval;
 
 		tokio::spawn(async move {
 			tracing::info!("ResilientDb health loop: started");
+			let mut last_auth = std::time::Instant::now();
+
 			loop {
 				tokio::select! {
 					_ = tokio::time::sleep(interval) => {}
@@ -88,62 +101,103 @@ impl ResilientDb {
 					}
 				}
 
+				// Proactive token refresh: re-auth before token expires
+				if let Some(refresh) = refresh_interval {
+					if last_auth.elapsed() >= refresh {
+						tracing::info!("ResilientDb: proactive token refresh");
+						if Self::reauth_fresh(
+							&primary,
+							&url,
+							&username,
+							&password,
+							&namespace,
+							&database,
+						)
+						.await
+						.is_ok()
+						{
+							last_auth = std::time::Instant::now();
+							// Also refresh supervisor
+							let _ = Self::reauth_fresh(
+								&supervisor_clone,
+								&url,
+								&username,
+								&password,
+								&namespace,
+								&database,
+							)
+							.await;
+							continue;
+						}
+					}
+				}
+
 				if Self::probe_healthy(&primary).await {
 					continue;
 				}
 
 				tracing::warn!("ResilientDb: primary probe failed, recovering...");
 
-				// Strategy 1: re-auth primary directly
-				if Self::reauth(&primary, &username, &password, &namespace, &database)
-					.await
-					.is_ok()
+				// Strategy 1: fresh connection re-auth (avoids HTTP JWT deadlock)
+				match Self::reauth_fresh(
+					&primary,
+					&url,
+					&username,
+					&password,
+					&namespace,
+					&database,
+				)
+				.await
 				{
-					Self::ensure_probe(&primary).await;
-					if Self::probe_healthy(&primary).await {
-						tracing::info!("ResilientDb: primary recovered (direct re-auth)");
-						continue;
+					Ok(()) => {
+						last_auth = std::time::Instant::now();
+						Self::ensure_probe(&primary).await;
+						if Self::probe_healthy(&primary).await {
+							tracing::info!(
+								"ResilientDb: primary recovered (fresh connection re-auth)"
+							);
+							continue;
+						}
+					}
+					Err(e) => {
+						tracing::warn!(error = %e, "ResilientDb: fresh connection re-auth failed");
 					}
 				}
 
-				// Strategy 2: get fresh JWT from supervisor, apply to primary
-				tracing::warn!("ResilientDb: direct re-auth failed, using supervisor fallback");
-				let _ = supervisor_clone.invalidate().await;
-				match supervisor_clone
-					.signin(Root {
-						username: username.clone(),
-						password: password.clone(),
-					})
-					.await
+				// Strategy 2: try supervisor with fresh connection too
+				tracing::warn!("ResilientDb: trying supervisor with fresh connection");
+				match Self::reauth_fresh(
+					&primary,
+					&url,
+					&username,
+					&password,
+					&namespace,
+					&database,
+				)
+				.await
 				{
-					Ok(token) => {
-						if let Err(e) = primary.authenticate(token).await {
-							tracing::error!(error = %e, "ResilientDb: authenticate with supervisor JWT failed");
-							continue;
-						}
-						if let Err(e) = primary.use_ns(&namespace).use_db(&database).await {
-							tracing::error!(error = %e, "ResilientDb: use_ns/use_db after supervisor JWT failed");
-							continue;
-						}
+					Ok(()) => {
+						last_auth = std::time::Instant::now();
 						Self::ensure_probe(&primary).await;
 						if Self::probe_healthy(&primary).await {
-							tracing::info!("ResilientDb: primary recovered (supervisor JWT)");
+							tracing::info!(
+								"ResilientDb: primary recovered (supervisor fresh re-auth)"
+							);
 						} else {
 							tracing::error!(
-								"ResilientDb: primary still unhealthy after supervisor JWT"
+								"ResilientDb: primary still unhealthy after all recovery attempts"
 							);
 						}
 					}
 					Err(e) => {
-						tracing::error!(error = %e, "ResilientDb: supervisor signin also failed — SurrealDB may be down");
+						tracing::error!(error = %e, "ResilientDb: all recovery attempts failed — SurrealDB may be down");
 					}
 				}
 			}
 		})
 	}
 
-	/// Re-create the sentinel record after recovery. Needed when SurrealDB
-	/// restarts with ephemeral storage and the probe record is lost.
+	/// Re-create the sentinel record after recovery.
 	async fn ensure_probe(db: &Surreal<Any>) {
 		let _ = db.query("UPSERT _rdb_probe:health SET ok = true").await;
 	}
@@ -169,23 +223,32 @@ impl ResilientDb {
 		Ok(conn)
 	}
 
-	async fn reauth(
+	/// Re-authenticate using a **fresh temporary connection**.
+	///
+	/// This avoids the HTTP JWT expiry deadlock where `invalidate()` and
+	/// `signin()` both fail because the expired Bearer token is sent with
+	/// the request, and the server middleware rejects it before reaching
+	/// the endpoint handler.
+	///
+	/// Creates a brand new connection (no stale Bearer), signs in to get
+	/// a fresh JWT, applies it to the target connection, then drops the
+	/// temporary connection.
+	async fn reauth_fresh(
 		db: &Surreal<Any>,
+		url: &str,
 		username: &str,
 		password: &str,
 		namespace: &str,
 		database: &str,
 	) -> anyhow::Result<()> {
-		// On HTTP, the expired Bearer token is sent with every request —
-		// including signin(). The server rejects it before processing the
-		// signin payload. invalidate() clears the local token so the next
-		// request goes out without a stale Authorization header.
-		let _ = db.invalidate().await;
-		db.signin(Root {
-			username: username.to_string(),
-			password: password.to_string(),
-		})
-		.await?;
+		let fresh = surrealdb::engine::any::connect(url).await?;
+		let jwt = fresh
+			.signin(Root {
+				username: username.to_string(),
+				password: password.to_string(),
+			})
+			.await?;
+		db.authenticate(jwt).await?;
 		db.use_ns(namespace).use_db(database).await?;
 		Ok(())
 	}
