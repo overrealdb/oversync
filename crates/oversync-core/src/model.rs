@@ -712,3 +712,197 @@ mod tests {
 		assert!(auth.is_plaintext());
 	}
 }
+
+#[cfg(test)]
+mod prop_tests {
+	use super::*;
+	use proptest::prelude::*;
+	use std::collections::HashMap;
+
+	fn arb_json_value() -> impl Strategy<Value = serde_json::Value> {
+		prop_oneof![
+			Just(serde_json::Value::Null),
+			any::<bool>().prop_map(serde_json::Value::Bool),
+			any::<i64>().prop_map(|n| serde_json::json!(n)),
+			any::<f64>()
+				.prop_filter("must be finite", |f| f.is_finite())
+				.prop_map(|n| serde_json::json!(n)),
+			"[a-zA-Z0-9_ ]{0,50}".prop_map(serde_json::Value::String),
+		]
+	}
+
+	fn arb_raw_row() -> impl Strategy<Value = RawRow> {
+		("[a-zA-Z0-9_]{1,20}", arb_json_value()).prop_map(|(key, data)| RawRow {
+			row_key: key,
+			row_data: data,
+		})
+	}
+
+	fn arb_raw_rows() -> impl Strategy<Value = Vec<RawRow>> {
+		prop::collection::vec(arb_raw_row(), 0..50)
+	}
+
+	fn arb_previous_snapshot() -> impl Strategy<Value = HashMap<String, String>> {
+		prop::collection::vec(("[a-zA-Z0-9_]{1,20}", "[a-f0-9]{64}"), 0..50)
+			.prop_map(|pairs| pairs.into_iter().collect())
+	}
+
+	proptest! {
+		#[test]
+		fn created_and_deleted_are_disjoint(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			let created_keys: std::collections::HashSet<_> =
+				result.created.iter().map(|e| &e.row_key).collect();
+			let deleted_keys: std::collections::HashSet<_> =
+				result.deleted.iter().map(|e| &e.row_key).collect();
+			prop_assert!(created_keys.is_disjoint(&deleted_keys));
+		}
+
+		#[test]
+		fn created_and_updated_are_disjoint(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			let created_keys: std::collections::HashSet<_> =
+				result.created.iter().map(|e| &e.row_key).collect();
+			let updated_keys: std::collections::HashSet<_> =
+				result.updated.iter().map(|e| &e.row_key).collect();
+			prop_assert!(created_keys.is_disjoint(&updated_keys));
+		}
+
+		#[test]
+		fn deleted_keys_come_from_previous(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			for event in &result.deleted {
+				prop_assert!(previous.contains_key(&event.row_key));
+			}
+		}
+
+		#[test]
+		fn created_keys_not_in_previous(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			for event in &result.created {
+				prop_assert!(!previous.contains_key(&event.row_key));
+			}
+		}
+
+		#[test]
+		fn updated_keys_in_both(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let current_keys: std::collections::HashSet<_> =
+				current.iter().map(|r| &r.row_key).collect();
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			for event in &result.updated {
+				prop_assert!(previous.contains_key(&event.row_key));
+				prop_assert!(current_keys.contains(&event.row_key));
+			}
+		}
+
+		#[test]
+		fn deleted_events_have_null_data(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			for event in &result.deleted {
+				prop_assert_eq!(&event.row_data, &serde_json::Value::Null);
+				prop_assert_eq!(event.op, OpType::Deleted);
+			}
+		}
+
+		#[test]
+		fn created_events_have_correct_op(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			for event in &result.created {
+				prop_assert_eq!(event.op, OpType::Created);
+			}
+			for event in &result.updated {
+				prop_assert_eq!(event.op, OpType::Updated);
+			}
+		}
+
+		#[test]
+		fn unique_keys_conservation(
+			previous in arb_previous_snapshot(),
+			current in arb_raw_rows(),
+		) {
+			// Deduplicate current by key (last-write-wins, matching compute_diff behavior)
+			let mut deduped: HashMap<&str, &RawRow> = HashMap::new();
+			for row in &current {
+				deduped.insert(&row.row_key, row);
+			}
+			let unique_current_keys: std::collections::HashSet<&str> =
+				deduped.keys().copied().collect();
+
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+
+			// Every unique current key is either created, updated, or unchanged
+			let created_keys: std::collections::HashSet<&str> =
+				result.created.iter().map(|e| e.row_key.as_str()).collect();
+			let updated_keys: std::collections::HashSet<&str> =
+				result.updated.iter().map(|e| e.row_key.as_str()).collect();
+
+			// created + updated ≤ unique current keys
+			prop_assert!(created_keys.len() + updated_keys.len() <= unique_current_keys.len());
+
+			// Every deleted key is in previous but not in current
+			let deleted_keys: std::collections::HashSet<&str> =
+				result.deleted.iter().map(|e| e.row_key.as_str()).collect();
+			for dk in &deleted_keys {
+				prop_assert!(!unique_current_keys.contains(dk));
+			}
+		}
+
+		#[test]
+		fn empty_previous_means_no_updates_or_deletes(
+			current in arb_raw_rows(),
+		) {
+			let previous = HashMap::new();
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			prop_assert!(result.deleted.is_empty());
+			prop_assert!(result.updated.is_empty());
+			// Every row becomes a created event (including duplicate keys)
+			prop_assert_eq!(result.created.len(), current.len());
+		}
+
+		#[test]
+		fn empty_current_means_all_deleted(
+			previous in arb_previous_snapshot(),
+		) {
+			let current: Vec<RawRow> = vec![];
+			let result = compute_diff(&previous, &current, "o", "q", 1);
+			prop_assert!(result.created.is_empty());
+			prop_assert!(result.updated.is_empty());
+			prop_assert_eq!(result.deleted.len(), previous.len());
+		}
+
+		#[test]
+		fn hash_is_deterministic(data in arb_json_value()) {
+			let h1 = hash_row_data(&data);
+			let h2 = hash_row_data(&data);
+			prop_assert_eq!(h1, h2);
+		}
+
+		#[test]
+		fn hash_is_64_hex_chars(data in arb_json_value()) {
+			let h = hash_row_data(&data);
+			prop_assert_eq!(h.len(), 64);
+			prop_assert!(h.chars().all(|c| c.is_ascii_hexdigit()));
+		}
+	}
+}

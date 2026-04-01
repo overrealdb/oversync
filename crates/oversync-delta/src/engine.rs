@@ -768,3 +768,75 @@ mod tests {
 		assert_eq!(keys.len(), 2, "should have 2 keys after upsert");
 	}
 }
+
+#[cfg(test)]
+mod prop_tests {
+	use super::*;
+	use proptest::prelude::*;
+
+	proptest! {
+		#[test]
+		fn zero_previous_always_safe(
+			deleted in 0usize..1000,
+			threshold in 0.0f64..100.0,
+		) {
+			prop_assert!(check_fail_safe(0, deleted, threshold));
+		}
+
+		#[test]
+		fn zero_deleted_always_safe(
+			previous in 1usize..1000,
+			threshold in 0.0f64..100.0,
+		) {
+			prop_assert!(check_fail_safe(previous, 0, threshold));
+		}
+
+		#[test]
+		fn monotonic_in_deleted(
+			previous in 1usize..500,
+			d1 in 0usize..500,
+			d2 in 0usize..500,
+			threshold in 0.1f64..100.0,
+		) {
+			// If fewer deletes pass, more deletes should also fail or pass
+			let (lo, hi) = if d1 <= d2 { (d1, d2) } else { (d2, d1) };
+			if !check_fail_safe(previous, lo, threshold) {
+				prop_assert!(!check_fail_safe(previous, hi, threshold));
+			}
+		}
+
+		#[test]
+		fn monotonic_in_threshold(
+			previous in 1usize..500,
+			deleted in 0usize..500,
+			t1 in 0.0f64..100.0,
+			t2 in 0.0f64..100.0,
+		) {
+			// Higher threshold is more permissive
+			let (lo, hi) = if t1 <= t2 { (t1, t2) } else { (t2, t1) };
+			if check_fail_safe(previous, deleted, lo) {
+				prop_assert!(check_fail_safe(previous, deleted, hi));
+			}
+		}
+
+		#[test]
+		fn hundred_percent_threshold_allows_all(
+			previous in 1usize..1000,
+			deleted in 0usize..1000,
+		) {
+			prop_assert!(check_fail_safe(previous, deleted.min(previous), 100.0));
+		}
+
+		#[test]
+		fn boundary_at_threshold(
+			previous in 1usize..1000,
+			threshold_pct in 1.0f64..99.0,
+		) {
+			// Compute exact boundary count
+			let boundary = (previous as f64 * threshold_pct / 100.0).floor() as usize;
+			if boundary <= previous {
+				prop_assert!(check_fail_safe(previous, boundary, threshold_pct));
+			}
+		}
+	}
+}
