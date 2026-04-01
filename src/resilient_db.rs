@@ -102,28 +102,28 @@ impl ResilientDb {
 				}
 
 				// Proactive token refresh: re-auth before token expires
-				if let Some(refresh) = refresh_interval {
-					if last_auth.elapsed() >= refresh {
-						tracing::info!("ResilientDb: proactive token refresh");
-						if Self::reauth_fresh(
-							&primary, &url, &username, &password, &namespace, &database,
+				if let Some(refresh) = refresh_interval
+					&& last_auth.elapsed() >= refresh
+				{
+					tracing::info!("ResilientDb: proactive token refresh");
+					if Self::reauth_fresh(
+						&primary, &url, &username, &password, &namespace, &database,
+					)
+					.await
+					.is_ok()
+					{
+						last_auth = std::time::Instant::now();
+						// Also refresh supervisor
+						let _ = Self::reauth_fresh(
+							&supervisor_clone,
+							&url,
+							&username,
+							&password,
+							&namespace,
+							&database,
 						)
-						.await
-						.is_ok()
-						{
-							last_auth = std::time::Instant::now();
-							// Also refresh supervisor
-							let _ = Self::reauth_fresh(
-								&supervisor_clone,
-								&url,
-								&username,
-								&password,
-								&namespace,
-								&database,
-							)
-							.await;
-							continue;
-						}
+						.await;
+						continue;
 					}
 				}
 
