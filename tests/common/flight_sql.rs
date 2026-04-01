@@ -31,12 +31,11 @@ async fn shared_trino() -> &'static SharedTrinoContainer {
 			let client = reqwest::Client::new();
 			let url = format!("http://{host}:{port}/v1/info");
 			for _ in 0..60 {
-				if let Ok(resp) = client.get(&url).send().await {
-					if let Ok(body) = resp.text().await {
-						if body.contains("starting") || body.contains("true") {
-							break;
-						}
-					}
+				if let Ok(resp) = client.get(&url).send().await
+					&& let Ok(body) = resp.text().await
+					&& (body.contains("starting") || body.contains("true"))
+				{
+					break;
 				}
 				tokio::time::sleep(Duration::from_secs(2)).await;
 			}
@@ -70,7 +69,7 @@ impl TestFlightSql {
 	pub async fn run_sql(&self, sql: &str) {
 		let client = reqwest::Client::new();
 		let resp = client
-			.post(&format!("{}/v1/statement", self.http_endpoint))
+			.post(format!("{}/v1/statement", self.http_endpoint))
 			.header("X-Trino-User", "test")
 			.header("X-Trino-Catalog", "memory")
 			.header("X-Trino-Schema", "default")

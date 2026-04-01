@@ -475,11 +475,7 @@ fn db_err(e: surrealdb::Error) -> Json<ErrorResponse> {
 	})
 }
 
-pub(crate) async fn reload_config_pub(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
-	reload_config(state).await
-}
-
-async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
+pub(crate) async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
 	if let (Some(lifecycle), Some(db)) = (&state.lifecycle, &state.db_client) {
 		lifecycle.restart_with_config_json(db).await.map_err(|e| {
 			Json(ErrorResponse {

@@ -103,7 +103,7 @@ async fn fetch_all_float_column() {
 	let my = TestMysql::new().await;
 	my.run_sql("CREATE TABLE floats (id VARCHAR(64) PRIMARY KEY, val DOUBLE)")
 		.await;
-	my.run_sql("INSERT INTO floats VALUES ('a', 3.14)").await;
+	my.run_sql("INSERT INTO floats VALUES ('a', 2.72)").await;
 
 	let conn = MysqlConnector::from_pool("test", my.pool.clone());
 	let rows = conn
@@ -111,7 +111,7 @@ async fn fetch_all_float_column() {
 		.await
 		.unwrap();
 	let val = rows[0].row_data["val"].as_f64().unwrap();
-	assert!((val - 3.14).abs() < 0.001);
+	assert!((val - 2.72).abs() < 0.001);
 }
 
 #[tokio::test]

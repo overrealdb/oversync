@@ -120,14 +120,14 @@ async fn fetch_all_real_double() {
 
 	let rows = conn
 		.fetch_all(
-			"SELECT 'k' AS id, CAST(3.14 AS DOUBLE) AS dbl, CAST(2.5 AS REAL) AS rl",
+			"SELECT 'k' AS id, CAST(2.72 AS DOUBLE) AS dbl, CAST(2.5 AS REAL) AS rl",
 			"id",
 		)
 		.await
 		.unwrap();
 
 	let dbl = rows[0].row_data["dbl"].as_f64().unwrap();
-	assert!((dbl - 3.14).abs() < 0.001);
+	assert!((dbl - 2.72).abs() < 0.001);
 	let rl = rows[0].row_data["rl"].as_f64().unwrap();
 	assert!((rl - 2.5).abs() < 0.1);
 }

@@ -165,7 +165,7 @@ pub struct DeltaEvent {
 }
 
 pub fn hash_row_data(data: &serde_json::Value) -> String {
-	let serialized = serde_json::to_string(data).unwrap_or_default();
+	let serialized = serde_json::to_string(data).expect("serde_json::Value is always serializable");
 	let mut hasher = Sha256::new();
 	hasher.update(serialized.as_bytes());
 	hex::encode(hasher.finalize())
@@ -187,6 +187,30 @@ pub enum AuthConfig {
 	Bearer { token: String },
 	Header { name: String, value: String },
 	Basic { username: String, password: String },
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct KafkaAuth {
+	#[serde(default = "default_security_protocol")]
+	pub security_protocol: String,
+	pub sasl_mechanism: Option<String>,
+	pub sasl_username: Option<String>,
+	pub sasl_password: Option<String>,
+	pub sasl_kerberos_keytab: Option<String>,
+	pub sasl_kerberos_principal: Option<String>,
+	pub ssl_ca_location: Option<String>,
+	pub ssl_certificate_location: Option<String>,
+	pub ssl_key_location: Option<String>,
+}
+
+fn default_security_protocol() -> String {
+	"PLAINTEXT".to_string()
+}
+
+impl KafkaAuth {
+	pub fn is_plaintext(&self) -> bool {
+		self.security_protocol == "PLAINTEXT"
+	}
 }
 
 #[cfg(test)]
@@ -412,6 +436,52 @@ mod tests {
 		assert_eq!(r.created[0].origin_id, "my-src");
 		assert_eq!(r.created[0].query_id, "my-q");
 		assert_eq!(r.created[0].cycle_id, 7);
+	}
+
+	#[test]
+	fn kafka_auth_default_is_plaintext() {
+		let auth = KafkaAuth::default();
+		assert_eq!(auth.security_protocol, "PLAINTEXT");
+		assert!(auth.is_plaintext());
+		assert!(auth.sasl_mechanism.is_none());
+	}
+
+	#[test]
+	fn kafka_auth_deserializes_sasl_plain() {
+		let json = serde_json::json!({
+			"security_protocol": "SASL_SSL",
+			"sasl_mechanism": "PLAIN",
+			"sasl_username": "user",
+			"sasl_password": "pass",
+			"ssl_ca_location": "/path/to/ca.pem"
+		});
+		let auth: KafkaAuth = serde_json::from_value(json).unwrap();
+		assert_eq!(auth.security_protocol, "SASL_SSL");
+		assert_eq!(auth.sasl_mechanism.as_deref(), Some("PLAIN"));
+		assert_eq!(auth.sasl_username.as_deref(), Some("user"));
+		assert_eq!(auth.sasl_password.as_deref(), Some("pass"));
+		assert_eq!(auth.ssl_ca_location.as_deref(), Some("/path/to/ca.pem"));
+		assert!(!auth.is_plaintext());
+	}
+
+	#[test]
+	fn kafka_auth_deserializes_kerberos() {
+		let json = serde_json::json!({
+			"security_protocol": "SASL_PLAINTEXT",
+			"sasl_mechanism": "GSSAPI",
+			"sasl_kerberos_keytab": "/etc/krb5.keytab",
+			"sasl_kerberos_principal": "kafka/broker@REALM"
+		});
+		let auth: KafkaAuth = serde_json::from_value(json).unwrap();
+		assert_eq!(auth.sasl_mechanism.as_deref(), Some("GSSAPI"));
+		assert_eq!(
+			auth.sasl_kerberos_keytab.as_deref(),
+			Some("/etc/krb5.keytab")
+		);
+		assert_eq!(
+			auth.sasl_kerberos_principal.as_deref(),
+			Some("kafka/broker@REALM")
+		);
 	}
 
 	#[test]

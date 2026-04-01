@@ -493,7 +493,7 @@ mod tests {
 	#[test]
 	fn items_to_rows_preserves_full_data() {
 		let item = serde_json::json!({"id": "k1", "a": 1, "b": "two"});
-		let rows = items_to_rows(&[item.clone()], "id").unwrap();
+		let rows = items_to_rows(std::slice::from_ref(&item), "id").unwrap();
 		assert_eq!(rows[0].row_data, item);
 	}
 

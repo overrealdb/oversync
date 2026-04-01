@@ -11,8 +11,6 @@ ignore = [
 	"RUSTSEC-2025-0141",
 	# paste unmaintained — transitive via wasmtime + arrow-flight
 	"RUSTSEC-2024-0436",
-	# astral-tokio-tar PAX extensions — transitive via testcontainers (dev-only)
-	"RUSTSEC-2026-0066",
 ]
 
 [licenses]

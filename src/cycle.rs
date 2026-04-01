@@ -148,7 +148,6 @@ impl<'a> CycleRunner<'a> {
 		};
 
 		let created_count = diff.created.len();
-		let _updated_count = diff.updated.len();
 		let deleted_count = diff.deleted.len();
 		let previous_count = total_upserted + deleted_count;
 

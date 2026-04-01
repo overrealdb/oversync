@@ -66,7 +66,7 @@ impl FlightSqlConnector {
 			let ticket = endpoint
 				.ticket
 				.as_ref()
-				.ok_or_else(|| OversyncError::Connector("trino: missing ticket".into()))?;
+				.ok_or_else(|| OversyncError::Connector("flight_sql: missing ticket".into()))?;
 
 			let mut stream = client
 				.do_get(ticket.clone())
@@ -123,7 +123,7 @@ impl OriginConnector for FlightSqlConnector {
 			let ticket = endpoint
 				.ticket
 				.as_ref()
-				.ok_or_else(|| OversyncError::Connector("trino: missing ticket".into()))?;
+				.ok_or_else(|| OversyncError::Connector("flight_sql: missing ticket".into()))?;
 
 			let mut stream = client
 				.do_get(ticket.clone())

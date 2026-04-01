@@ -32,12 +32,11 @@ async fn shared_trino() -> &'static SharedTrinoContainer {
 			let client = reqwest::Client::new();
 			let info_url = format!("{url}/v1/info");
 			for _ in 0..90 {
-				if let Ok(resp) = client.get(&info_url).send().await {
-					if let Ok(body) = resp.json::<serde_json::Value>().await {
-						if body.get("starting") == Some(&serde_json::json!(false)) {
-							break;
-						}
-					}
+				if let Ok(resp) = client.get(&info_url).send().await
+					&& let Ok(body) = resp.json::<serde_json::Value>().await
+					&& body.get("starting") == Some(&serde_json::json!(false))
+				{
+					break;
 				}
 				tokio::time::sleep(Duration::from_secs(2)).await;
 			}
@@ -66,7 +65,7 @@ impl TestTrino {
 	pub async fn run_sql(&self, sql: &str) {
 		let client = reqwest::Client::new();
 		let resp = client
-			.post(&format!("{}/v1/statement", self.url))
+			.post(format!("{}/v1/statement", self.url))
 			.header("X-Trino-User", "test")
 			.header("X-Trino-Catalog", "memory")
 			.header("X-Trino-Schema", "default")

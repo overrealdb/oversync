@@ -109,7 +109,8 @@ impl ClickHouseSink {
 fn envelope_to_row(envelope: &EventEnvelope) -> ClickHouseRow {
 	ClickHouseRow {
 		key: envelope.meta.key.clone(),
-		data: serde_json::to_string(&envelope.data).unwrap_or_default(),
+		data: serde_json::to_string(&envelope.data)
+			.expect("serde_json::Value is always serializable"),
 		op: envelope.meta.op.to_string(),
 		origin_id: envelope.meta.origin_id.clone(),
 		query_id: envelope.meta.query_id.clone(),

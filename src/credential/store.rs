@@ -176,7 +176,7 @@ mod tests {
 	#[test]
 	fn too_short_ciphertext_fails() {
 		let store = AesGcmStore::from_passphrase("key");
-		let short = BASE64.encode(&[0u8; 5]);
+		let short = BASE64.encode([0u8; 5]);
 		let err = store.decrypt(&short).unwrap_err();
 		assert!(err.to_string().contains("too short"));
 	}

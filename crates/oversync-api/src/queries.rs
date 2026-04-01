@@ -122,7 +122,7 @@ pub async fn create_query(
 			.map_err(db_err)?;
 	}
 
-	super::mutations::reload_config_pub(&state).await?;
+	super::mutations::reload_config(&state).await?;
 
 	Ok(Json(MutationResponse {
 		ok: true,
@@ -188,7 +188,7 @@ pub async fn update_query(
 			.map_err(db_err)?;
 	}
 
-	super::mutations::reload_config_pub(&state).await?;
+	super::mutations::reload_config(&state).await?;
 
 	Ok(Json(MutationResponse {
 		ok: true,
@@ -220,7 +220,7 @@ pub async fn delete_query(
 		.await
 		.map_err(db_err)?;
 
-	super::mutations::reload_config_pub(&state).await?;
+	super::mutations::reload_config(&state).await?;
 
 	Ok(Json(MutationResponse {
 		ok: true,

@@ -167,7 +167,7 @@ async fn fetch_all_float_column() {
 
 	pg.run_sql("CREATE TABLE measures (id TEXT PRIMARY KEY, val FLOAT8)")
 		.await;
-	pg.run_sql("INSERT INTO measures VALUES ('m1', 3.14)").await;
+	pg.run_sql("INSERT INTO measures VALUES ('m1', 2.72)").await;
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
@@ -177,7 +177,7 @@ async fn fetch_all_float_column() {
 
 	assert_eq!(rows.len(), 1);
 	let val = rows[0].row_data["val"].as_f64().unwrap();
-	assert!((val - 3.14).abs() < 0.001);
+	assert!((val - 2.72).abs() < 0.001);
 }
 
 #[tokio::test]

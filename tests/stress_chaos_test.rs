@@ -153,9 +153,9 @@ async fn stress_two_tables_join_full_lifecycle() {
 	// ── Setup: create tables with bulk data ─────────────────
 	eprintln!("setup: creating tables...");
 
-	pg.run_sql(&format!(
-		"CREATE TABLE categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT)"
-	))
+	pg.run_sql(
+		"CREATE TABLE categories (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT)",
+	)
 	.await;
 
 	pg.run_sql(&format!(
@@ -167,15 +167,15 @@ async fn stress_two_tables_join_full_lifecycle() {
 	))
 	.await;
 
-	pg.run_sql(&format!(
+	pg.run_sql(
 		"CREATE TABLE products (\
 		   id TEXT PRIMARY KEY, \
 		   name TEXT NOT NULL, \
 		   price NUMERIC(10,2), \
 		   category_id TEXT REFERENCES categories(id), \
-		   metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb \
-		 )"
-	))
+		   metadata JSONB NOT NULL DEFAULT '{}'::jsonb \
+		 )",
+	)
 	.await;
 
 	// Insert in chunks of 100K to avoid OOM in postgres container

@@ -346,10 +346,10 @@ async fn concurrent_reads_writes_during_recovery() {
 			}
 			let res: Result<Option<serde_json::Value>, _> =
 				reader_db.select(("rw_test", "counter")).await;
-			if let Ok(Some(row)) = res {
-				if row.get("value").and_then(|v| v.as_u64()).is_some() {
-					rok.fetch_add(1, Ordering::Relaxed);
-				}
+			if let Ok(Some(row)) = res
+				&& row.get("value").and_then(|v| v.as_u64()).is_some()
+			{
+				rok.fetch_add(1, Ordering::Relaxed);
 			}
 			tokio::time::sleep(Duration::from_millis(20)).await;
 		}

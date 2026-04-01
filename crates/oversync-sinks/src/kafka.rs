@@ -6,7 +6,7 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use tracing::debug;
 
 use oversync_core::error::OversyncError;
-use oversync_core::model::EventEnvelope;
+use oversync_core::model::{EventEnvelope, KafkaAuth};
 use oversync_core::traits::Sink;
 
 pub struct KafkaSink {
@@ -17,9 +17,24 @@ pub struct KafkaSink {
 
 impl KafkaSink {
 	pub fn new(brokers: &str, topic: &str) -> Result<Self, OversyncError> {
-		let producer: FutureProducer = ClientConfig::new()
+		Self::with_auth(brokers, topic, None)
+	}
+
+	pub fn with_auth(
+		brokers: &str,
+		topic: &str,
+		auth: Option<&KafkaAuth>,
+	) -> Result<Self, OversyncError> {
+		let mut config = ClientConfig::new();
+		config
 			.set("bootstrap.servers", brokers)
-			.set("message.timeout.ms", "5000")
+			.set("message.timeout.ms", "5000");
+
+		if let Some(auth) = auth {
+			apply_kafka_auth(&mut config, auth);
+		}
+
+		let producer: FutureProducer = config
 			.create()
 			.map_err(|e| OversyncError::Sink(format!("kafka producer create: {e}")))?;
 
@@ -28,6 +43,35 @@ impl KafkaSink {
 			topic: topic.to_string(),
 			sink_name: format!("kafka:{topic}"),
 		})
+	}
+}
+
+pub(crate) fn apply_kafka_auth(config: &mut ClientConfig, auth: &KafkaAuth) {
+	config.set("security.protocol", &auth.security_protocol);
+
+	if let Some(ref mechanism) = auth.sasl_mechanism {
+		config.set("sasl.mechanism", mechanism);
+	}
+	if let Some(ref username) = auth.sasl_username {
+		config.set("sasl.username", username);
+	}
+	if let Some(ref password) = auth.sasl_password {
+		config.set("sasl.password", password);
+	}
+	if let Some(ref keytab) = auth.sasl_kerberos_keytab {
+		config.set("sasl.kerberos.keytab", keytab);
+	}
+	if let Some(ref principal) = auth.sasl_kerberos_principal {
+		config.set("sasl.kerberos.principal", principal);
+	}
+	if let Some(ref ca) = auth.ssl_ca_location {
+		config.set("ssl.ca.location", ca);
+	}
+	if let Some(ref cert) = auth.ssl_certificate_location {
+		config.set("ssl.certificate.location", cert);
+	}
+	if let Some(ref key) = auth.ssl_key_location {
+		config.set("ssl.key.location", key);
 	}
 }
 
@@ -54,7 +98,6 @@ impl Sink for KafkaSink {
 	}
 
 	async fn test_connection(&self) -> Result<(), OversyncError> {
-		// Produce a test message to verify connectivity
 		let record = FutureRecord::to(&self.topic)
 			.key("__oversync_health_check")
 			.payload("{}");
