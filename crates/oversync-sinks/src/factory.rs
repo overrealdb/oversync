@@ -5,9 +5,12 @@ use async_trait::async_trait;
 use oversync_core::error::OversyncError;
 use oversync_core::traits::{Sink, TargetFactory};
 
+use crate::clickhouse_sink::ClickHouseSink;
 use crate::http_sink::HttpSink;
 use crate::kafka::KafkaSink;
 use crate::mcp_sink::{McpSink, McpSinkConfig};
+use crate::mysql_sink::MysqlSink;
+use crate::postgres_sink::PostgresSink;
 use crate::stdout::StdoutSink;
 use crate::surrealdb_sink::SurrealDbSink;
 use oversync_core::model::AuthConfig;
@@ -120,6 +123,110 @@ impl TargetFactory for McpTargetFactory {
 	}
 }
 
+pub struct MysqlTargetFactory;
+
+#[async_trait]
+impl TargetFactory for MysqlTargetFactory {
+	fn sink_type(&self) -> &str {
+		"mysql"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn Sink>, OversyncError> {
+		let dsn = config
+			.get("dsn")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("mysql sink: missing 'dsn'".into()))?;
+		let table = config
+			.get("table")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("mysql sink: missing 'table'".into()))?;
+		Ok(Box::new(MysqlSink::new(name, dsn, table).await?))
+	}
+}
+
+pub struct PostgresTargetFactory;
+
+#[async_trait]
+impl TargetFactory for PostgresTargetFactory {
+	fn sink_type(&self) -> &str {
+		"postgres"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn Sink>, OversyncError> {
+		let dsn = config
+			.get("dsn")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("postgres sink: missing 'dsn'".into()))?;
+		let table = config
+			.get("table")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("postgres sink: missing 'table'".into()))?;
+		let schema = config
+			.get("schema")
+			.and_then(|v| v.as_str())
+			.unwrap_or("public");
+		Ok(Box::new(PostgresSink::new(name, dsn, table, schema).await?))
+	}
+}
+
+pub struct ClickHouseTargetFactory;
+
+#[async_trait]
+impl TargetFactory for ClickHouseTargetFactory {
+	fn sink_type(&self) -> &str {
+		"clickhouse"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		config: &serde_json::Value,
+	) -> Result<Box<dyn Sink>, OversyncError> {
+		let url = config
+			.get("url")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("clickhouse sink: missing 'url'".into()))?;
+		let table = config
+			.get("table")
+			.and_then(|v| v.as_str())
+			.ok_or_else(|| OversyncError::Config("clickhouse sink: missing 'table'".into()))?;
+		let database = config
+			.get("database")
+			.and_then(|v| v.as_str())
+			.map(String::from);
+		let user = config
+			.get("user")
+			.and_then(|v| v.as_str())
+			.unwrap_or("default")
+			.to_string();
+		let password = config
+			.get("password")
+			.and_then(|v| v.as_str())
+			.map(String::from);
+		let timeout_secs = config
+			.get("timeout_secs")
+			.and_then(|v| v.as_u64())
+			.unwrap_or(60);
+		Ok(Box::new(ClickHouseSink::new(
+			name,
+			url,
+			table,
+			database,
+			user,
+			password,
+			timeout_secs,
+		)?))
+	}
+}
+
 pub struct HttpTargetFactory;
 
 #[async_trait]
@@ -187,5 +294,48 @@ impl TargetFactory for HttpTargetFactory {
 			timeout_secs,
 			retry_count,
 		)?))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn mysql_factory_sink_type() {
+		assert_eq!(MysqlTargetFactory.sink_type(), "mysql");
+	}
+
+	#[tokio::test]
+	async fn mysql_factory_missing_dsn() {
+		let config = serde_json::json!({"table": "events"});
+		let err = MysqlTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'dsn'"));
+	}
+
+	#[tokio::test]
+	async fn mysql_factory_missing_table() {
+		let config = serde_json::json!({"dsn": "mysql://localhost/test"});
+		let err = MysqlTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'table'"));
+	}
+
+	#[tokio::test]
+	async fn mysql_factory_missing_both() {
+		let config = serde_json::json!({});
+		let err = MysqlTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'dsn'"));
 	}
 }

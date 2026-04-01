@@ -15,6 +15,7 @@ tracing = { workspace = true }
 rdkafka = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+sqlx = { workspace = true }
 surrealdb = { workspace = true }
 tokio = { workspace = true }
 
