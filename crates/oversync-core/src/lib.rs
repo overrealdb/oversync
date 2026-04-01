@@ -12,8 +12,8 @@ pub mod traits;
 pub use config::OversyncConfig;
 pub use error::OversyncError;
 pub use model::{
-	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, OpType, RawRow,
-	compute_diff,
+	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, KafkaAuth, OpType,
+	RawRow, compute_diff,
 };
 pub use table_names::TableNames;
 pub use traits::{

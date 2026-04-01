@@ -7,7 +7,7 @@ use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use tracing::{debug, info};
 
 use oversync_core::error::OversyncError;
-use oversync_core::model::RawRow;
+use oversync_core::model::{KafkaAuth, RawRow};
 use oversync_core::traits::OriginConnector;
 
 pub struct KafkaSourceConnector {
@@ -24,11 +24,29 @@ impl KafkaSourceConnector {
 		group_id: &str,
 		auto_offset_reset: Option<&str>,
 	) -> Result<Self, OversyncError> {
-		let consumer: StreamConsumer = ClientConfig::new()
+		Self::with_auth(name, brokers, topic, group_id, auto_offset_reset, None)
+	}
+
+	pub fn with_auth(
+		name: &str,
+		brokers: &str,
+		topic: &str,
+		group_id: &str,
+		auto_offset_reset: Option<&str>,
+		auth: Option<&KafkaAuth>,
+	) -> Result<Self, OversyncError> {
+		let mut config = ClientConfig::new();
+		config
 			.set("bootstrap.servers", brokers)
 			.set("group.id", group_id)
 			.set("enable.auto.commit", "false")
-			.set("auto.offset.reset", auto_offset_reset.unwrap_or("earliest"))
+			.set("auto.offset.reset", auto_offset_reset.unwrap_or("earliest"));
+
+		if let Some(auth) = auth {
+			apply_kafka_auth(&mut config, auth);
+		}
+
+		let consumer: StreamConsumer = config
 			.create()
 			.map_err(|e| OversyncError::Connector(format!("kafka consumer create: {e}")))?;
 
@@ -46,6 +64,35 @@ impl KafkaSourceConnector {
 	}
 }
 
+fn apply_kafka_auth(config: &mut ClientConfig, auth: &KafkaAuth) {
+	config.set("security.protocol", &auth.security_protocol);
+
+	if let Some(ref mechanism) = auth.sasl_mechanism {
+		config.set("sasl.mechanism", mechanism);
+	}
+	if let Some(ref username) = auth.sasl_username {
+		config.set("sasl.username", username);
+	}
+	if let Some(ref password) = auth.sasl_password {
+		config.set("sasl.password", password);
+	}
+	if let Some(ref keytab) = auth.sasl_kerberos_keytab {
+		config.set("sasl.kerberos.keytab", keytab);
+	}
+	if let Some(ref principal) = auth.sasl_kerberos_principal {
+		config.set("sasl.kerberos.principal", principal);
+	}
+	if let Some(ref ca) = auth.ssl_ca_location {
+		config.set("ssl.ca.location", ca);
+	}
+	if let Some(ref cert) = auth.ssl_certificate_location {
+		config.set("ssl.certificate.location", cert);
+	}
+	if let Some(ref key) = auth.ssl_key_location {
+		config.set("ssl.key.location", key);
+	}
+}
+
 #[async_trait]
 impl OriginConnector for KafkaSourceConnector {
 	fn name(&self) -> &str {
@@ -54,10 +101,17 @@ impl OriginConnector for KafkaSourceConnector {
 
 	async fn fetch_all(&self, _sql: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
 		let mut rows = Vec::new();
-		let deadline = Duration::from_secs(2);
+		// Longer timeout for the first recv to allow for group rebalance + partition assignment.
+		let initial_timeout = Duration::from_secs(10);
+		let batch_timeout = Duration::from_secs(2);
 
 		loop {
-			match tokio::time::timeout(deadline, self.consumer.recv()).await {
+			let timeout = if rows.is_empty() {
+				initial_timeout
+			} else {
+				batch_timeout
+			};
+			match tokio::time::timeout(timeout, self.consumer.recv()).await {
 				Ok(Ok(msg)) => {
 					let Some(payload) = msg.payload() else {
 						continue;
@@ -73,6 +127,11 @@ impl OriginConnector for KafkaSourceConnector {
 					});
 				}
 				Ok(Err(e)) => {
+					let err_str = e.to_string();
+					if err_str.contains("UnknownTopicOrPartition") {
+						debug!(topic = %self.topic, "topic not found, returning empty");
+						break;
+					}
 					return Err(OversyncError::Connector(format!("kafka consume: {e}")));
 				}
 				Err(_) => break,

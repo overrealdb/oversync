@@ -29,5 +29,5 @@ pub use mcp::McpOriginConnector;
 pub use mysql::MysqlConnector;
 pub use oversync_core::traits::OriginConnector;
 pub use postgres::PostgresConnector;
-pub use surrealdb_source::SurrealDbConnector;
+pub use surrealdb_source::{SurrealDbConnector, SurrealDbLiveConnector};
 pub use trino::TrinoConnector;
