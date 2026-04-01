@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5c307070fe82681f8c18e43e98b979d2ed23b84a2381bbfc8171d7c4e6646c76 # shrinks to current = [RawRow { row_key: "__", row_data: Null }, RawRow { row_key: "__", row_data: Null }]
