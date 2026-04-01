@@ -192,12 +192,11 @@ fn cmd_export(cli: &Cli) -> anyhow::Result<()> {
 	let mut json = serde_json::to_value(&config)?;
 
 	// Mask secrets
-	if let Some(obj) = json.as_object_mut() {
-		if let Some(surreal) = obj.get_mut("surrealdb").and_then(|v| v.as_object_mut()) {
-			if surreal.contains_key("password") {
-				surreal.insert("password".into(), serde_json::json!("***"));
-			}
-		}
+	if let Some(obj) = json.as_object_mut()
+		&& let Some(surreal) = obj.get_mut("surrealdb").and_then(|v| v.as_object_mut())
+		&& surreal.contains_key("password")
+	{
+		surreal.insert("password".into(), serde_json::json!("***"));
 	}
 
 	println!("{}", serde_json::to_string_pretty(&json)?);

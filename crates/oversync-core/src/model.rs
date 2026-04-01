@@ -189,7 +189,7 @@ pub enum AuthConfig {
 	Basic { username: String, password: String },
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct KafkaAuth {
 	#[serde(default = "default_security_protocol")]
 	pub security_protocol: String,
@@ -205,6 +205,22 @@ pub struct KafkaAuth {
 
 fn default_security_protocol() -> String {
 	"PLAINTEXT".to_string()
+}
+
+impl Default for KafkaAuth {
+	fn default() -> Self {
+		Self {
+			security_protocol: default_security_protocol(),
+			sasl_mechanism: None,
+			sasl_username: None,
+			sasl_password: None,
+			sasl_kerberos_keytab: None,
+			sasl_kerberos_principal: None,
+			ssl_ca_location: None,
+			ssl_certificate_location: None,
+			ssl_key_location: None,
+		}
+	}
 }
 
 impl KafkaAuth {
@@ -492,5 +508,207 @@ mod tests {
 		let r = compute_diff(&prev, &[], "s", "q", 5);
 		assert_eq!(r.deleted[0].row_hash, h);
 		assert_eq!(r.deleted[0].row_data, serde_json::Value::Null);
+	}
+
+	// ── Edge case tests ───────────────────────────────────────────
+
+	#[test]
+	fn diff_empty_previous_empty_current() {
+		let r = compute_diff(&HashMap::new(), &[], "s", "q", 1);
+		assert!(r.is_empty());
+	}
+
+	#[test]
+	fn diff_unicode_keys() {
+		let rows = vec![
+			RawRow {
+				row_key: "日本語キー".into(),
+				row_data: serde_json::json!({"emoji": "🎉"}),
+			},
+			RawRow {
+				row_key: "clé-français".into(),
+				row_data: serde_json::json!({"val": "été"}),
+			},
+		];
+		let r = compute_diff(&HashMap::new(), &rows, "s", "q", 1);
+		assert_eq!(r.created.len(), 2);
+		let keys: Vec<&str> = r.created.iter().map(|e| e.row_key.as_str()).collect();
+		assert!(keys.contains(&"日本語キー"));
+		assert!(keys.contains(&"clé-français"));
+	}
+
+	#[test]
+	fn diff_null_row_data() {
+		let rows = vec![RawRow {
+			row_key: "k1".into(),
+			row_data: serde_json::Value::Null,
+		}];
+		let r = compute_diff(&HashMap::new(), &rows, "s", "q", 1);
+		assert_eq!(r.created.len(), 1);
+		assert_eq!(r.created[0].row_data, serde_json::Value::Null);
+	}
+
+	#[test]
+	fn diff_empty_string_key() {
+		let rows = vec![RawRow {
+			row_key: "".into(),
+			row_data: serde_json::json!({"v": 1}),
+		}];
+		let r = compute_diff(&HashMap::new(), &rows, "s", "q", 1);
+		assert_eq!(r.created.len(), 1);
+		assert_eq!(r.created[0].row_key, "");
+	}
+
+	#[test]
+	fn diff_duplicate_keys_emit_multiple_created_events() {
+		let prev = HashMap::new();
+		let rows = vec![
+			RawRow {
+				row_key: "dup".into(),
+				row_data: serde_json::json!({"v": 1}),
+			},
+			RawRow {
+				row_key: "dup".into(),
+				row_data: serde_json::json!({"v": 2}),
+			},
+		];
+		let r = compute_diff(&prev, &rows, "s", "q", 1);
+		assert_eq!(r.created.len(), 2);
+	}
+
+	#[test]
+	fn diff_large_json_data() {
+		let big_obj: serde_json::Value = (0..100)
+			.map(|i| (format!("field_{i}"), serde_json::json!(i)))
+			.collect::<serde_json::Map<String, serde_json::Value>>()
+			.into();
+		let rows = vec![RawRow {
+			row_key: "big".into(),
+			row_data: big_obj.clone(),
+		}];
+		let r = compute_diff(&HashMap::new(), &rows, "s", "q", 1);
+		assert_eq!(r.created.len(), 1);
+		assert_eq!(r.created[0].row_hash, hash_row_data(&big_obj));
+	}
+
+	#[test]
+	fn hash_null_value() {
+		let h = hash_row_data(&serde_json::Value::Null);
+		assert_eq!(h.len(), 64);
+	}
+
+	#[test]
+	fn hash_nested_objects_differ() {
+		let a = serde_json::json!({"nested": {"a": 1}});
+		let b = serde_json::json!({"nested": {"a": 2}});
+		assert_ne!(hash_row_data(&a), hash_row_data(&b));
+	}
+
+	#[test]
+	fn hash_array_values() {
+		let data = serde_json::json!({"items": [1, 2, 3]});
+		let h = hash_row_data(&data);
+		assert_eq!(h.len(), 64);
+		assert_ne!(h, hash_row_data(&serde_json::json!({"items": [1, 2, 4]})));
+	}
+
+	// ── EventEnvelope conversion ──────────────────────────────────
+
+	#[test]
+	fn event_envelope_from_delta_event() {
+		let evt = DeltaEvent {
+			op: OpType::Updated,
+			origin_id: "pg".into(),
+			query_id: "q1".into(),
+			row_key: "pk-42".into(),
+			row_data: serde_json::json!({"name": "test"}),
+			row_hash: "abc123".into(),
+			cycle_id: 10,
+			timestamp: Utc::now(),
+		};
+		let envelope = EventEnvelope::from(&evt);
+		assert_eq!(envelope.meta.op, OpType::Updated);
+		assert_eq!(envelope.meta.origin_id, "pg");
+		assert_eq!(envelope.meta.query_id, "q1");
+		assert_eq!(envelope.meta.key, "pk-42");
+		assert_eq!(envelope.meta.hash, "abc123");
+		assert_eq!(envelope.meta.cycle_id, 10);
+		assert_eq!(envelope.data, serde_json::json!({"name": "test"}));
+	}
+
+	#[test]
+	fn event_envelope_roundtrip_json() {
+		let evt = DeltaEvent {
+			op: OpType::Created,
+			origin_id: "s".into(),
+			query_id: "q".into(),
+			row_key: "k".into(),
+			row_data: serde_json::json!(null),
+			row_hash: "h".into(),
+			cycle_id: 1,
+			timestamp: Utc::now(),
+		};
+		let envelope = EventEnvelope::from(&evt);
+		let json = serde_json::to_string(&envelope).unwrap();
+		let back: EventEnvelope = serde_json::from_str(&json).unwrap();
+		assert_eq!(envelope, back);
+	}
+
+	// ── AuthConfig tests ──────────────────────────────────────────
+
+	#[test]
+	fn auth_config_bearer() {
+		let json = serde_json::json!({"type": "bearer", "token": "tok123"});
+		let auth: AuthConfig = serde_json::from_value(json).unwrap();
+		assert!(matches!(auth, AuthConfig::Bearer { token } if token == "tok123"));
+	}
+
+	#[test]
+	fn auth_config_header() {
+		let json = serde_json::json!({"type": "header", "name": "X-Api-Key", "value": "secret"});
+		let auth: AuthConfig = serde_json::from_value(json).unwrap();
+		assert!(
+			matches!(auth, AuthConfig::Header { name, value } if name == "X-Api-Key" && value == "secret")
+		);
+	}
+
+	#[test]
+	fn auth_config_basic() {
+		let json = serde_json::json!({"type": "basic", "username": "user", "password": "pass"});
+		let auth: AuthConfig = serde_json::from_value(json).unwrap();
+		assert!(
+			matches!(auth, AuthConfig::Basic { username, password } if username == "user" && password == "pass")
+		);
+	}
+
+	#[test]
+	fn auth_config_unknown_type_fails() {
+		let json = serde_json::json!({"type": "oauth2", "token": "t"});
+		assert!(serde_json::from_value::<AuthConfig>(json).is_err());
+	}
+
+	#[test]
+	fn kafka_auth_ssl_only() {
+		let json = serde_json::json!({
+			"security_protocol": "SSL",
+			"ssl_ca_location": "/ca.pem",
+			"ssl_certificate_location": "/cert.pem",
+			"ssl_key_location": "/key.pem"
+		});
+		let auth: KafkaAuth = serde_json::from_value(json).unwrap();
+		assert_eq!(auth.security_protocol, "SSL");
+		assert!(!auth.is_plaintext());
+		assert!(auth.sasl_mechanism.is_none());
+		assert_eq!(auth.ssl_ca_location.as_deref(), Some("/ca.pem"));
+		assert_eq!(auth.ssl_certificate_location.as_deref(), Some("/cert.pem"));
+		assert_eq!(auth.ssl_key_location.as_deref(), Some("/key.pem"));
+	}
+
+	#[test]
+	fn kafka_auth_minimal_deserialize() {
+		let json = serde_json::json!({});
+		let auth: KafkaAuth = serde_json::from_value(json).unwrap();
+		assert_eq!(auth.security_protocol, "PLAINTEXT");
+		assert!(auth.is_plaintext());
 	}
 }

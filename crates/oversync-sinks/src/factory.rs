@@ -57,7 +57,18 @@ impl TargetFactory for KafkaTargetFactory {
 			.get("topic")
 			.and_then(|v| v.as_str())
 			.ok_or_else(|| OversyncError::Config("kafka: missing 'topic'".into()))?;
-		Ok(Box::new(KafkaSink::new(brokers, topic)?))
+		let auth: Option<oversync_core::model::KafkaAuth> = config
+			.get("auth")
+			.map(|v| {
+				serde_json::from_value(v.clone())
+					.map_err(|e| OversyncError::Config(format!("kafka auth: {e}")))
+			})
+			.transpose()?;
+		Ok(Box::new(KafkaSink::with_auth(
+			brokers,
+			topic,
+			auth.as_ref(),
+		)?))
 	}
 }
 
@@ -301,10 +312,114 @@ impl TargetFactory for HttpTargetFactory {
 mod tests {
 	use super::*;
 
+	// ── Sink type identity ────────────────────────────────────────
+
 	#[test]
-	fn mysql_factory_sink_type() {
+	fn all_factories_report_correct_sink_type() {
+		assert_eq!(StdoutTargetFactory.sink_type(), "stdout");
+		assert_eq!(KafkaTargetFactory.sink_type(), "kafka");
+		assert_eq!(SurrealDbTargetFactory.sink_type(), "surrealdb");
+		assert_eq!(McpTargetFactory.sink_type(), "mcp");
 		assert_eq!(MysqlTargetFactory.sink_type(), "mysql");
+		assert_eq!(PostgresTargetFactory.sink_type(), "postgres");
+		assert_eq!(ClickHouseTargetFactory.sink_type(), "clickhouse");
+		assert_eq!(HttpTargetFactory.sink_type(), "http");
 	}
+
+	// ── Stdout factory ────────────────────────────────────────────
+
+	#[tokio::test]
+	async fn stdout_factory_creates_with_defaults() {
+		let sink = StdoutTargetFactory
+			.create("test", &serde_json::json!({}))
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "stdout");
+	}
+
+	#[tokio::test]
+	async fn stdout_factory_creates_with_pretty() {
+		let sink = StdoutTargetFactory
+			.create("test", &serde_json::json!({"pretty": true}))
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "stdout");
+	}
+
+	// ── Kafka factory ─────────────────────────────────────────────
+
+	#[tokio::test]
+	async fn kafka_factory_missing_brokers() {
+		let config = serde_json::json!({"topic": "t"});
+		let err = KafkaTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'brokers'"));
+	}
+
+	#[tokio::test]
+	async fn kafka_factory_missing_topic() {
+		let config = serde_json::json!({"brokers": "localhost:9092"});
+		let err = KafkaTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'topic'"));
+	}
+
+	// ── SurrealDB factory ─────────────────────────────────────────
+
+	#[tokio::test]
+	async fn surrealdb_factory_missing_url() {
+		let config = serde_json::json!({"namespace": "ns", "database": "db", "table": "t"});
+		let err = SurrealDbTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'url'"));
+	}
+
+	#[tokio::test]
+	async fn surrealdb_factory_missing_namespace() {
+		let config =
+			serde_json::json!({"url": "ws://localhost:8000", "database": "db", "table": "t"});
+		let err = SurrealDbTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'namespace'"));
+	}
+
+	#[tokio::test]
+	async fn surrealdb_factory_missing_database() {
+		let config =
+			serde_json::json!({"url": "ws://localhost:8000", "namespace": "ns", "table": "t"});
+		let err = SurrealDbTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'database'"));
+	}
+
+	#[tokio::test]
+	async fn surrealdb_factory_missing_table() {
+		let config =
+			serde_json::json!({"url": "ws://localhost:8000", "namespace": "ns", "database": "db"});
+		let err = SurrealDbTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'table'"));
+	}
+
+	// ── MySQL factory ─────────────────────────────────────────────
 
 	#[tokio::test]
 	async fn mysql_factory_missing_dsn() {
@@ -328,14 +443,172 @@ mod tests {
 		assert!(err.to_string().contains("missing 'table'"));
 	}
 
+	// ── PostgreSQL factory ────────────────────────────────────────
+
 	#[tokio::test]
-	async fn mysql_factory_missing_both() {
-		let config = serde_json::json!({});
-		let err = MysqlTargetFactory
+	async fn postgres_factory_missing_dsn() {
+		let config = serde_json::json!({"table": "events"});
+		let err = PostgresTargetFactory
 			.create("test", &config)
 			.await
 			.err()
 			.expect("should fail");
 		assert!(err.to_string().contains("missing 'dsn'"));
+	}
+
+	#[tokio::test]
+	async fn postgres_factory_missing_table() {
+		let config = serde_json::json!({"dsn": "postgres://localhost/test"});
+		let err = PostgresTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'table'"));
+	}
+
+	// ── ClickHouse factory ────────────────────────────────────────
+
+	#[tokio::test]
+	async fn clickhouse_factory_missing_url() {
+		let config = serde_json::json!({"table": "events"});
+		let err = ClickHouseTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'url'"));
+	}
+
+	#[tokio::test]
+	async fn clickhouse_factory_missing_table() {
+		let config = serde_json::json!({"url": "http://localhost:8123"});
+		let err = ClickHouseTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'table'"));
+	}
+
+	#[tokio::test]
+	async fn clickhouse_factory_creates_with_defaults() {
+		let config = serde_json::json!({"url": "http://localhost:8123", "table": "events"});
+		let sink = ClickHouseTargetFactory
+			.create("ch-test", &config)
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "ch-test");
+	}
+
+	#[tokio::test]
+	async fn clickhouse_factory_creates_with_all_options() {
+		let config = serde_json::json!({
+			"url": "http://localhost:8123",
+			"table": "events",
+			"database": "analytics",
+			"user": "admin",
+			"password": "secret",
+			"timeout_secs": 120
+		});
+		let sink = ClickHouseTargetFactory
+			.create("ch-full", &config)
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "ch-full");
+	}
+
+	// ── HTTP factory ──────────────────────────────────────────────
+
+	#[tokio::test]
+	async fn http_factory_missing_url() {
+		let config = serde_json::json!({});
+		let err = HttpTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("missing 'url'"));
+	}
+
+	#[tokio::test]
+	async fn http_factory_creates_with_defaults() {
+		let config = serde_json::json!({"url": "http://localhost:8080/webhook"});
+		let sink = HttpTargetFactory
+			.create("http-test", &config)
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "http-test");
+	}
+
+	#[tokio::test]
+	async fn http_factory_creates_with_put_method() {
+		let config = serde_json::json!({"url": "http://localhost:8080", "method": "PUT"});
+		let sink = HttpTargetFactory.create("put-test", &config).await.unwrap();
+		assert_eq!(sink.name(), "put-test");
+	}
+
+	#[tokio::test]
+	async fn http_factory_rejects_unsupported_method() {
+		let config = serde_json::json!({"url": "http://localhost:8080", "method": "DELETE"});
+		let err = HttpTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("unsupported method"));
+	}
+
+	#[tokio::test]
+	async fn http_factory_creates_with_headers() {
+		let config = serde_json::json!({
+			"url": "http://localhost:8080",
+			"headers": {"X-Custom": "value"}
+		});
+		let sink = HttpTargetFactory
+			.create("headers-test", &config)
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "headers-test");
+	}
+
+	#[tokio::test]
+	async fn http_factory_creates_with_bearer_auth() {
+		let config = serde_json::json!({
+			"url": "http://localhost:8080",
+			"auth": {"type": "bearer", "token": "tok123"}
+		});
+		let sink = HttpTargetFactory
+			.create("auth-test", &config)
+			.await
+			.unwrap();
+		assert_eq!(sink.name(), "auth-test");
+	}
+
+	#[tokio::test]
+	async fn http_factory_invalid_headers_type() {
+		let config = serde_json::json!({
+			"url": "http://localhost:8080",
+			"headers": "not-an-object"
+		});
+		let err = HttpTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("headers"));
+	}
+
+	// ── MCP factory ───────────────────────────────────────────────
+
+	#[tokio::test]
+	async fn mcp_factory_invalid_config() {
+		let config = serde_json::json!("not-an-object");
+		let err = McpTargetFactory
+			.create("test", &config)
+			.await
+			.err()
+			.expect("should fail");
+		assert!(err.to_string().contains("mcp sink"));
 	}
 }
