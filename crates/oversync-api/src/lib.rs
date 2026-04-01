@@ -163,6 +163,7 @@ mod tests {
 			sinks: Arc::new(RwLock::new(vec![SinkConfig {
 				name: "stdout".into(),
 				sink_type: "stdout".into(),
+				config: None,
 			}])),
 			pipes: Arc::new(RwLock::new(vec![state::PipeConfigCache {
 				name: "catalog-sync".into(),
@@ -221,7 +222,7 @@ mod tests {
 	async fn get_source_not_found() {
 		let app = router(test_state());
 		let (status, json) = get_json(&app, "/sources/nonexistent").await;
-		assert_eq!(status, StatusCode::OK); // TODO: proper 404 with IntoResponse
+		assert_eq!(status, StatusCode::NOT_FOUND);
 		assert!(json["error"].as_str().unwrap().contains("not found"));
 	}
 
@@ -287,7 +288,7 @@ mod tests {
 	async fn get_pipe_not_found() {
 		let app = router(test_state());
 		let (status, json) = get_json(&app, "/pipes/nonexistent").await;
-		assert_eq!(status, StatusCode::OK);
+		assert_eq!(status, StatusCode::NOT_FOUND);
 		assert!(json["error"].as_str().unwrap().contains("not found"));
 	}
 }

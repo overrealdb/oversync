@@ -6,10 +6,12 @@ use axum::extract::{Path, State};
 use crate::state::ApiState;
 use crate::types::*;
 
-use oversync_queries::query_config;
+use oversync_queries::{mutations, query_config};
 
 const SQL_LIST_QUERIES: &str = query_config::LIST_BY_SOURCE;
 const SQL_DELETE_QUERY: &str = query_config::DELETE_ONE;
+const SQL_CREATE_QUERY: &str = mutations::CREATE_QUERY;
+const SQL_CREATE_QUERY_WITH_SINKS: &str = mutations::CREATE_QUERY_WITH_SINKS;
 const SQL_UPDATE_QUERY_SQL: &str = query_config::UPDATE_QUERY;
 const SQL_UPDATE_QUERY_KEY: &str = query_config::UPDATE_KEY_COLUMN;
 const SQL_UPDATE_QUERY_SINKS: &str = query_config::UPDATE_SINKS;
@@ -97,28 +99,28 @@ pub async fn create_query(
 		.await
 		.map_err(db_err)?;
 
-	let mut query_str = "CREATE query_config SET origin_id = $source, name = $name, query = $query, key_column = $key_column, enabled = true".to_string();
-
 	let sinks_val = req
 		.sinks
 		.map(|s| serde_json::Value::Array(s.into_iter().map(serde_json::Value::String).collect()));
 
-	if sinks_val.is_some() {
-		query_str.push_str(", sinks = $sinks");
-	}
-
-	let mut q = db
-		.query(&query_str)
-		.bind(("source", source.clone()))
-		.bind(("name", req.name.clone()))
-		.bind(("query", req.query))
-		.bind(("key_column", req.key_column));
-
 	if let Some(sv) = sinks_val {
-		q = q.bind(("sinks", sv));
+		db.query(SQL_CREATE_QUERY_WITH_SINKS)
+			.bind(("source", source.clone()))
+			.bind(("name", req.name.clone()))
+			.bind(("query", req.query))
+			.bind(("key_column", req.key_column))
+			.bind(("sinks", sv))
+			.await
+			.map_err(db_err)?;
+	} else {
+		db.query(SQL_CREATE_QUERY)
+			.bind(("source", source.clone()))
+			.bind(("name", req.name.clone()))
+			.bind(("query", req.query))
+			.bind(("key_column", req.key_column))
+			.await
+			.map_err(db_err)?;
 	}
-
-	q.await.map_err(db_err)?;
 
 	super::mutations::reload_config_pub(&state).await?;
 

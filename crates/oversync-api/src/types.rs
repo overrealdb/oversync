@@ -32,18 +32,24 @@ pub struct SourceStatus {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct CycleInfo {
 	pub cycle_id: u64,
+	pub source: String,
+	pub query: String,
 	pub status: String,
 	pub started_at: DateTime<Utc>,
 	pub finished_at: Option<DateTime<Utc>>,
 	pub rows_created: u64,
 	pub rows_updated: u64,
 	pub rows_deleted: u64,
+	pub duration_ms: Option<u64>,
+	pub error: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SinkInfo {
 	pub name: String,
 	pub sink_type: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub config: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

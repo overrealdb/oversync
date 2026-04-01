@@ -491,7 +491,7 @@ async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResponse>> {
 	Ok(())
 }
 
-async fn refresh_read_cache(state: &ApiState) {
+pub async fn refresh_read_cache(state: &ApiState) {
 	let Some(db) = &state.db_client else { return };
 
 	const SQL_READ_SOURCES_CACHE: &str = oversync_queries::config::READ_SOURCES_CACHE;
@@ -527,6 +527,7 @@ async fn refresh_read_cache(state: &ApiState) {
 				Some(crate::state::SinkConfig {
 					name: r.get("name")?.as_str()?.to_string(),
 					sink_type: r.get("sink_type")?.as_str()?.to_string(),
+					config: r.get("config").cloned(),
 				})
 			})
 			.collect();

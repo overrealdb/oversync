@@ -1,0 +1,49 @@
+/* ── Recharts SVG fill/stroke fix for Tailwind v4 oklch() ────────── */
+/* Tailwind v4 generates oklch() colors which SVG can't resolve.      */
+/* These hex overrides must load AFTER tailwind to win specificity.    */
+
+/* Bar fills */
+svg .fill-blue-500 rect   { fill: #3b82f6 !important; }
+svg .fill-blue-400 rect   { fill: #60a5fa !important; }
+svg .fill-emerald-500 rect { fill: #10b981 !important; }
+svg .fill-emerald-400 rect { fill: #34d399 !important; }
+svg .fill-rose-500 rect   { fill: #f43f5e !important; }
+svg .fill-rose-400 rect   { fill: #fb7185 !important; }
+svg .fill-amber-500 rect  { fill: #f59e0b !important; }
+svg .fill-amber-400 rect  { fill: #fbbf24 !important; }
+svg .fill-cyan-500 rect   { fill: #06b6d4 !important; }
+svg .fill-violet-500 rect { fill: #8b5cf6 !important; }
+
+/* Area fills */
+svg .fill-blue-500 path   { fill: #3b82f6 !important; }
+svg .fill-emerald-500 path { fill: #10b981 !important; }
+svg .fill-rose-500 path   { fill: #f43f5e !important; }
+svg .fill-amber-500 path  { fill: #f59e0b !important; }
+
+/* Line strokes */
+svg .stroke-blue-500 path    { stroke: #3b82f6 !important; }
+svg .stroke-emerald-500 path { stroke: #10b981 !important; }
+svg .stroke-emerald-400 path { stroke: #34d399 !important; }
+svg .stroke-rose-500 path    { stroke: #f43f5e !important; }
+svg .stroke-amber-500 path   { stroke: #f59e0b !important; }
+
+/* Tooltip dark theme */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #1f2937 !important;
+  border-color: #374151 !important;
+  border-radius: 8px !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label {
+  color: #e5e7eb !important;
+}
+.recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item {
+  color: #d1d5db !important;
+}
+
+/* Axis labels */
+.recharts-cartesian-axis-tick-value {
+  fill: #9ca3af !important;
+}
+.recharts-legend-item-text {
+  color: #d1d5db !important;
+}

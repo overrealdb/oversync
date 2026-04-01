@@ -123,7 +123,7 @@ async fn cmd_serve(cli: &Cli) -> anyhow::Result<()> {
 		engine_shutdown.shutdown().await;
 	});
 
-	let app = engine.api_router();
+	let app = engine.api_router().await;
 	let listener = tokio::net::TcpListener::bind(&cli.bind).await?;
 	tracing::info!(bind = %cli.bind, "API server started");
 	axum::serve(listener, app).await?;

@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 
 use crate::state::ApiState;
 use crate::types::*;
@@ -45,16 +47,19 @@ pub async fn list_sources(State(state): State<Arc<ApiState>>) -> Json<SourceList
 pub async fn get_source(
 	State(state): State<Arc<ApiState>>,
 	Path(name): Path<String>,
-) -> Result<Json<SourceInfo>, Json<ErrorResponse>> {
+) -> Result<Json<SourceInfo>, impl IntoResponse> {
 	state
 		.sources_info()
 		.into_iter()
 		.find(|s| s.name == name)
 		.map(Json)
 		.ok_or_else(|| {
-			Json(ErrorResponse {
-				error: format!("source not found: {name}"),
-			})
+			(
+				StatusCode::NOT_FOUND,
+				Json(ErrorResponse {
+					error: format!("source not found: {name}"),
+				}),
+			)
 		})
 }
 
@@ -96,15 +101,18 @@ pub async fn list_pipes(State(state): State<Arc<ApiState>>) -> Json<PipeListResp
 pub async fn get_pipe(
 	State(state): State<Arc<ApiState>>,
 	Path(name): Path<String>,
-) -> Result<Json<PipeInfo>, Json<ErrorResponse>> {
+) -> Result<Json<PipeInfo>, impl IntoResponse> {
 	state
 		.pipes_info()
 		.into_iter()
 		.find(|p| p.name == name)
 		.map(Json)
 		.ok_or_else(|| {
-			Json(ErrorResponse {
-				error: format!("pipe not found: {name}"),
-			})
+			(
+				StatusCode::NOT_FOUND,
+				Json(ErrorResponse {
+					error: format!("pipe not found: {name}"),
+				}),
+			)
 		})
 }

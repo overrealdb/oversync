@@ -58,6 +58,9 @@ pub mod mutations {
 	pub const CREATE_DLQ_ENTRY: &str =
 		include_str!("../surql/queries/mutations/create_dlq_entry.surql");
 	pub const CREATE_PIPE: &str = include_str!("../surql/queries/mutations/create_pipe.surql");
+	pub const CREATE_QUERY: &str = include_str!("../surql/queries/mutations/create_query.surql");
+	pub const CREATE_QUERY_WITH_SINKS: &str =
+		include_str!("../surql/queries/mutations/create_query_with_sinks.surql");
 	pub const CREATE_SINK: &str = include_str!("../surql/queries/mutations/create_sink.surql");
 	pub const CREATE_SOURCE: &str = include_str!("../surql/queries/mutations/create_source.surql");
 	pub const DELETE_DLQ_ENTRY: &str =

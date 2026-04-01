@@ -1,1 +1,1 @@
-SELECT name, sink_type FROM sink_config WHERE enabled = true;
+SELECT name, sink_type, config FROM sink_config WHERE enabled = true;
