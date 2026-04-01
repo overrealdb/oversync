@@ -1,3 +1,5 @@
+#[cfg(feature = "js")]
+pub mod js;
 mod parse;
 pub mod steps;
 #[cfg(feature = "wasm")]

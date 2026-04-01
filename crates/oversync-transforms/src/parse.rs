@@ -141,6 +141,12 @@ pub fn parse_steps(defs: &[serde_json::Value]) -> Result<StepChain, OversyncErro
 					deny,
 				})
 			}
+			#[cfg(feature = "js")]
+			"js" => {
+				let function = req_str(obj, "function", i)?;
+				let name = obj.get("name").and_then(|v| v.as_str()).unwrap_or("js");
+				Box::new(crate::js::JsStep::new(name, &function)?)
+			}
 			other => {
 				return Err(OversyncError::Config(format!(
 					"transform step {i}: unknown type '{other}'"

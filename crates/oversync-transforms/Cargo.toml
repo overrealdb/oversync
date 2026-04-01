@@ -17,10 +17,13 @@ hex = { workspace = true }
 tracing = { workspace = true }
 regex = "1"
 wasmtime = { workspace = true, optional = true }
+rquickjs = { workspace = true, optional = true }
+rquickjs-serde = { workspace = true, optional = true }
 
 [features]
 default = []
 wasm = ["dep:wasmtime"]
+js = ["dep:rquickjs", "dep:rquickjs-serde"]
 
 [dev-dependencies]
 tokio = { workspace = true }
