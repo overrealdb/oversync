@@ -52,9 +52,9 @@ dependencies = ["clippy", "fmt-check", "deny"]
 
 [tasks.coverage]
 clear = true
-description = "Generate code coverage report"
+description = "Run tests with coverage (single compile, no double-run)"
 command = "cargo"
-args = ["llvm-cov", "--workspace", "--lcov", "--output-path", "lcov.info"]
+args = ["llvm-cov", "--workspace", "--features", "validate-docker", "--lcov", "--output-path", "lcov.info"]
 
 [tasks.coverage-html]
 description = "Generate HTML coverage report"
@@ -64,9 +64,14 @@ args = ["llvm-cov", "--workspace", "--html"]
 # ─── CI (what GitHub Actions runs) ───
 
 [tasks.ci]
-description = "Full CI pipeline: fmt + clippy + test (with Docker) + coverage"
-dependencies = ["fmt-check", "clippy", "test-docker", "coverage"]
+description = "Full CI pipeline: fmt + clippy + coverage (tests included)"
+dependencies = ["fmt-check", "clippy", "coverage"]
 env = { "RUSTFLAGS" = "-D warnings" }
+
+[tasks.stress]
+description = "Run stress tests (ignored by default, used in release CI)"
+command = "cargo"
+args = ["test", "--workspace", "--features", "validate-docker", "--", "--ignored"]
 
 # ─── CLI ───
 

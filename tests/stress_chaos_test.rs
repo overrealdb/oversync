@@ -124,6 +124,7 @@ fn make_config(schema: &str, threshold: f64) -> CycleConfig {
 // ── The test ─────────────────────────────────────────────────
 
 #[tokio::test]
+#[ignore = "stress test — runs only in release CI"]
 async fn stress_two_tables_join_full_lifecycle() {
 	let _ = tracing_subscriber::fmt()
 		.with_env_filter("oversync=info")
