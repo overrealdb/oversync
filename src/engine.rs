@@ -706,7 +706,9 @@ pub(crate) async fn apply_schema(
 	ns: &str,
 	db_name: &str,
 ) -> Result<(), OversyncError> {
-	let mut manifest = overshift::Manifest::load("crates/oversync-queries/surql/")
+	let surql_dir = std::env::var("OVERSYNC_SURQL_DIR")
+		.unwrap_or_else(|_| "crates/oversync-queries/surql/".to_string());
+	let mut manifest = overshift::Manifest::load(&surql_dir)
 		.map_err(|e| OversyncError::Migration(format!("load manifest: {e}")))?;
 	manifest.meta.ns = ns.to_string();
 	manifest.meta.db = db_name.to_string();

@@ -20,6 +20,7 @@ COPY --from=builder /usr/lib/*-linux-gnu/libcrypto.so.3 /usr/lib/
 
 WORKDIR /app
 
+ENV OVERSYNC_SURQL_DIR=/app/surql/
 ENV OVERSYNC_BIND=0.0.0.0:4200
 ENV OVERSYNC_LOG_LEVEL=info
 ENV OVERSYNC_SURREALDB_URL=http://surrealdb:8000
