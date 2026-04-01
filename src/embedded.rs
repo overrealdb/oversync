@@ -405,9 +405,16 @@ async fn run_all_pipes(
 		}
 	}
 
-	info!(tasks = handles.len(), "embedded sync started");
-	for handle in handles {
-		let _ = handle.await;
+	info!(
+		tasks = handles.len(),
+		pipes = pipes.len(),
+		"embedded sync started"
+	);
+	for (i, handle) in handles.into_iter().enumerate() {
+		match handle.await {
+			Ok(()) => {}
+			Err(e) => error!(task = i, error = %e, "embedded sync task panicked"),
+		}
 	}
 	info!("embedded sync stopped");
 }
@@ -437,13 +444,17 @@ async fn run_embedded_pipe_query(
 			serde_json::json!({"dsn": trino_url, "catalog": pipe.origin.connector}),
 		)
 	};
+	info!(pipe = %pipe.name, connector = %effective_connector, "creating connector");
 	let connector = match registry
 		.create_source(&effective_connector, &pipe.name, &connector_config)
 		.await
 	{
-		Ok(c) => c,
+		Ok(c) => {
+			info!(pipe = %pipe.name, "connector created successfully");
+			c
+		}
 		Err(e) => {
-			error!(pipe = %pipe.name, error = %e, "failed to create connector");
+			error!(pipe = %pipe.name, connector = %effective_connector, error = %e, "failed to create connector");
 			return;
 		}
 	};
@@ -516,23 +527,21 @@ async fn run_embedded_pipe_query(
 	}
 
 	loop {
-		tokio::select! {
-			_ = ticker.tick() => {
-				run_timed_embedded_cycle(
-					&pipe_engine,
-					connector.as_ref(),
-					&query_sinks,
-					&pipe,
-					&query,
-					&transform_hooks,
-					interval,
-				).await;
-			}
-			_ = shutdown.changed() => {
-				info!(pipe = %pipe.name, query = %query.id, "shutting down");
-				break;
-			}
+		ticker.tick().await;
+		if *shutdown.borrow() {
+			info!(pipe = %pipe.name, query = %query.id, "shutting down");
+			break;
 		}
+		run_timed_embedded_cycle(
+			&pipe_engine,
+			connector.as_ref(),
+			&query_sinks,
+			&pipe,
+			&query,
+			&transform_hooks,
+			interval,
+		)
+		.await;
 	}
 }
 

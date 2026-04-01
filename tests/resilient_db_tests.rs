@@ -22,6 +22,7 @@ fn test_config(url: &str) -> ResilientDbConfig {
 		namespace: format!("rdb_{}", &id[..8]),
 		database: format!("stress_{}", &id[..8]),
 		health_interval: Duration::from_millis(500),
+		token_refresh_interval: None,
 	}
 }
 
@@ -380,6 +381,141 @@ async fn concurrent_reads_writes_during_recovery() {
 		final_value, writes,
 		"counter must equal total successful writes"
 	);
+
+	cancel.cancel();
+}
+
+// ---------------------------------------------------------------------------
+// 6. JWT expiry deadlock recovery — the REAL production failure
+// ---------------------------------------------------------------------------
+
+/// Simulate the exact production deadlock where expired JWT makes even
+/// invalidate() and signin() fail on HTTP. The health loop must recover
+/// by creating a fresh connection (no stale Bearer).
+#[tokio::test]
+async fn recovers_from_expired_jwt_deadlock() {
+	let url = common::surreal::TestSurrealContainer::url().await;
+	let cancel = CancellationToken::new();
+
+	let rdb = ResilientDb::connect(test_config(&url)).await.unwrap();
+	let _health = rdb.start_health_loop(cancel.clone());
+	let db = rdb.client();
+
+	// Write test data while healthy
+	db.query("DEFINE TABLE IF NOT EXISTS deadlock_test SCHEMALESS")
+		.await
+		.unwrap();
+	db.query("CREATE deadlock_test:1 SET value = 42")
+		.await
+		.unwrap();
+
+	// Verify data is readable
+	let mut resp = db.query("SELECT * FROM deadlock_test:1").await.unwrap();
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert!(!rows.is_empty(), "should read data when healthy");
+
+	// Corrupt the session by authenticating with a fabricated expired JWT.
+	// This simulates what happens when a real JWT expires — the client's
+	// Bearer token becomes stale and the server rejects all requests.
+	let fake_jwt = surrealdb::opt::auth::Token::from(
+		"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MTYwMDAwMDAwMSwiaXNzIjoiU3VycmVhbERCIiwianRpIjoiZmFrZSJ9.invalid",
+	);
+	let _ = db.authenticate(fake_jwt).await;
+
+	// Connection is now in deadlock state
+	let broken: Result<Option<serde_json::Value>, _> = db.select(("deadlock_test", "1")).await;
+	eprintln!("deadlock state query result: {broken:?}");
+
+	// Wait for health loop to detect and recover via fresh connection
+	tokio::time::sleep(Duration::from_secs(3)).await;
+
+	// After recovery, queries must work
+	let mut resp = db
+		.query("SELECT * FROM deadlock_test:1")
+		.await
+		.expect("query must succeed after deadlock recovery");
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert!(
+		!rows.is_empty(),
+		"data must be readable after deadlock recovery"
+	);
+	assert_eq!(rows[0]["value"], 42);
+
+	cancel.cancel();
+}
+
+// ---------------------------------------------------------------------------
+// 7. Proactive refresh prevents any downtime
+// ---------------------------------------------------------------------------
+
+/// With a short token_refresh_interval, workers should experience ZERO
+/// failures because the token is refreshed before it expires.
+#[tokio::test]
+async fn proactive_refresh_prevents_failures() {
+	let url = common::surreal::TestSurrealContainer::url().await;
+	let cancel = CancellationToken::new();
+
+	let id = uuid::Uuid::new_v4().to_string().replace('-', "");
+	let config = ResilientDbConfig {
+		url: url.to_string(),
+		username: "root".to_string(),
+		password: "root".to_string(),
+		namespace: format!("rdb_{}", &id[..8]),
+		database: format!("proactive_{}", &id[..8]),
+		health_interval: Duration::from_millis(500),
+		token_refresh_interval: Some(Duration::from_secs(2)),
+	};
+
+	let rdb = ResilientDb::connect(config).await.unwrap();
+	let _health = rdb.start_health_loop(cancel.clone());
+	let db = rdb.client();
+
+	let failure_count = Arc::new(AtomicU64::new(0));
+	let success_count = Arc::new(AtomicU64::new(0));
+	let worker_cancel = CancellationToken::new();
+
+	let mut handles = vec![];
+	for i in 0..5 {
+		let db = Arc::clone(&db);
+		let f = Arc::clone(&failure_count);
+		let s = Arc::clone(&success_count);
+		let wc = worker_cancel.clone();
+		handles.push(tokio::spawn(async move {
+			loop {
+				if wc.is_cancelled() {
+					break;
+				}
+				match db
+					.query(format!("UPSERT proactive_test:w{i} SET ts = time::now()"))
+					.await
+				{
+					Ok(_) => {
+						s.fetch_add(1, Ordering::Relaxed);
+					}
+					Err(_) => {
+						f.fetch_add(1, Ordering::Relaxed);
+					}
+				}
+				tokio::time::sleep(Duration::from_millis(50)).await;
+			}
+		}));
+	}
+
+	tokio::time::sleep(Duration::from_secs(6)).await;
+	worker_cancel.cancel();
+	for h in handles {
+		h.await.unwrap();
+	}
+
+	let failures = failure_count.load(Ordering::Relaxed);
+	let successes = success_count.load(Ordering::Relaxed);
+	eprintln!("proactive refresh: ok={successes} err={failures}");
+
+	assert_eq!(
+		failures, 0,
+		"proactive refresh should prevent ALL failures, got {failures}"
+	);
+	assert!(successes > 100, "should have >100 successful ops");
 
 	cancel.cancel();
 }

@@ -43,6 +43,7 @@ pub struct QueryConfig {
 pub struct SinkConfig {
 	pub name: String,
 	pub sink_type: String,
+	pub config: Option<serde_json::Value>,
 }
 
 pub struct PipeConfigCache {
@@ -101,6 +102,7 @@ impl ApiState {
 			.map(|s| SinkInfo {
 				name: s.name.clone(),
 				sink_type: s.sink_type.clone(),
+				config: s.config.clone(),
 			})
 			.collect()
 	}

@@ -10,3 +10,6 @@ surql/generated/current.surql
 oversync.infra-test.toml
 history.txt
 .fastembed_cache/
+.playwright-mcp/
+oversync.dev.toml
+/oversync-*.png

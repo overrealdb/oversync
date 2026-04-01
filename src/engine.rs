@@ -212,7 +212,7 @@ impl OversyncEngine {
 	/// Build an axum `Router` with the full oversync REST API.
 	/// Requires the `api` feature. Mount into your own axum app or serve standalone.
 	#[cfg(feature = "api")]
-	pub fn api_router(&self) -> axum::Router {
+	pub async fn api_router(&self) -> axum::Router {
 		use std::collections::HashMap;
 		use tokio::sync::RwLock;
 
@@ -230,6 +230,9 @@ impl OversyncEngine {
 			lifecycle: Some(Arc::new(lifecycle_adapter)),
 			api_key: self.api_key.clone(),
 		});
+
+		// Load initial cache from DB so history/sources/sinks are populated
+		oversync_api::mutations::refresh_read_cache(&api_state).await;
 
 		// Install prometheus metrics exporter
 		let prom_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
@@ -571,6 +574,7 @@ impl OversyncEngineBuilder {
 					namespace: self.namespace.clone(),
 					database: self.database.clone(),
 					health_interval: std::time::Duration::from_secs(1),
+					token_refresh_interval: Some(std::time::Duration::from_secs(3000)),
 				})
 				.await
 				.map_err(|e| OversyncError::SurrealDb(format!("resilient connect: {e}")))?;
