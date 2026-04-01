@@ -417,7 +417,9 @@ async fn recovers_from_expired_jwt_deadlock() {
 	// Corrupt the session by authenticating with a fabricated expired JWT.
 	// This simulates what happens when a real JWT expires — the client's
 	// Bearer token becomes stale and the server rejects all requests.
-	let fake_jwt = surrealdb::opt::auth::Token::from("eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MTYwMDAwMDAwMSwiaXNzIjoiU3VycmVhbERCIiwianRpIjoiZmFrZSJ9.invalid");
+	let fake_jwt = surrealdb::opt::auth::Token::from(
+		"eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MTYwMDAwMDAwMSwiaXNzIjoiU3VycmVhbERCIiwianRpIjoiZmFrZSJ9.invalid",
+	);
 	let _ = db.authenticate(fake_jwt).await;
 
 	// Connection is now in deadlock state

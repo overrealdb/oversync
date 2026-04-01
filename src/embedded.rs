@@ -405,7 +405,11 @@ async fn run_all_pipes(
 		}
 	}
 
-	info!(tasks = handles.len(), pipes = pipes.len(), "embedded sync started");
+	info!(
+		tasks = handles.len(),
+		pipes = pipes.len(),
+		"embedded sync started"
+	);
 	for (i, handle) in handles.into_iter().enumerate() {
 		match handle.await {
 			Ok(()) => {}

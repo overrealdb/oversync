@@ -106,8 +106,20 @@ pub async fn get_history(
 	const SQL_TEMPLATE: &str = oversync_queries::delta::LIST_CYCLE_HISTORY;
 
 	// Collect per-pipe table names + legacy shared table
-	let pipe_names: Vec<String> = state.pipes.read().await.iter().map(|p| p.name.clone()).collect();
-	let source_names: Vec<String> = state.sources.read().await.iter().map(|s| s.name.clone()).collect();
+	let pipe_names: Vec<String> = state
+		.pipes
+		.read()
+		.await
+		.iter()
+		.map(|p| p.name.clone())
+		.collect();
+	let source_names: Vec<String> = state
+		.sources
+		.read()
+		.await
+		.iter()
+		.map(|s| s.name.clone())
+		.collect();
 
 	let mut all_tables: Vec<oversync_core::TableNames> = pipe_names
 		.iter()

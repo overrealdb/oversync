@@ -106,12 +106,7 @@ impl ResilientDb {
 					if last_auth.elapsed() >= refresh {
 						tracing::info!("ResilientDb: proactive token refresh");
 						if Self::reauth_fresh(
-							&primary,
-							&url,
-							&username,
-							&password,
-							&namespace,
-							&database,
+							&primary, &url, &username, &password, &namespace, &database,
 						)
 						.await
 						.is_ok()
@@ -140,12 +135,7 @@ impl ResilientDb {
 
 				// Strategy 1: fresh connection re-auth (avoids HTTP JWT deadlock)
 				match Self::reauth_fresh(
-					&primary,
-					&url,
-					&username,
-					&password,
-					&namespace,
-					&database,
+					&primary, &url, &username, &password, &namespace, &database,
 				)
 				.await
 				{
@@ -167,12 +157,7 @@ impl ResilientDb {
 				// Strategy 2: try supervisor with fresh connection too
 				tracing::warn!("ResilientDb: trying supervisor with fresh connection");
 				match Self::reauth_fresh(
-					&primary,
-					&url,
-					&username,
-					&password,
-					&namespace,
-					&database,
+					&primary, &url, &username, &password, &namespace, &database,
 				)
 				.await
 				{
