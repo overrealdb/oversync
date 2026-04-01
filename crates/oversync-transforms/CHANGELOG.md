@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/overrealdb/oversync/compare/oversync-transforms-v0.1.1...oversync-transforms-v0.2.0) - 2026-04-01
+
+### Other
+
+- Add README.md for all 8 workspace crates
+
 ## [0.1.1](https://github.com/overrealdb/oversync/compare/oversync-transforms-v0.1.0...oversync-transforms-v0.1.1) - 2026-03-28
 
 ### Other
