@@ -21,10 +21,11 @@ rquickjs = { workspace = true, optional = true }
 rquickjs-serde = { workspace = true, optional = true }
 
 [features]
-default = []
+default = ["js"]
 wasm = ["dep:wasmtime"]
 js = ["dep:rquickjs", "dep:rquickjs-serde"]
 
 [dev-dependencies]
 tokio = { workspace = true }
+proptest = { workspace = true }
 wat = "1"

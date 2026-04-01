@@ -962,3 +962,203 @@ mod tests {
 		assert_eq!(data["target"]["a"], 1);
 	}
 }
+
+#[cfg(test)]
+mod prop_tests {
+	use super::*;
+	use crate::{StepChain, TransformStep};
+	use proptest::prelude::*;
+
+	fn arb_json_leaf() -> impl Strategy<Value = serde_json::Value> {
+		prop_oneof![
+			Just(serde_json::Value::Null),
+			any::<bool>().prop_map(serde_json::Value::Bool),
+			any::<i64>().prop_map(|n| serde_json::json!(n)),
+			"[a-zA-Z0-9_ ]{0,30}".prop_map(serde_json::Value::String),
+		]
+	}
+
+	fn arb_json_object() -> impl Strategy<Value = serde_json::Value> {
+		prop::collection::vec(("[a-z]{1,8}", arb_json_leaf()), 0..10).prop_map(|pairs| {
+			let map: serde_json::Map<String, serde_json::Value> = pairs.into_iter().collect();
+			serde_json::Value::Object(map)
+		})
+	}
+
+	fn arb_field_name() -> impl Strategy<Value = String> {
+		"[a-z]{1,8}"
+	}
+
+	proptest! {
+		#[test]
+		fn rename_roundtrip_is_identity(
+			base in arb_json_object(),
+			value in arb_json_leaf(),
+		) {
+			// Construct object with known field "src" and without "dst"
+			let mut obj = base;
+			obj.as_object_mut().unwrap().insert("src".into(), value);
+			obj.as_object_mut().unwrap().remove("dst");
+			let original = obj.clone();
+
+			Rename { from: "src".into(), to: "dst".into() }.apply(&mut obj).unwrap();
+			Rename { from: "dst".into(), to: "src".into() }.apply(&mut obj).unwrap();
+			prop_assert_eq!(obj, original);
+		}
+
+		#[test]
+		fn set_then_remove_restores_keys(
+			mut obj in arb_json_object(),
+			field in arb_field_name(),
+			value in arb_json_leaf(),
+		) {
+			prop_assume!(!obj.as_object().unwrap().contains_key(&field));
+			let original = obj.clone();
+			Set { field: field.clone(), value }.apply(&mut obj).unwrap();
+			Remove { field }.apply(&mut obj).unwrap();
+			prop_assert_eq!(obj, original);
+		}
+
+		#[test]
+		fn upper_then_lower_idempotent(
+			mut obj in arb_json_object(),
+			field in arb_field_name(),
+		) {
+			// upper(lower(x)) = upper(x) for any string
+			let mut obj2 = obj.clone();
+			Upper { field: field.clone() }.apply(&mut obj).unwrap();
+			let after_upper = obj.clone();
+
+			Lower { field: field.clone() }.apply(&mut obj).unwrap();
+			Upper { field: field.clone() }.apply(&mut obj).unwrap();
+			prop_assert_eq!(obj, after_upper);
+
+			// lower(upper(x)) = lower(x)
+			Lower { field: field.clone() }.apply(&mut obj2).unwrap();
+			let after_lower = obj2.clone();
+			Upper { field: field.clone() }.apply(&mut obj2).unwrap();
+			Lower { field }.apply(&mut obj2).unwrap();
+			prop_assert_eq!(obj2, after_lower);
+		}
+
+		#[test]
+		fn copy_preserves_source(
+			mut obj in arb_json_object(),
+			src in arb_field_name(),
+			dst in arb_field_name(),
+		) {
+			prop_assume!(src != dst);
+			let original_src = obj.as_object().and_then(|o| o.get(&src)).cloned();
+			Copy { from: src.clone(), to: dst }.apply(&mut obj).unwrap();
+			let after_src = obj.as_object().and_then(|o| o.get(&src)).cloned();
+			prop_assert_eq!(original_src, after_src);
+		}
+
+		#[test]
+		fn default_is_idempotent(
+			mut obj in arb_json_object(),
+			field in arb_field_name(),
+			value in arb_json_leaf(),
+		) {
+			Default { field: field.clone(), value: value.clone() }.apply(&mut obj).unwrap();
+			let after_first = obj.clone();
+			Default { field, value }.apply(&mut obj).unwrap();
+			prop_assert_eq!(obj, after_first);
+		}
+
+		#[test]
+		fn filter_eq_ne_are_complementary(
+			obj in arb_json_object(),
+			field in arb_field_name(),
+			value in arb_json_leaf(),
+		) {
+			let mut obj_eq = obj.clone();
+			let mut obj_ne = obj;
+			let eq_result = Filter { field: field.clone(), op: FilterOp::Eq, value: value.clone() }
+				.apply(&mut obj_eq).unwrap();
+			let ne_result = Filter { field: field.clone(), op: FilterOp::Ne, value }
+				.apply(&mut obj_ne).unwrap();
+
+			// If field exists, eq and ne are complementary
+			if obj_eq.as_object().unwrap().contains_key(&field) {
+				prop_assert_ne!(eq_result, ne_result);
+			}
+		}
+
+		#[test]
+		fn chain_never_panics_on_valid_json(
+			mut obj in arb_json_object(),
+			field_a in arb_field_name(),
+			field_b in arb_field_name(),
+			value in arb_json_leaf(),
+		) {
+			let steps: Vec<Box<dyn TransformStep>> = vec![
+				Box::new(Set { field: field_a.clone(), value: value.clone() }),
+				Box::new(Rename { from: field_a.clone(), to: field_b.clone() }),
+				Box::new(Upper { field: field_b.clone() }),
+				Box::new(Lower { field: field_b.clone() }),
+				Box::new(Copy { from: field_b.clone(), to: field_a.clone() }),
+				Box::new(Default { field: "missing".into(), value }),
+				Box::new(Remove { field: field_a }),
+			];
+			let chain = StepChain::new(steps);
+			let result = chain.apply_one(&mut obj);
+			prop_assert!(result.is_ok());
+		}
+
+		#[test]
+		fn truncate_respects_max_len(
+			mut obj in arb_json_object(),
+			field in arb_field_name(),
+			max_len in 0usize..100,
+		) {
+			Truncate { field: field.clone(), max_len }.apply(&mut obj).unwrap();
+			if let Some(s) = obj.as_object().and_then(|o| o.get(&field)).and_then(|v| v.as_str()) {
+				prop_assert!(s.chars().count() <= max_len);
+			}
+		}
+
+		#[test]
+		fn remove_then_default_sets_value(
+			mut obj in arb_json_object(),
+			field in arb_field_name(),
+			value in arb_json_leaf(),
+		) {
+			Remove { field: field.clone() }.apply(&mut obj).unwrap();
+			Default { field: field.clone(), value: value.clone() }.apply(&mut obj).unwrap();
+			prop_assert_eq!(obj.as_object().unwrap().get(&field).unwrap(), &value);
+		}
+
+		#[test]
+		fn nest_then_flatten_preserves_fields(
+			field_a in arb_field_name(),
+			field_b in arb_field_name(),
+			val_a in arb_json_leaf(),
+			val_b in arb_json_leaf(),
+		) {
+			let nest_target = "nested".to_string();
+			prop_assume!(field_a != field_b);
+			prop_assume!(field_a != nest_target && field_b != nest_target);
+
+			let mut obj = serde_json::json!({ &field_a: val_a.clone(), &field_b: val_b.clone() });
+			Nest { fields: vec![field_a.clone(), field_b.clone()], into: nest_target.clone() }
+				.apply(&mut obj).unwrap();
+			Flatten { field: nest_target }.apply(&mut obj).unwrap();
+
+			prop_assert_eq!(obj.as_object().unwrap().get(&field_a).unwrap(), &val_a);
+			prop_assert_eq!(obj.as_object().unwrap().get(&field_b).unwrap(), &val_b);
+		}
+
+		#[test]
+		fn hash_is_deterministic(
+			obj in arb_json_object(),
+			field in arb_field_name(),
+		) {
+			let mut obj1 = obj.clone();
+			let mut obj2 = obj;
+			Hash { field: field.clone() }.apply(&mut obj1).unwrap();
+			Hash { field }.apply(&mut obj2).unwrap();
+			prop_assert_eq!(obj1, obj2);
+		}
+	}
+}
