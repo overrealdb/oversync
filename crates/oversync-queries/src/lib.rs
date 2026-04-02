@@ -118,6 +118,15 @@ pub mod query_config {
 	pub const UPDATE_SINKS: &str = include_str!("../surql/queries/query_config/update_sinks.surql");
 }
 
+pub mod links {
+	pub const CREATE_RULE: &str = include_str!("../surql/queries/links/create_rule.surql");
+	pub const LIST_RULES: &str = include_str!("../surql/queries/links/list_rules.surql");
+	pub const DELETE_RULE: &str = include_str!("../surql/queries/links/delete_rule.surql");
+	pub const UPSERT_LINK: &str = include_str!("../surql/queries/links/upsert_link.surql");
+	pub const READ_LINKS: &str = include_str!("../surql/queries/links/read_links.surql");
+	pub const DELETE_LINK: &str = include_str!("../surql/queries/links/delete_link.surql");
+}
+
 pub mod sink {
 	pub const BATCH_UPSERT_EVENTS: &str =
 		include_str!("../surql/queries/sink/batch_upsert_events.surql");
