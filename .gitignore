@@ -13,3 +13,8 @@ history.txt
 .playwright-mcp/
 oversync.dev.toml
 /oversync-*.png
+.dev-history/
+.dev-logs/
+analysis-and-tasks.md
+scripts/
+ui/dist/
