@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/overrealdb/oversync/compare/oversync-v0.2.0...oversync-v0.2.1) - 2026-04-02
+
+### Added
+
+- *(ui)* add ESLint flat config, fix lint issues, add CI job
+- add KafkaAuth support, integration tests, and examples for new connectors
+- add PostgreSQL, MySQL, ClickHouse sinks + Kafka, SurrealDB sources
+- add JavaScript transform step via rquickjs (QuickJS)
+
+### Fixed
+
+- *(ci)* graceful skip for FlightSQL stress tests without server
+- use OVERSYNC_SURQL_DIR env for schema path in Docker
+
+### Other
+
+- mark Task 3.1 release prep done
+- update dev plan — Phase 1 tests complete
+- add property-based tests for transform steps
+- add property-based tests for delta engine and fail-safe
+- add 60+ unit tests for factories, model edge cases, and fix KafkaAuth default
+- quality sweep — fix clippy warnings, slop, dead code
+- optimize CI — eliminate double test run, move stress to main-only
+
 ## [0.2.0](https://github.com/overrealdb/oversync/compare/oversync-v0.1.1...oversync-v0.2.0) - 2026-04-01
 
 ### Other
