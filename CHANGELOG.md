@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/overrealdb/oversync/compare/oversync-v0.2.1...oversync-v0.3.0) - 2026-04-02
+
+### Added
+
+- *(bench)* add Criterion benchmarks for delta and transforms (Tasks 5.1, 5.2)
+- *(links)* integrate entity linking into CycleRunner (Task 4.4)
+- *(links)* add link storage schema, CRUD queries, and integration tests
+
+### Fixed
+
+- *(links)* address slop-check findings in entity linking
+
+### Other
+
+- fix rustfmt in benches
+- mark Phase 3 release pipeline complete
+
 ## [0.2.1](https://github.com/overrealdb/oversync/compare/oversync-v0.2.0...oversync-v0.2.1) - 2026-04-02
 
 ### Added

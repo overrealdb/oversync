@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/overrealdb/oversync/compare/oversync-links-v0.2.1...oversync-links-v0.3.0) - 2026-04-02
+
+### Added
+
+- *(links)* define LinkRule, MatchStrategy, LinkMatch types with find_links
+
 ## [0.2.0](https://github.com/overrealdb/oversync/compare/oversync-links-v0.1.1...oversync-links-v0.2.0) - 2026-04-01
 
 ### Other
