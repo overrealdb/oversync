@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
+		links: vec![],
 		alert_webhook: None,
 		enabled: true,
 	};

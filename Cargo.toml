@@ -87,11 +87,20 @@ rdkafka = { version = "0.37", features = ["cmake-build"] }
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["surrealdb", "postgres", "kafka", "mysql"] }
 proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bin]]
 name = "oversync"
 path = "bin/oversync.rs"
 required-features = ["cli"]
+
+[[bench]]
+name = "delta"
+harness = false
+
+[[bench]]
+name = "transforms"
+harness = false
 
 [[example]]
 name = "embedded"
@@ -193,6 +202,7 @@ tokio-stream = "0.1"
 tokio-util = { workspace = true }
 testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true }
+criterion = { workspace = true }
 
 [build-dependencies]
 surql-parser = { workspace = true }

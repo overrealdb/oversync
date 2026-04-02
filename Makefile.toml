@@ -48,6 +48,13 @@ args = ["deny", "check", "advisories", "licenses", "sources"]
 description = "All quality checks: clippy + fmt + deny"
 dependencies = ["clippy", "fmt-check", "deny"]
 
+# ─── Benchmarks ───
+
+[tasks.bench]
+description = "Run Criterion benchmarks (delta + transforms)"
+command = "cargo"
+args = ["bench"]
+
 # ─── Coverage ───
 
 [tasks.coverage]
