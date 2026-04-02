@@ -130,6 +130,7 @@ async fn full_pipeline_origin_to_sink() {
 			retry: RetryDef::default(),
 			filters: vec![],
 			transforms: vec![],
+			links: vec![],
 			alert_webhook: None,
 			enabled: true,
 		})
@@ -192,6 +193,7 @@ async fn full_pipeline_with_transforms() {
 				serde_json::json!({"type": "upper", "field": "name"}),
 				serde_json::json!({"type": "set", "field": "version", "value": 1}),
 			],
+			links: vec![],
 			alert_webhook: None,
 			enabled: true,
 		})
@@ -249,6 +251,7 @@ async fn full_pipeline_with_pre_delta_filters() {
 				"value": "public"
 			})],
 			transforms: vec![],
+			links: vec![],
 			alert_webhook: None,
 			enabled: true,
 		})
@@ -307,6 +310,7 @@ async fn full_pipeline_second_run_no_changes() {
 			retry: RetryDef::default(),
 			filters: vec![],
 			transforms: vec![],
+			links: vec![],
 			alert_webhook: None,
 			enabled: true,
 		})
@@ -370,6 +374,7 @@ async fn full_pipeline_filters_plus_transforms() {
 				serde_json::json!({"type": "upper", "field": "name"}),
 				serde_json::json!({"type": "remove", "field": "schema"}),
 			],
+			links: vec![],
 			alert_webhook: None,
 			enabled: true,
 		})

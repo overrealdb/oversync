@@ -6,7 +6,7 @@ use oversync_core::traits::{OriginConnector, Sink, TransformHook};
 use oversync_delta::{DeltaEngine, check_fail_safe};
 use tracing::{Instrument, error, info, warn};
 
-use crate::config::DiffMode;
+use crate::config::{DiffMode, LinkDef};
 
 pub struct CycleConfig {
 	pub origin_id: String,
@@ -16,6 +16,7 @@ pub struct CycleConfig {
 	pub fail_safe_threshold: f64,
 	pub diff_mode: DiffMode,
 	pub transform: Option<String>,
+	pub links: Vec<LinkDef>,
 }
 
 pub struct CycleRunner<'a> {
@@ -189,6 +190,11 @@ impl<'a> CycleRunner<'a> {
 				growth_pct = format!("{growth_pct:.1}"),
 				"unusual growth: new records exceed previous total"
 			);
+		}
+
+		// Entity linking: match current rows against configured target sources
+		if !config.links.is_empty() && !diff.is_empty() {
+			self.run_links(config, &diff).await;
 		}
 
 		if !diff.is_empty() {
@@ -442,6 +448,68 @@ impl<'a> CycleRunner<'a> {
 			}
 		}
 		true
+	}
+
+	async fn run_links(&self, config: &CycleConfig, diff: &DeltaResult) {
+		use oversync_links::{LinkRule, MatchStrategy, find_links};
+
+		let current_rows: Vec<oversync_core::RawRow> = diff
+			.created
+			.iter()
+			.chain(diff.updated.iter())
+			.filter(|e| !e.row_data.is_null())
+			.map(|e| oversync_core::RawRow {
+				row_key: e.row_key.clone(),
+				row_data: e.row_data.clone(),
+			})
+			.collect();
+
+		if current_rows.is_empty() {
+			return;
+		}
+
+		for link_def in &config.links {
+			let strategy = match link_def.strategy.as_str() {
+				"normalized" => MatchStrategy::Normalized,
+				_ => MatchStrategy::Exact,
+			};
+			let rule = LinkRule {
+				name: link_def.name.clone(),
+				left_field: link_def.left_field.clone(),
+				right_field: link_def.right_field.clone(),
+				strategy,
+			};
+
+			let target_rows = match self
+				.engine
+				.read_snapshot_rows(&link_def.target_origin, &link_def.target_query)
+				.await
+			{
+				Ok(rows) => rows,
+				Err(e) => {
+					warn!(
+						rule = %link_def.name,
+						target = %link_def.target_origin,
+						error = %e,
+						"failed to read target rows for linking"
+					);
+					continue;
+				}
+			};
+
+			let matches = find_links(&current_rows, &target_rows, &[rule]);
+
+			if !matches.is_empty() {
+				info!(
+					rule = %link_def.name,
+					matched = matches.len(),
+					"entity links resolved"
+				);
+				if let Err(e) = self.engine.upsert_resolved_links(&matches).await {
+					warn!(error = %e, "failed to store resolved links");
+				}
+			}
+		}
 	}
 
 	async fn deliver_pending(&self, config: &CycleConfig) {

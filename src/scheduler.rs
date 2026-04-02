@@ -356,6 +356,7 @@ async fn run_with_retry(
 		fail_safe_threshold: pipe.delta.fail_safe_threshold,
 		diff_mode: pipe.delta.diff_mode.clone(),
 		transform: query.transform.clone(),
+		links: vec![],
 	};
 
 	let mut runner = CycleRunner::new(engine, connector, sinks);

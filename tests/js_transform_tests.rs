@@ -21,6 +21,7 @@ fn cycle_config(schema: &str, transform: Option<&str>) -> CycleConfig {
 		fail_safe_threshold: 30.0,
 		diff_mode: oversync::config::DiffMode::Db,
 		transform: transform.map(String::from),
+		links: vec![],
 	}
 }
 

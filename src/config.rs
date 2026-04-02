@@ -159,9 +159,27 @@ pub struct PipeConfig {
 	#[serde(default)]
 	pub transforms: Vec<serde_json::Value>,
 	#[serde(default)]
+	pub links: Vec<LinkDef>,
+	#[serde(default)]
 	pub alert_webhook: Option<String>,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
+}
+
+/// Cross-source entity linking rule in TOML config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkDef {
+	pub name: String,
+	pub left_field: String,
+	pub right_field: String,
+	#[serde(default = "default_link_strategy")]
+	pub strategy: String,
+	pub target_origin: String,
+	pub target_query: String,
+}
+
+fn default_link_strategy() -> String {
+	"exact".into()
 }
 
 /// Connector types that require Trino as a JDBC bridge.
@@ -288,6 +306,7 @@ impl From<&SourceDef> for PipeConfig {
 			},
 			filters: vec![],
 			transforms: vec![],
+			links: vec![],
 			alert_webhook: None,
 			enabled: true,
 		}

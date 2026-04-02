@@ -147,6 +147,7 @@ impl EmbeddedSync {
 			fail_safe_threshold: pipe.delta.fail_safe_threshold,
 			diff_mode: pipe.delta.diff_mode.clone(),
 			transform: query.transform.clone(),
+			links: vec![],
 		};
 
 		let pipe_engine = self.delta_engine.for_source(pipe_name);
@@ -586,6 +587,7 @@ async fn run_embedded_cycle(
 		fail_safe_threshold: pipe.delta.fail_safe_threshold,
 		diff_mode: pipe.delta.diff_mode.clone(),
 		transform: query.transform.clone(),
+		links: vec![],
 	};
 
 	let mut runner = CycleRunner::new(engine, connector, sinks);

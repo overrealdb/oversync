@@ -370,6 +370,7 @@ mod tests {
 			retry: RetryDef::default(),
 			filters: vec![],
 			transforms: vec![],
+			links: vec![],
 			enabled: true,
 			alert_webhook: None,
 		}

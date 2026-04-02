@@ -20,6 +20,7 @@ fn cycle_config(schema: &str) -> CycleConfig {
 		fail_safe_threshold: 30.0,
 		diff_mode: oversync::config::DiffMode::Db,
 		transform: None,
+		links: vec![],
 	}
 }
 
@@ -107,6 +108,7 @@ async fn routing_resolve_pipe_query_sinks_filters() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
+		links: vec![],
 		enabled: true,
 		alert_webhook: None,
 	};

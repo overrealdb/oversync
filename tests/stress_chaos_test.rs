@@ -118,6 +118,7 @@ fn make_config(schema: &str, threshold: f64) -> CycleConfig {
 		fail_safe_threshold: threshold,
 		diff_mode: oversync::config::DiffMode::Db,
 		transform: None,
+		links: vec![],
 	}
 }
 

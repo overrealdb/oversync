@@ -3999,6 +3999,7 @@ dependencies = [
  "oversync-connectors",
  "oversync-core",
  "oversync-delta",
+ "oversync-links",
  "oversync-queries",
  "oversync-sinks",
  "oversync-transforms",
@@ -4087,6 +4088,7 @@ version = "0.2.1"
 dependencies = [
  "chrono",
  "oversync-core",
+ "oversync-links",
  "oversync-queries",
  "proptest",
  "serde_json",
@@ -4100,6 +4102,8 @@ name = "oversync-links"
 version = "0.2.1"
 dependencies = [
  "oversync-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

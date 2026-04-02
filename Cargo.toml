@@ -133,6 +133,7 @@ validate-docker = []
 oversync-core = { workspace = true }
 oversync-connectors = { workspace = true }
 oversync-delta = { workspace = true }
+oversync-links = { workspace = true }
 oversync-sinks = { workspace = true }
 oversync-transforms = { workspace = true }
 oversync-queries = { workspace = true }
@@ -172,6 +173,7 @@ oversync-core = { workspace = true }
 oversync-connectors = { workspace = true }
 oversync-delta = { workspace = true }
 oversync-sinks = { workspace = true }
+oversync-queries = { workspace = true }
 overshift = { workspace = true }
 surql-macros = { workspace = true }
 surrealdb = { workspace = true }

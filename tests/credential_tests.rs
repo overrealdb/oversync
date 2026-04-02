@@ -45,6 +45,7 @@ async fn resolve_credential_into_pipe_dsn() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
+		links: vec![],
 		enabled: true,
 		alert_webhook: None,
 	}];
@@ -81,6 +82,7 @@ async fn resolve_missing_credential_errors() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
+		links: vec![],
 		enabled: true,
 		alert_webhook: None,
 	}];
@@ -113,6 +115,7 @@ async fn resolve_no_credentials_is_noop() {
 		retry: RetryDef::default(),
 		filters: vec![],
 		transforms: vec![],
+		links: vec![],
 		enabled: true,
 		alert_webhook: None,
 	}];

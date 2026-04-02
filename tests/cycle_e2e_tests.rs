@@ -1,5 +1,6 @@
 mod common;
 
+use oversync::config::LinkDef;
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_connectors::PostgresConnector;
 use oversync_core::model::OpType;
@@ -20,6 +21,7 @@ fn cycle_config(schema: &str) -> CycleConfig {
 		fail_safe_threshold: 30.0,
 		diff_mode: oversync::config::DiffMode::Db,
 		transform: None,
+		links: vec![],
 	}
 }
 
@@ -199,4 +201,94 @@ async fn e2e_sink_receives_all_events() {
 	assert_eq!(diff.updated[0].op, OpType::Updated);
 
 	drop(sink);
+}
+
+#[tokio::test]
+async fn e2e_link_step_stores_resolved_links() {
+	let surreal = TestSurrealContainer::new().await;
+	let pg = TestPostgres::new().await;
+
+	pg.run_sql("CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT)")
+		.await;
+	pg.run_sql("CREATE TABLE contacts (id TEXT PRIMARY KEY, email TEXT)")
+		.await;
+	pg.run_sql("INSERT INTO users VALUES ('u1', 'alice@example.com')")
+		.await;
+	pg.run_sql("INSERT INTO users VALUES ('u2', 'bob@example.com')")
+		.await;
+	pg.run_sql("INSERT INTO contacts VALUES ('c1', 'alice@example.com')")
+		.await;
+	pg.run_sql("INSERT INTO contacts VALUES ('c2', 'charlie@example.com')")
+		.await;
+
+	let engine = DeltaEngine::single(surreal.client.clone());
+	let connector = PostgresConnector::from_pool("pg-test", pg.pool.clone());
+	let sinks: Vec<Arc<dyn Sink>> = vec![Arc::new(StdoutSink::new(false))];
+
+	// Populate contacts snapshot so the link step can read target rows.
+	let contacts_config = CycleConfig {
+		origin_id: "contacts-source".into(),
+		query_id: "contacts".into(),
+		sql: format!("SELECT id, email FROM {}.contacts", pg.schema),
+		key_column: "id".into(),
+		fail_safe_threshold: 100.0,
+		diff_mode: oversync::config::DiffMode::Db,
+		transform: None,
+		links: vec![],
+	};
+	CycleRunner::new(&engine, &connector, &sinks)
+		.run(&contacts_config)
+		.await
+		.unwrap();
+
+	// Run users cycle with a link rule matching email → contacts.email.
+	let users_config = CycleConfig {
+		origin_id: "users-source".into(),
+		query_id: "users".into(),
+		sql: format!("SELECT id, email FROM {}.users", pg.schema),
+		key_column: "id".into(),
+		fail_safe_threshold: 100.0,
+		diff_mode: oversync::config::DiffMode::Db,
+		transform: None,
+		links: vec![LinkDef {
+			name: "user-contact-email".into(),
+			left_field: "email".into(),
+			right_field: "email".into(),
+			strategy: "exact".into(),
+			target_origin: "contacts-source".into(),
+			target_query: "contacts".into(),
+		}],
+	};
+	CycleRunner::new(&engine, &connector, &sinks)
+		.run(&users_config)
+		.await
+		.unwrap();
+
+	// u1 matches c1 via email.
+	let mut resp = surreal
+		.client
+		.query(oversync_queries::links::READ_LINKS)
+		.bind(("source_key", "u1"))
+		.await
+		.unwrap()
+		.check()
+		.unwrap();
+	let links: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert_eq!(links.len(), 1);
+	assert_eq!(links[0]["source_key"], "u1");
+	assert_eq!(links[0]["target_key"], "c1");
+	assert_eq!(links[0]["rule_name"], "user-contact-email");
+	assert_eq!(links[0]["confidence"], 1.0);
+
+	// u2 has no matching contact.
+	let mut resp = surreal
+		.client
+		.query(oversync_queries::links::READ_LINKS)
+		.bind(("source_key", "u2"))
+		.await
+		.unwrap()
+		.check()
+		.unwrap();
+	let links: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert!(links.is_empty());
 }

@@ -125,6 +125,8 @@ pub mod links {
 	pub const UPSERT_LINK: &str = include_str!("../surql/queries/links/upsert_link.surql");
 	pub const READ_LINKS: &str = include_str!("../surql/queries/links/read_links.surql");
 	pub const DELETE_LINK: &str = include_str!("../surql/queries/links/delete_link.surql");
+	pub const READ_SNAPSHOT_ROWS: &str =
+		include_str!("../surql/queries/links/read_snapshot_rows.surql");
 }
 
 pub mod sink {

@@ -634,6 +634,54 @@ impl DeltaEngine {
 		);
 		Ok(transformed)
 	}
+
+	/// Read all snapshot rows (key + data) for a given origin/query.
+	/// Used by the link step to load target source rows for cross-matching.
+	pub async fn read_snapshot_rows(
+		&self,
+		origin_id: &str,
+		query_id: &str,
+	) -> Result<Vec<RawRow>, OversyncError> {
+		let mut resp = self
+			.snapshot_client
+			.query(oversync_queries::links::READ_SNAPSHOT_ROWS)
+			.bind(("origin_id", origin_id.to_string()))
+			.bind(("query_id", query_id.to_string()))
+			.await
+			.map_err(|e| OversyncError::Internal(format!("read_snapshot_rows: {e}")))?;
+
+		let rows: Vec<serde_json::Value> = resp
+			.take(0)
+			.map_err(|e| OversyncError::Internal(format!("read_snapshot_rows take: {e}")))?;
+
+		Ok(rows
+			.into_iter()
+			.filter_map(|v| {
+				Some(RawRow {
+					row_key: v.get("row_key")?.as_str()?.to_string(),
+					row_data: v.get("row_data")?.clone(),
+				})
+			})
+			.collect())
+	}
+
+	/// Store resolved links from the entity linking step.
+	pub async fn upsert_resolved_links(
+		&self,
+		links: &[oversync_links::LinkMatch],
+	) -> Result<(), OversyncError> {
+		for link in links {
+			self.state_client
+				.query(oversync_queries::links::UPSERT_LINK)
+				.bind(("source_key", link.left_key.clone()))
+				.bind(("target_key", link.right_key.clone()))
+				.bind(("rule_name", link.rule_name.clone()))
+				.bind(("confidence", link.confidence))
+				.await
+				.map_err(|e| OversyncError::Internal(format!("upsert_resolved_link: {e}")))?;
+		}
+		Ok(())
+	}
 }
 
 pub fn check_fail_safe(previous_count: usize, deleted_count: usize, threshold_pct: f64) -> bool {
