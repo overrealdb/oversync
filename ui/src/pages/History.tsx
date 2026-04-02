@@ -17,7 +17,7 @@ export function History() {
   const [dateTo, setDateTo] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const allCycles = data?.cycles ?? [];
+  const allCycles = useMemo(() => data?.cycles ?? [], [data?.cycles]);
 
   const filteredCycles = useMemo(() => {
     let result = allCycles;
@@ -52,7 +52,10 @@ export function History() {
       {isLoading ? (
         <LoadingSkeleton rows={8} />
       ) : allCycles.length === 0 ? (
-        <EmptyState title="No cycle history" description="Cycles will appear here after syncs run" />
+        <EmptyState
+          title="No cycle history"
+          description="Cycles will appear here after syncs run"
+        />
       ) : (
         <>
           <HistoryCharts cycles={allCycles} />
@@ -70,7 +73,8 @@ export function History() {
             <HistoryTable cycles={paginatedCycles} />
             <div className="flex items-center justify-between px-1">
               <p className="text-xs text-gray-500">
-                Showing {paginatedCycles.length} of {filteredCycles.length} cycles
+                Showing {paginatedCycles.length} of {filteredCycles.length}{" "}
+                cycles
               </p>
               {hasMore && (
                 <button

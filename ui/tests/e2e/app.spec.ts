@@ -29,7 +29,9 @@ test.describe("Dashboard", () => {
     await expect(page.getByText("Total Sinks")).toBeVisible();
 
     // Status badge should be visible
-    await expect(page.locator("[class*='emerald'],[class*='blue']").first()).toBeVisible();
+    await expect(
+      page.locator("[class*='emerald'],[class*='blue']").first(),
+    ).toBeVisible();
 
     // Charts sections should render
     await expect(page.getByText("Cycles").first()).toBeVisible();
@@ -45,18 +47,25 @@ test.describe("Dashboard", () => {
     await pauseBtn.click();
 
     // Should show resume button after pause
-    await expect(page.locator("button:has-text('Resume')")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("button:has-text('Resume')")).toBeVisible({
+      timeout: 5000,
+    });
 
     // Click resume
     await page.locator("button:has-text('Resume')").click();
-    await expect(page.locator("button:has-text('Pause')")).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("button:has-text('Pause')")).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("screenshot", async ({ page, mockApi }) => {
     await page.goto("/");
     await expect(page.locator("h1")).toContainText("Dashboard");
     await page.waitForTimeout(1000);
-    await page.screenshot({ path: "tests/screenshots/dashboard.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/dashboard.png",
+      fullPage: true,
+    });
   });
 });
 
@@ -81,14 +90,19 @@ test.describe("Sources", () => {
 
     // Fill form
     await expect(page.getByText("Create Source")).toBeVisible();
-    await page.fill('input[placeholder="my-postgres-source"]', "test-new-source");
+    await page.fill(
+      'input[placeholder="my-postgres-source"]',
+      "test-new-source",
+    );
     await page.selectOption("select", { value: "postgres" });
 
     // Submit
     await page.click("button:has-text('Create')");
 
     // Should close dialog and show toast
-    await expect(page.getByText("Create Source")).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Create Source")).not.toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("edit a source", async ({ page, mockApi }) => {
@@ -104,7 +118,9 @@ test.describe("Sources", () => {
 
     // Submit update
     await page.click("button:has-text('Update')");
-    await expect(page.getByText("Edit Source: pg-main")).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Edit Source: pg-main")).not.toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("delete a source with confirmation", async ({ page, mockApi }) => {
@@ -117,13 +133,19 @@ test.describe("Sources", () => {
 
     // Confirm dialog should appear
     await expect(page.getByText("Delete Source")).toBeVisible();
-    await expect(page.getByText('Are you sure you want to delete "pg-main"?')).toBeVisible();
+    await expect(
+      page.getByText('Are you sure you want to delete "pg-main"?'),
+    ).toBeVisible();
 
     // Confirm delete
-    await page.locator('[role="alertdialog"] button:has-text("Delete")').click();
+    await page
+      .locator('[role="alertdialog"] button:has-text("Delete")')
+      .click();
 
     // Source should be removed
-    await expect(page.getByText("Delete Source")).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Delete Source")).not.toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("trigger sync from sources table", async ({ page, mockApi }) => {
@@ -132,10 +154,14 @@ test.describe("Sources", () => {
     await expect(page.getByText("pg-main")).toBeVisible();
 
     // Click trigger button
-    await page.locator("tr:has-text('pg-main') button[title='Trigger sync']").click();
+    await page
+      .locator("tr:has-text('pg-main') button[title='Trigger sync']")
+      .click();
 
     // Should show success toast
-    await expect(page.getByText(/triggered|Sync/i).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/triggered|Sync/i).first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("screenshot", async ({ page, mockApi }) => {
@@ -143,7 +169,10 @@ test.describe("Sources", () => {
     await page.click('nav a:has-text("Sources")');
     await expect(page.getByText("pg-main")).toBeVisible();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: "tests/screenshots/sources.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/sources.png",
+      fullPage: true,
+    });
   });
 
   test("screenshot create dialog", async ({ page, mockApi }) => {
@@ -152,7 +181,10 @@ test.describe("Sources", () => {
     await page.click("button:has-text('Add Source')");
     await expect(page.getByText("Create Source")).toBeVisible();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: "tests/screenshots/source-create-dialog.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/source-create-dialog.png",
+      fullPage: true,
+    });
   });
 });
 
@@ -188,7 +220,10 @@ test.describe("Source Detail", () => {
     await page.locator("a:has-text('pg-main')").first().click();
     await expect(page.locator("h1:has-text('pg-main')")).toBeVisible();
     await page.waitForTimeout(1000);
-    await page.screenshot({ path: "tests/screenshots/source-detail.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/source-detail.png",
+      fullPage: true,
+    });
   });
 });
 
@@ -213,7 +248,9 @@ test.describe("Sinks", () => {
     await page.locator("form select").first().selectOption({ value: "kafka" });
 
     await page.click("button:has-text('Create')");
-    await expect(page.getByText("Create Sink")).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Create Sink")).not.toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("screenshot", async ({ page, mockApi }) => {
@@ -221,7 +258,10 @@ test.describe("Sinks", () => {
     await page.click('nav a:has-text("Sinks")');
     await expect(page.getByText("kafka-prod")).toBeVisible();
     await page.waitForTimeout(500);
-    await page.screenshot({ path: "tests/screenshots/sinks.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/sinks.png",
+      fullPage: true,
+    });
   });
 });
 
@@ -254,7 +294,10 @@ test.describe("History", () => {
     await page.click('nav a:has-text("History")');
     await expect(page.getByText("users_sync").first()).toBeVisible();
     await page.waitForTimeout(1000);
-    await page.screenshot({ path: "tests/screenshots/history.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/history.png",
+      fullPage: true,
+    });
   });
 });
 
@@ -294,6 +337,9 @@ test.describe("Settings", () => {
     await page.click('nav a:has-text("Settings")');
     await expect(page.locator("h1")).toContainText("Settings");
     await page.waitForTimeout(500);
-    await page.screenshot({ path: "tests/screenshots/settings.png", fullPage: true });
+    await page.screenshot({
+      path: "tests/screenshots/settings.png",
+      fullPage: true,
+    });
   });
 });

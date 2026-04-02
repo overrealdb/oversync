@@ -24,7 +24,14 @@ interface QueryDraft {
 }
 
 function emptyQuery(): QueryDraft {
-  return { id: "", key_column: "", sql: "", interval_secs: 60, diff_mode: "memory", failsafe_threshold: 30 };
+  return {
+    id: "",
+    key_column: "",
+    sql: "",
+    interval_secs: 60,
+    diff_mode: "memory",
+    failsafe_threshold: 30,
+  };
 }
 
 interface SourceFormProps {
@@ -49,14 +56,26 @@ function ConnectorConfigFields({
     onChange({ ...config, [key]: value });
   }
 
-  function textField(label: string, key: string, placeholder?: string, type?: string) {
+  function textField(
+    label: string,
+    key: string,
+    placeholder?: string,
+    type?: string,
+  ) {
     return (
       <div key={key}>
-        <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
+        <label className="block text-xs font-medium text-gray-400 mb-1">
+          {label}
+        </label>
         <input
           type={type ?? "text"}
           value={(config[key] as string) ?? ""}
-          onChange={(e) => set(key, type === "number" ? Number(e.target.value) : e.target.value)}
+          onChange={(e) =>
+            set(
+              key,
+              type === "number" ? Number(e.target.value) : e.target.value,
+            )
+          }
           placeholder={placeholder}
           className={INPUT_CLS}
         />
@@ -83,10 +102,17 @@ function ConnectorConfigFields({
     case "mysql":
       return (
         <div className="space-y-3">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Connection</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            Connection
+          </p>
           <div className="grid grid-cols-2 gap-3">
             {textField("Host", "host", "localhost")}
-            {textField("Port", "port", connector === "postgres" ? "5432" : "3306", "number")}
+            {textField(
+              "Port",
+              "port",
+              connector === "postgres" ? "5432" : "3306",
+              "number",
+            )}
           </div>
           {textField("Database", "database", "mydb")}
           {textField("User", "user", "admin")}
@@ -97,10 +123,14 @@ function ConnectorConfigFields({
     case "http":
       return (
         <div className="space-y-3">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">HTTP Config</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            HTTP Config
+          </p>
           {textField("URL", "url", "https://api.example.com/data")}
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Auth Type</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">
+              Auth Type
+            </label>
             <select
               value={(config["auth_type"] as string) ?? "none"}
               onChange={(e) => set("auth_type", e.target.value)}
@@ -112,7 +142,8 @@ function ConnectorConfigFields({
               <option value="header">Custom Header</option>
             </select>
           </div>
-          {config["auth_type"] === "bearer" && textField("Token", "token", "eyJ...")}
+          {config["auth_type"] === "bearer" &&
+            textField("Token", "token", "eyJ...")}
           {config["auth_type"] === "basic" && (
             <div className="grid grid-cols-2 gap-3">
               {textField("Username", "username")}
@@ -130,10 +161,14 @@ function ConnectorConfigFields({
     case "graphql":
       return (
         <div className="space-y-3">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">GraphQL Config</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            GraphQL Config
+          </p>
           {textField("URL", "url", "https://api.example.com/graphql")}
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Auth Type</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">
+              Auth Type
+            </label>
             <select
               value={(config["auth_type"] as string) ?? "none"}
               onChange={(e) => set("auth_type", e.target.value)}
@@ -156,7 +191,9 @@ function ConnectorConfigFields({
     case "trino":
       return (
         <div className="space-y-3">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Trino Config</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            Trino Config
+          </p>
           <div className="grid grid-cols-2 gap-3">
             {textField("Host", "host", "localhost")}
             {textField("Port", "port", "8080", "number")}
@@ -169,7 +206,9 @@ function ConnectorConfigFields({
     case "flight_sql":
       return (
         <div className="space-y-3">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Flight SQL Config</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            Flight SQL Config
+          </p>
           <div className="grid grid-cols-2 gap-3">
             {textField("Host", "host", "localhost")}
             {textField("Port", "port", "31337", "number")}
@@ -283,7 +322,10 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
           <h2 className="text-lg font-semibold text-white">
             {isEdit ? `Edit Source: ${source.name}` : "Create Source"}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -292,7 +334,9 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
           {/* Name */}
           {!isEdit && (
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Name</label>
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Name
+              </label>
               <input
                 type="text"
                 value={name}
@@ -306,7 +350,9 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
 
           {/* Connector type */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Connector Type</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Connector Type
+            </label>
             <select
               value={connector}
               onChange={(e) => {
@@ -316,7 +362,9 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
               className={INPUT_CLS}
             >
               {CONNECTOR_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>
+                  {t}
+                </option>
               ))}
             </select>
           </div>
@@ -328,7 +376,9 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
               onClick={() => setEnabled(!enabled)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? "bg-emerald-600" : "bg-gray-700"}`}
             >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? "translate-x-6" : "translate-x-1"}`} />
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? "translate-x-6" : "translate-x-1"}`}
+              />
             </button>
             <span className="text-sm text-gray-300">Enabled</span>
           </div>
@@ -336,7 +386,9 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
           {/* Configuration */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-gray-300">Configuration</label>
+              <label className="text-sm font-medium text-gray-300">
+                Configuration
+              </label>
               <button
                 type="button"
                 onClick={() => setUseJsonEditor(!useJsonEditor)}
@@ -348,14 +400,20 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
             {useJsonEditor ? (
               <JsonEditor value={config} onChange={setConfig} label="" />
             ) : (
-              <ConnectorConfigFields connector={connector} config={config} onChange={setConfig} />
+              <ConnectorConfigFields
+                connector={connector}
+                config={config}
+                onChange={setConfig}
+              />
             )}
           </div>
 
           {/* Queries */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-gray-300">Queries</label>
+              <label className="text-sm font-medium text-gray-300">
+                Queries
+              </label>
               <button
                 type="button"
                 onClick={addQuery}
@@ -372,7 +430,10 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
             ) : (
               <div className="space-y-4">
                 {queries.map((q, idx) => (
-                  <div key={idx} className="border border-gray-700 rounded-lg p-4 space-y-3 relative">
+                  <div
+                    key={idx}
+                    className="border border-gray-700 rounded-lg p-4 space-y-3 relative"
+                  >
                     <button
                       type="button"
                       onClick={() => removeQuery(idx)}
@@ -383,21 +444,29 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Query Name</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Query Name
+                        </label>
                         <input
                           type="text"
                           value={q.id}
-                          onChange={(e) => updateQuery(idx, { id: e.target.value })}
+                          onChange={(e) =>
+                            updateQuery(idx, { id: e.target.value })
+                          }
                           placeholder="users_sync"
                           className={INPUT_CLS}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Key Column</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Key Column
+                        </label>
                         <input
                           type="text"
                           value={q.key_column}
-                          onChange={(e) => updateQuery(idx, { key_column: e.target.value })}
+                          onChange={(e) =>
+                            updateQuery(idx, { key_column: e.target.value })
+                          }
                           placeholder="id"
                           className={INPUT_CLS}
                         />
@@ -405,10 +474,14 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">SQL / Query</label>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">
+                        SQL / Query
+                      </label>
                       <textarea
                         value={q.sql}
-                        onChange={(e) => updateQuery(idx, { sql: e.target.value })}
+                        onChange={(e) =>
+                          updateQuery(idx, { sql: e.target.value })
+                        }
                         placeholder="SELECT * FROM users"
                         rows={2}
                         className={INPUT_CLS + " font-mono resize-y"}
@@ -417,20 +490,32 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
 
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Interval (s)</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Interval (s)
+                        </label>
                         <input
                           type="number"
                           value={q.interval_secs}
-                          onChange={(e) => updateQuery(idx, { interval_secs: Number(e.target.value) })}
+                          onChange={(e) =>
+                            updateQuery(idx, {
+                              interval_secs: Number(e.target.value),
+                            })
+                          }
                           min={1}
                           className={INPUT_CLS}
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">Diff Mode</label>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">
+                          Diff Mode
+                        </label>
                         <select
                           value={q.diff_mode}
-                          onChange={(e) => updateQuery(idx, { diff_mode: e.target.value as "memory" | "db" })}
+                          onChange={(e) =>
+                            updateQuery(idx, {
+                              diff_mode: e.target.value as "memory" | "db",
+                            })
+                          }
                           className={INPUT_CLS}
                         >
                           <option value="memory">Memory</option>
@@ -446,7 +531,11 @@ export function SourceForm({ open, onClose, source }: SourceFormProps) {
                           min={0}
                           max={100}
                           value={q.failsafe_threshold}
-                          onChange={(e) => updateQuery(idx, { failsafe_threshold: Number(e.target.value) })}
+                          onChange={(e) =>
+                            updateQuery(idx, {
+                              failsafe_threshold: Number(e.target.value),
+                            })
+                          }
                           className="w-full accent-amber-500"
                         />
                       </div>
