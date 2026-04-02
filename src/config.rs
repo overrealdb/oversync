@@ -166,20 +166,25 @@ pub struct PipeConfig {
 	pub enabled: bool,
 }
 
+/// Matching strategy for entity linking rules.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkStrategy {
+	#[default]
+	Exact,
+	Normalized,
+}
+
 /// Cross-source entity linking rule in TOML config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkDef {
 	pub name: String,
 	pub left_field: String,
 	pub right_field: String,
-	#[serde(default = "default_link_strategy")]
-	pub strategy: String,
+	#[serde(default)]
+	pub strategy: LinkStrategy,
 	pub target_origin: String,
 	pub target_query: String,
-}
-
-fn default_link_strategy() -> String {
-	"exact".into()
 }
 
 /// Connector types that require Trino as a JDBC bridge.

@@ -6,7 +6,7 @@ use oversync_core::traits::{OriginConnector, Sink, TransformHook};
 use oversync_delta::{DeltaEngine, check_fail_safe};
 use tracing::{Instrument, error, info, warn};
 
-use crate::config::{DiffMode, LinkDef};
+use crate::config::{DiffMode, LinkDef, LinkStrategy};
 
 pub struct CycleConfig {
 	pub origin_id: String,
@@ -468,10 +468,12 @@ impl<'a> CycleRunner<'a> {
 			return;
 		}
 
+		// Link failures are non-fatal: the cycle delivers events regardless.
+		// Operators see warnings in logs if linking degrades.
 		for link_def in &config.links {
-			let strategy = match link_def.strategy.as_str() {
-				"normalized" => MatchStrategy::Normalized,
-				_ => MatchStrategy::Exact,
+			let strategy = match link_def.strategy {
+				LinkStrategy::Normalized => MatchStrategy::Normalized,
+				LinkStrategy::Exact => MatchStrategy::Exact,
 			};
 			let rule = LinkRule {
 				name: link_def.name.clone(),

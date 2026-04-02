@@ -654,32 +654,54 @@ impl DeltaEngine {
 			.take(0)
 			.map_err(|e| OversyncError::Internal(format!("read_snapshot_rows take: {e}")))?;
 
-		Ok(rows
-			.into_iter()
-			.filter_map(|v| {
-				Some(RawRow {
-					row_key: v.get("row_key")?.as_str()?.to_string(),
-					row_data: v.get("row_data")?.clone(),
-				})
-			})
-			.collect())
+		let mut result = Vec::with_capacity(rows.len());
+		for v in rows {
+			let key = v.get("row_key").and_then(|k| k.as_str());
+			let data = v.get("row_data");
+			match (key, data) {
+				(Some(k), Some(d)) => result.push(RawRow {
+					row_key: k.to_string(),
+					row_data: d.clone(),
+				}),
+				_ => {
+					tracing::warn!(
+						origin_id,
+						query_id,
+						row = %v,
+						"read_snapshot_rows: skipping row with missing or non-string row_key/row_data"
+					);
+				}
+			}
+		}
+		Ok(result)
 	}
 
-	/// Store resolved links from the entity linking step.
+	/// Store resolved links from the entity linking step — single batch round-trip.
 	pub async fn upsert_resolved_links(
 		&self,
 		links: &[oversync_links::LinkMatch],
 	) -> Result<(), OversyncError> {
-		for link in links {
-			self.state_client
-				.query(oversync_queries::links::UPSERT_LINK)
-				.bind(("source_key", link.left_key.clone()))
-				.bind(("target_key", link.right_key.clone()))
-				.bind(("rule_name", link.rule_name.clone()))
-				.bind(("confidence", link.confidence))
-				.await
-				.map_err(|e| OversyncError::Internal(format!("upsert_resolved_link: {e}")))?;
+		if links.is_empty() {
+			return Ok(());
 		}
+		let batch: Vec<serde_json::Value> = links
+			.iter()
+			.map(|l| {
+				serde_json::json!({
+					"source_key": l.left_key,
+					"target_key": l.right_key,
+					"rule_name": l.rule_name,
+					"confidence": l.confidence,
+				})
+			})
+			.collect();
+		self.state_client
+			.query(oversync_queries::links::BATCH_UPSERT_LINKS)
+			.bind(("links", batch))
+			.await
+			.map_err(|e| OversyncError::Internal(format!("upsert_resolved_links: {e}")))?
+			.check()
+			.map_err(|e| OversyncError::Internal(format!("upsert_resolved_links check: {e}")))?;
 		Ok(())
 	}
 }

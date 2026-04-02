@@ -1,6 +1,6 @@
 mod common;
 
-use oversync::config::LinkDef;
+use oversync::config::{LinkDef, LinkStrategy};
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_connectors::PostgresConnector;
 use oversync_core::model::OpType;
@@ -254,7 +254,7 @@ async fn e2e_link_step_stores_resolved_links() {
 			name: "user-contact-email".into(),
 			left_field: "email".into(),
 			right_field: "email".into(),
-			strategy: "exact".into(),
+			strategy: LinkStrategy::Exact,
 			target_origin: "contacts-source".into(),
 			target_query: "contacts".into(),
 		}],
