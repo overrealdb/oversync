@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - serialize DDL to prevent TiKV lock contention on startup
 
+### Other
+
+- fix rustfmt formatting in tables_exist test
+
 ## [0.3.0](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.2.1...oversync-delta-v0.3.0) - 2026-04-02
 
 ### Added
