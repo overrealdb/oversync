@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.4.0...oversync-delta-v0.4.1) - 2026-04-03
+
+### Other
+
+- release v0.4.0
+- fix rustfmt formatting in tables_exist test
+
 ## [0.4.0](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.3.0...oversync-delta-v0.4.0) - 2026-04-03
 
 ### Fixed
