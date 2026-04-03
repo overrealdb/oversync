@@ -61,7 +61,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 opentelemetry = "0.28"
 opentelemetry_sdk = { version = "0.28", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic"] }
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
 tracing-opentelemetry = "0.29"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4", "serde"] }
