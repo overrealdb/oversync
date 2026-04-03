@@ -1,19 +1,50 @@
 use async_trait::async_trait;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use oversync_core::error::OversyncError;
-use oversync_core::model::EventEnvelope;
+use oversync_core::model::{EventEnvelope, EventMeta};
 use oversync_core::traits::Sink;
 
-const UPSERT_EVENT_SQL: &str = oversync_queries::sink::UPSERT_EVENT;
-const BATCH_UPSERT_EVENTS_SQL: &str = oversync_queries::sink::BATCH_UPSERT_EVENTS;
+fn build_document(data: &serde_json::Value, meta: &EventMeta) -> serde_json::Value {
+	let mut map = match data {
+		serde_json::Value::Object(m) => m.clone(),
+		other => {
+			warn!(kind = %other, "document mode: data is not an object, wrapping in payload");
+			let mut m = serde_json::Map::new();
+			m.insert("payload".into(), other.clone());
+			m
+		}
+	};
+	map.insert(
+		"_meta".into(),
+		serde_json::json!({
+			"origin_id": meta.origin_id,
+			"query_id": meta.query_id,
+			"op": meta.op.to_string(),
+			"hash": meta.hash,
+			"cycle_id": meta.cycle_id,
+		}),
+	);
+	serde_json::Value::Object(map)
+}
+
+/// How the SurrealDB sink writes records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SinkMode {
+	/// Wrap payload inside a `data` field with `_meta` alongside (default).
+	Envelope,
+	/// Merge payload fields directly onto the record as top-level fields.
+	Document,
+}
 
 pub struct SurrealDbSink {
 	client: Surreal<Any>,
 	table: String,
 	sink_name: String,
+	mode: SinkMode,
+	key_field: Option<String>,
 }
 
 impl SurrealDbSink {
@@ -25,6 +56,24 @@ impl SurrealDbSink {
 		table: &str,
 		username: &str,
 		password: &str,
+	) -> Result<Self, OversyncError> {
+		Self::with_mode(
+			name, url, namespace, database, table, username, password,
+			SinkMode::Envelope, None,
+		)
+		.await
+	}
+
+	pub async fn with_mode(
+		name: &str,
+		url: &str,
+		namespace: &str,
+		database: &str,
+		table: &str,
+		username: &str,
+		password: &str,
+		mode: SinkMode,
+		key_field: Option<String>,
 	) -> Result<Self, OversyncError> {
 		let client = surrealdb::engine::any::connect(url)
 			.await
@@ -48,16 +97,64 @@ impl SurrealDbSink {
 			client,
 			table: table.to_string(),
 			sink_name: name.to_string(),
+			mode,
+			key_field,
 		})
 	}
 
 	/// Create from an existing connected client (for testing).
-	pub fn from_client(name: &str, client: Surreal<Any>, table: &str) -> Self {
+	pub fn from_client(
+		name: &str,
+		client: Surreal<Any>,
+		table: &str,
+		mode: SinkMode,
+		key_field: Option<String>,
+	) -> Self {
 		Self {
 			client,
 			table: table.to_string(),
 			sink_name: name.to_string(),
+			mode,
+			key_field,
 		}
+	}
+
+	fn resolve_key(&self, envelope: &EventEnvelope) -> Result<String, OversyncError> {
+		match &self.key_field {
+			Some(field) => envelope
+				.data
+				.get(field)
+				.and_then(|v| v.as_str())
+				.map(String::from)
+				.ok_or_else(|| {
+					OversyncError::Sink(format!(
+						"key_field '{field}' missing or not a string in data for key '{}'",
+						envelope.meta.key,
+					))
+				}),
+			None => Ok(envelope.meta.key.clone()),
+		}
+	}
+
+	fn to_batch_entry(&self, envelope: &EventEnvelope) -> Result<serde_json::Value, OversyncError> {
+		let key = self.resolve_key(envelope)?;
+		Ok(match self.mode {
+			SinkMode::Envelope => serde_json::json!({
+				"table": self.table,
+				"key": key,
+				"data": envelope.data,
+				"origin_id": envelope.meta.origin_id,
+				"query_id": envelope.meta.query_id,
+				"op": envelope.meta.op.to_string(),
+				"hash": envelope.meta.hash,
+				"cycle_id": envelope.meta.cycle_id,
+			}),
+			SinkMode::Document => serde_json::json!({
+				"table": self.table,
+				"key": key,
+				"doc": build_document(&envelope.data, &envelope.meta),
+			}),
+		})
 	}
 }
 
@@ -68,25 +165,7 @@ impl Sink for SurrealDbSink {
 	}
 
 	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError> {
-		let response = self
-			.client
-			.query(UPSERT_EVENT_SQL)
-			.bind(("table", self.table.clone()))
-			.bind(("key", envelope.meta.key.clone()))
-			.bind(("data", envelope.data.clone()))
-			.bind(("origin_id", envelope.meta.origin_id.clone()))
-			.bind(("query_id", envelope.meta.query_id.clone()))
-			.bind(("op", envelope.meta.op.to_string()))
-			.bind(("hash", envelope.meta.hash.clone()))
-			.bind(("cycle_id", envelope.meta.cycle_id))
-			.await
-			.map_err(|e| OversyncError::Sink(format!("surrealdb upsert: {e}")))?;
-		response
-			.check()
-			.map_err(|e| OversyncError::Sink(format!("surrealdb upsert check: {e}")))?;
-
-		debug!(table = %self.table, key = %envelope.meta.key, "upserted event");
-		Ok(())
+		self.send_batch(std::slice::from_ref(envelope)).await
 	}
 
 	async fn send_batch(&self, envelopes: &[EventEnvelope]) -> Result<(), OversyncError> {
@@ -96,23 +175,17 @@ impl Sink for SurrealDbSink {
 
 		let events: Vec<serde_json::Value> = envelopes
 			.iter()
-			.map(|e| {
-				serde_json::json!({
-					"table": self.table,
-					"key": e.meta.key,
-					"data": e.data,
-					"origin_id": e.meta.origin_id,
-					"query_id": e.meta.query_id,
-					"op": e.meta.op.to_string(),
-					"hash": e.meta.hash,
-					"cycle_id": e.meta.cycle_id,
-				})
-			})
-			.collect();
+			.map(|e| self.to_batch_entry(e))
+			.collect::<Result<_, _>>()?;
+
+		let sql = match self.mode {
+			SinkMode::Envelope => oversync_queries::sink::BATCH_UPSERT_EVENTS,
+			SinkMode::Document => oversync_queries::sink::BATCH_UPSERT_DOCUMENTS,
+		};
 
 		let response = self
 			.client
-			.query(BATCH_UPSERT_EVENTS_SQL)
+			.query(sql)
 			.bind(("events", events))
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb batch upsert: {e}")))?;
@@ -120,7 +193,7 @@ impl Sink for SurrealDbSink {
 			.check()
 			.map_err(|e| OversyncError::Sink(format!("surrealdb batch upsert check: {e}")))?;
 
-		debug!(table = %self.table, count = envelopes.len(), "batch upserted events");
+		debug!(table = %self.table, count = envelopes.len(), mode = ?self.mode, "batch upserted events");
 		Ok(())
 	}
 

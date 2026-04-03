@@ -12,7 +12,7 @@ use crate::mcp_sink::{McpSink, McpSinkConfig};
 use crate::mysql_sink::MysqlSink;
 use crate::postgres_sink::PostgresSink;
 use crate::stdout::StdoutSink;
-use crate::surrealdb_sink::SurrealDbSink;
+use crate::surrealdb_sink::{SinkMode, SurrealDbSink};
 use oversync_core::model::AuthConfig;
 
 pub struct StdoutTargetFactory;
@@ -109,8 +109,28 @@ impl TargetFactory for SurrealDbTargetFactory {
 			.get("password")
 			.and_then(|v| v.as_str())
 			.unwrap_or("root");
+		let mode = match config
+			.get("mode")
+			.and_then(|v| v.as_str())
+			.unwrap_or("envelope")
+		{
+			"envelope" => SinkMode::Envelope,
+			"document" => SinkMode::Document,
+			other => {
+				return Err(OversyncError::Config(format!(
+					"surrealdb sink: unknown mode '{other}', expected 'envelope' or 'document'"
+				)));
+			}
+		};
+		let key_field = config
+			.get("key_field")
+			.and_then(|v| v.as_str())
+			.map(String::from);
 		Ok(Box::new(
-			SurrealDbSink::new(name, url, namespace, database, table, username, password).await?,
+			SurrealDbSink::with_mode(
+				name, url, namespace, database, table, username, password, mode, key_field,
+			)
+			.await?,
 		))
 	}
 }

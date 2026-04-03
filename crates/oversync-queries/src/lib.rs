@@ -135,4 +135,8 @@ pub mod sink {
 	pub const BATCH_UPSERT_EVENTS: &str =
 		include_str!("../surql/queries/sink/batch_upsert_events.surql");
 	pub const UPSERT_EVENT: &str = include_str!("../surql/queries/sink/upsert_event.surql");
+	pub const UPSERT_DOCUMENT: &str =
+		include_str!("../surql/queries/sink/upsert_document.surql");
+	pub const BATCH_UPSERT_DOCUMENTS: &str =
+		include_str!("../surql/queries/sink/batch_upsert_documents.surql");
 }
