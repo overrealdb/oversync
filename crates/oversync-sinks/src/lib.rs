@@ -22,4 +22,4 @@ pub use mysql_sink::MysqlSink;
 pub use oversync_core::traits::Sink;
 pub use postgres_sink::PostgresSink;
 pub use stdout::StdoutSink;
-pub use surrealdb_sink::{SinkMode, SurrealDbSink};
+pub use surrealdb_sink::{SinkMode, SurrealDbSink, SurrealDbSinkConfig};

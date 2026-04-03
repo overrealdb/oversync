@@ -39,6 +39,19 @@ pub enum SinkMode {
 	Document,
 }
 
+/// Configuration for creating a [`SurrealDbSink`].
+pub struct SurrealDbSinkConfig<'a> {
+	pub name: &'a str,
+	pub url: &'a str,
+	pub namespace: &'a str,
+	pub database: &'a str,
+	pub table: &'a str,
+	pub username: &'a str,
+	pub password: &'a str,
+	pub mode: SinkMode,
+	pub key_field: Option<String>,
+}
+
 pub struct SurrealDbSink {
 	client: Surreal<Any>,
 	table: String,
@@ -57,7 +70,7 @@ impl SurrealDbSink {
 		username: &str,
 		password: &str,
 	) -> Result<Self, OversyncError> {
-		Self::with_mode(
+		Self::connect(SurrealDbSinkConfig {
 			name,
 			url,
 			namespace,
@@ -65,47 +78,37 @@ impl SurrealDbSink {
 			table,
 			username,
 			password,
-			SinkMode::Envelope,
-			None,
-		)
+			mode: SinkMode::Envelope,
+			key_field: None,
+		})
 		.await
 	}
 
-	pub async fn with_mode(
-		name: &str,
-		url: &str,
-		namespace: &str,
-		database: &str,
-		table: &str,
-		username: &str,
-		password: &str,
-		mode: SinkMode,
-		key_field: Option<String>,
-	) -> Result<Self, OversyncError> {
-		let client = surrealdb::engine::any::connect(url)
+	pub async fn connect(cfg: SurrealDbSinkConfig<'_>) -> Result<Self, OversyncError> {
+		let client = surrealdb::engine::any::connect(cfg.url)
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb connect: {e}")))?;
 
 		client
 			.signin(surrealdb::opt::auth::Root {
-				username: username.to_string(),
-				password: password.to_string(),
+				username: cfg.username.to_string(),
+				password: cfg.password.to_string(),
 			})
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb signin: {e}")))?;
 
 		client
-			.use_ns(namespace)
-			.use_db(database)
+			.use_ns(cfg.namespace)
+			.use_db(cfg.database)
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb use ns/db: {e}")))?;
 
 		Ok(Self {
 			client,
-			table: table.to_string(),
-			sink_name: name.to_string(),
-			mode,
-			key_field,
+			table: cfg.table.to_string(),
+			sink_name: cfg.name.to_string(),
+			mode: cfg.mode,
+			key_field: cfg.key_field,
 		})
 	}
 

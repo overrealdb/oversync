@@ -12,7 +12,7 @@ use crate::mcp_sink::{McpSink, McpSinkConfig};
 use crate::mysql_sink::MysqlSink;
 use crate::postgres_sink::PostgresSink;
 use crate::stdout::StdoutSink;
-use crate::surrealdb_sink::{SinkMode, SurrealDbSink};
+use crate::surrealdb_sink::{SinkMode, SurrealDbSink, SurrealDbSinkConfig};
 use oversync_core::model::AuthConfig;
 
 pub struct StdoutTargetFactory;
@@ -127,9 +127,17 @@ impl TargetFactory for SurrealDbTargetFactory {
 			.and_then(|v| v.as_str())
 			.map(String::from);
 		Ok(Box::new(
-			SurrealDbSink::with_mode(
-				name, url, namespace, database, table, username, password, mode, key_field,
-			)
+			SurrealDbSink::connect(SurrealDbSinkConfig {
+				name,
+				url,
+				namespace,
+				database,
+				table,
+				username,
+				password,
+				mode,
+				key_field,
+			})
 			.await?,
 		))
 	}
