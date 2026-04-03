@@ -873,7 +873,10 @@ mod tests {
 			DeltaEngine::new(db.clone().into(), db).with_tables(TableNames::for_source("check"));
 
 		// Before ensure_tables — no tables yet
-		assert!(!engine.tables_exist().await, "tables should not exist before DDL");
+		assert!(
+			!engine.tables_exist().await,
+			"tables should not exist before DDL"
+		);
 
 		// Create tables
 		engine.ensure_tables().await.unwrap();
