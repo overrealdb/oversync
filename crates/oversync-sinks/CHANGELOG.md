@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/overrealdb/oversync/compare/oversync-sinks-v0.3.0...oversync-sinks-v0.4.0) - 2026-04-03
+
+### Added
+
+- *(sinks)* add document mode to SurrealDB sink
+
+### Fixed
+
+- use config struct for SurrealDbSink to satisfy clippy too-many-arguments
+
+### Other
+
+- fix rustfmt formatting
+
 ## [0.2.1](https://github.com/overrealdb/oversync/compare/oversync-sinks-v0.2.0...oversync-sinks-v0.2.1) - 2026-04-02
 
 ### Added
