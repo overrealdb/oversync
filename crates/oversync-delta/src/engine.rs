@@ -75,8 +75,34 @@ impl DeltaEngine {
 		&self.state_client
 	}
 
+	/// Check whether the per-pipeline snapshot table already exists.
+	///
+	/// Uses `INFO FOR DB` which is a read-only metadata query — avoids the
+	/// TiKV distributed write lock that DDL operations require.
+	async fn tables_exist(&self) -> bool {
+		let Ok(mut res) = self.state_client.query("INFO FOR DB").await else {
+			return false;
+		};
+		let Ok(Some(info)) = res.take::<Option<serde_json::Value>>(0) else {
+			return false;
+		};
+		// INFO FOR DB returns { "tables": { "table_name": "DEFINE TABLE ...", ... }, ... }
+		if let Some(tables) = info.get("tables").and_then(|t| t.as_object()) {
+			tables.contains_key(&self.tables.snapshot)
+		} else {
+			false
+		}
+	}
+
 	/// Ensure the per-pipeline tables exist in SurrealDB (idempotent).
+	///
+	/// Skips DDL entirely when tables already exist (the common restart case)
+	/// to avoid TiKV distributed-lock contention on schema mutations.
 	pub async fn ensure_tables(&self) -> Result<(), OversyncError> {
+		if self.tables_exist().await {
+			debug!("tables already exist, skipping DDL: {:?}", self.tables);
+			return Ok(());
+		}
 		let ddl = self.tables.create_ddl();
 		self.state_client
 			.query(&ddl)
@@ -836,6 +862,27 @@ mod tests {
 			.await
 			.unwrap();
 		assert_eq!(keys.len(), 2, "should have 2 keys after upsert");
+	}
+
+	#[tokio::test]
+	async fn tables_exist_false_before_ddl_true_after() {
+		let db = surrealdb::engine::any::connect("mem://").await.unwrap();
+		db.use_ns("t").use_db("exist_check").await.unwrap();
+
+		let engine =
+			DeltaEngine::new(db.clone().into(), db).with_tables(TableNames::for_source("check"));
+
+		// Before ensure_tables — no tables yet
+		assert!(!engine.tables_exist().await, "tables should not exist before DDL");
+
+		// Create tables
+		engine.ensure_tables().await.unwrap();
+
+		// After ensure_tables — tables exist
+		assert!(engine.tables_exist().await, "tables should exist after DDL");
+
+		// Second call should hit the fast path (skip DDL)
+		engine.ensure_tables().await.unwrap();
 	}
 }
 

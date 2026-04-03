@@ -374,6 +374,18 @@ async fn run_all_pipes(
 	let transform_hooks = Arc::new(transform_hooks);
 	let mut handles = Vec::new();
 
+	// Pre-create tables sequentially to avoid TiKV DDL lock contention.
+	for pipe in &pipes {
+		if !pipe.enabled {
+			continue;
+		}
+		let pipe_engine = engine.for_source(&pipe.name);
+		if let Err(e) = pipe_engine.ensure_tables().await {
+			error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
+			return;
+		}
+	}
+
 	for pipe in &pipes {
 		if !pipe.enabled {
 			info!(pipe = %pipe.name, "pipe disabled, skipping");
@@ -487,11 +499,8 @@ async fn run_embedded_pipe_query(
 		}
 	};
 
+	// Tables already ensured by run_all_pipes() before spawning tasks.
 	let pipe_engine = engine.for_source(&pipe.name);
-	if let Err(e) = pipe_engine.ensure_tables().await {
-		error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
-		return;
-	}
 
 	let interval_secs = pipe.schedule.interval_secs.max(1);
 	let interval = Duration::from_secs(interval_secs);

@@ -42,9 +42,32 @@ echo "USE NS test DB test; DEFINE TABLE foo SCHEMALESS;" | \
 - Use `OVERSYNC_SURQL_DIR=/empty-dir/` to skip overshift schema apply
 - Use SurrealDB with RocksDB backend instead of TiKV for development
 
-## Theory
+## Root Cause
 
-Possibly TiKV transaction lock contention or SurrealDB DDL serialization issue when multiple WS connections are active. The `ol-surrealdb` instance on infra has multiple active connections (datacat, health loop, oversync state, oversync sink).
+SurrealDB DDL (`DEFINE TABLE/FIELD/INDEX`) acquires a namespace-level write lock for schema mutations.
+On TiKV, this is a distributed transaction requiring Raft consensus across regions.
+
+Oversync's scheduler spawned **all pipe-query tasks concurrently** via `tokio::spawn`, and each
+task called `ensure_tables()` which fires 3x DEFINE TABLE + 8+ DEFINE FIELD + 3 DEFINE INDEX.
+With 4 polling tasks, that's 4 concurrent DDL batches fighting over the same distributed lock.
+
+Additionally, `ensure_tables()` sent DDL to **both** `state_client` and `snapshot_client` — when
+both point to the same SurrealDB instance, that doubles the contention.
+
+DataCat migrations work because overshift applies them **sequentially** through a single connection
+before any other clients connect.
+
+## Fix (applied)
+
+1. **Serialized DDL** — `ensure_tables()` now runs sequentially in `Scheduler::run()` and
+   `run_all_pipes()` before spawning concurrent tasks (not inside each task).
+2. **Skip DDL when tables exist** — `ensure_tables()` checks `INFO FOR DB` first and skips
+   all DDL if the snapshot table already exists (the common restart case).
+
+Files changed:
+- `crates/oversync-delta/src/engine.rs` — added `tables_exist()`, early return in `ensure_tables()`
+- `src/scheduler.rs` — moved `ensure_tables` to pre-spawn loop
+- `src/embedded.rs` — same pattern for embedded engine
 
 ## Environment
 

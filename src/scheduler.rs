@@ -56,6 +56,20 @@ impl Scheduler {
 		let mut handles = Vec::new();
 
 		let pipes = self.config.effective_pipes();
+
+		// Pre-create tables sequentially to avoid TiKV DDL lock contention.
+		// On TiKV backend, concurrent DEFINE TABLE operations can deadlock.
+		for pipe in &pipes {
+			if !pipe.enabled {
+				continue;
+			}
+			let pipe_engine = self.engine.for_source(&pipe.name);
+			if let Err(e) = pipe_engine.ensure_tables().await {
+				error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
+				return Err(e);
+			}
+		}
+
 		for pipe in &pipes {
 			if !pipe.enabled {
 				info!(pipe = %pipe.name, "pipe disabled, skipping");
@@ -203,13 +217,8 @@ async fn run_pipe_query(
 		}
 	};
 
-	let pipe_engine = engine.for_source(&pipe.name);
-	if let Err(e) = pipe_engine.ensure_tables().await {
-		error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
-		return;
-	}
-
-	let pipe_engine = Arc::new(pipe_engine);
+	// Tables already ensured by Scheduler::run() before spawning tasks.
+	let pipe_engine = Arc::new(engine.for_source(&pipe.name));
 
 	let interval_secs = pipe.schedule.interval_secs.max(1);
 	let interval = Duration::from_secs(interval_secs);
