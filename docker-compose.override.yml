@@ -1,0 +1,5 @@
+services:
+  oversync:
+    image: 22fx/oversync:latest
+    platform: linux/amd64
+    build: !reset null

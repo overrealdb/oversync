@@ -24,7 +24,13 @@ fn make_envelope(key: &str, op: OpType, data: serde_json::Value) -> EventEnvelop
 #[tokio::test]
 async fn surrealdb_sink_upserts_created_event() {
 	let surreal = TestSurrealContainer::new_raw().await;
-	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "synced_items", SinkMode::Envelope, None);
+	let sink = SurrealDbSink::from_client(
+		"test",
+		surreal.client.clone(),
+		"synced_items",
+		SinkMode::Envelope,
+		None,
+	);
 
 	let envelope = make_envelope(
 		"item_1",
@@ -49,7 +55,13 @@ async fn surrealdb_sink_upserts_created_event() {
 #[tokio::test]
 async fn surrealdb_sink_upserts_updated_event() {
 	let surreal = TestSurrealContainer::new_raw().await;
-	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "synced_items", SinkMode::Envelope, None);
+	let sink = SurrealDbSink::from_client(
+		"test",
+		surreal.client.clone(),
+		"synced_items",
+		SinkMode::Envelope,
+		None,
+	);
 
 	let create = make_envelope(
 		"item_1",
@@ -79,7 +91,13 @@ async fn surrealdb_sink_upserts_updated_event() {
 #[tokio::test]
 async fn surrealdb_sink_handles_deleted_event() {
 	let surreal = TestSurrealContainer::new_raw().await;
-	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "synced_items", SinkMode::Envelope, None);
+	let sink = SurrealDbSink::from_client(
+		"test",
+		surreal.client.clone(),
+		"synced_items",
+		SinkMode::Envelope,
+		None,
+	);
 
 	let create = make_envelope(
 		"item_1",
@@ -104,7 +122,13 @@ async fn surrealdb_sink_handles_deleted_event() {
 #[tokio::test]
 async fn surrealdb_sink_batch_upserts() {
 	let surreal = TestSurrealContainer::new_raw().await;
-	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "batch_t", SinkMode::Envelope, None);
+	let sink = SurrealDbSink::from_client(
+		"test",
+		surreal.client.clone(),
+		"batch_t",
+		SinkMode::Envelope,
+		None,
+	);
 
 	let envelopes: Vec<EventEnvelope> = (0..10)
 		.map(|i| {
@@ -130,14 +154,26 @@ async fn surrealdb_sink_batch_upserts() {
 #[tokio::test]
 async fn surrealdb_sink_test_connection() {
 	let surreal = TestSurrealContainer::new_raw().await;
-	let sink = SurrealDbSink::from_client("test", surreal.client.clone(), "t", SinkMode::Envelope, None);
+	let sink = SurrealDbSink::from_client(
+		"test",
+		surreal.client.clone(),
+		"t",
+		SinkMode::Envelope,
+		None,
+	);
 	sink.test_connection().await.unwrap();
 }
 
 #[tokio::test]
 async fn surrealdb_sink_name() {
 	let surreal = TestSurrealContainer::new_raw().await;
-	let sink = SurrealDbSink::from_client("my-surreal", surreal.client.clone(), "t", SinkMode::Envelope, None);
+	let sink = SurrealDbSink::from_client(
+		"my-surreal",
+		surreal.client.clone(),
+		"t",
+		SinkMode::Envelope,
+		None,
+	);
 	assert_eq!(sink.name(), "my-surreal");
 }
 
@@ -198,11 +234,7 @@ async fn document_mode_preserves_created_at_on_update() {
 		None,
 	);
 
-	let create = make_envelope(
-		"tbl",
-		OpType::Created,
-		serde_json::json!({"name": "v1"}),
-	);
+	let create = make_envelope("tbl", OpType::Created, serde_json::json!({"name": "v1"}));
 	sink.send_event(&create).await.unwrap();
 
 	let mut res = surreal
@@ -216,11 +248,7 @@ async fn document_mode_preserves_created_at_on_update() {
 	// Small delay to ensure updated_at differs
 	tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
-	let update = make_envelope(
-		"tbl",
-		OpType::Updated,
-		serde_json::json!({"name": "v2"}),
-	);
+	let update = make_envelope("tbl", OpType::Updated, serde_json::json!({"name": "v2"}));
 	sink.send_event(&update).await.unwrap();
 
 	let mut res = surreal

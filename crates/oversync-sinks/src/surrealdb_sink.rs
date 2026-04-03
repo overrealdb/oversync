@@ -58,8 +58,15 @@ impl SurrealDbSink {
 		password: &str,
 	) -> Result<Self, OversyncError> {
 		Self::with_mode(
-			name, url, namespace, database, table, username, password,
-			SinkMode::Envelope, None,
+			name,
+			url,
+			namespace,
+			database,
+			table,
+			username,
+			password,
+			SinkMode::Envelope,
+			None,
 		)
 		.await
 	}

@@ -1,0 +1,8 @@
+[surrealdb]
+url = "http://surrealdb:8000"
+username = "root"
+password = "root"
+namespace = "oversync"
+database = "sync"
+
+# No sources configured — engine will start idle
