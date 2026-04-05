@@ -87,7 +87,7 @@ impl EmbeddedSync {
 	/// Run one sync cycle with an optional DSN override.
 	///
 	/// When `dsn_override` is set, the pipe's `origin.dsn` is replaced before
-	/// creating the connector. This allows callers (e.g. datacat) to resolve
+	/// creating the connector. This allows callers to resolve
 	/// credentials externally and pass the decrypted DSN without modifying
 	/// the stored pipe config.
 	pub async fn run_once_with_dsn(
@@ -380,10 +380,12 @@ async fn run_all_pipes(
 			continue;
 		}
 		let pipe_engine = engine.for_source(&pipe.name);
+		info!(pipe = %pipe.name, tables = ?pipe_engine.tables(), "ensuring embedded pipe tables");
 		if let Err(e) = pipe_engine.ensure_tables().await {
 			error!(pipe = %pipe.name, error = %e, "failed to create pipeline tables");
 			return;
 		}
+		info!(pipe = %pipe.name, "embedded pipe tables ready");
 	}
 
 	for pipe in &pipes {

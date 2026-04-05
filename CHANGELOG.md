@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- *(delta)* treat `INFO FOR DB` timeout as "tables already exist" during startup checks, avoiding embedded startup stalls on slow SurrealDB metadata paths
+- *(embedded)* add pipe-level logs around `ensure_tables()` so startup hangs are visible in embedded mode
+
 ## [0.4.0](https://github.com/overrealdb/oversync/compare/oversync-v0.3.0...oversync-v0.4.0) - 2026-04-03
 
 ### Added

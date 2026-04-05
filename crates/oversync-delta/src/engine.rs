@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::{
@@ -80,9 +80,34 @@ impl DeltaEngine {
 	/// Uses `INFO FOR DB` which is a read-only metadata query — avoids the
 	/// TiKV distributed write lock that DDL operations require.
 	async fn tables_exist(&self) -> bool {
-		let Ok(mut res) = self.state_client.query("INFO FOR DB").await else {
-			return false;
+		const INFO_TIMEOUT_SECS: u64 = 5;
+
+		let info_result = tokio::time::timeout(
+			std::time::Duration::from_secs(INFO_TIMEOUT_SECS),
+			self.state_client.query("INFO FOR DB"),
+		)
+		.await;
+
+		let mut res = match info_result {
+			Ok(Ok(res)) => res,
+			Err(_) => {
+				warn!(
+					tables = ?self.tables,
+					timeout_secs = INFO_TIMEOUT_SECS,
+					"INFO FOR DB timed out while checking oversync tables; assuming tables already exist"
+				);
+				return true;
+			}
+			Ok(Err(e)) => {
+				warn!(
+					tables = ?self.tables,
+					error = %e,
+					"INFO FOR DB failed while checking oversync tables; assuming tables do not exist"
+				);
+				return false;
+			}
 		};
+
 		let Ok(Some(info)) = res.take::<Option<serde_json::Value>>(0) else {
 			return false;
 		};
