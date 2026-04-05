@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.4.1...oversync-delta-v0.4.2) - 2026-04-05
+
+### Fixed
+
+- harden embedded startup table checks
+
 ## [0.4.1](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.4.0...oversync-delta-v0.4.1) - 2026-04-03
 
 ### Other
