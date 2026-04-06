@@ -81,7 +81,7 @@ rquickjs = { version = "0.11", features = ["parallel"] }
 rquickjs-serde = "0.5"
 arrow = { version = "58", default-features = false, features = ["json"] }
 arrow-flight = { version = "58", features = ["flight-sql-experimental"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "mysql", "json"] }
 rdkafka = { version = "0.37", features = ["cmake-build"] }
 testcontainers = "0.27"
