@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-push:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'oversync-v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'oversync-v') || startsWith(github.event.release.tag_name, 'oversync-core-v')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -27,6 +27,8 @@ jobs:
           tags: |
             type=match,pattern=oversync-v(.*),group=1
             type=match,pattern=oversync-v(\d+\.\d+),group=1
+            type=match,pattern=oversync-core-v(.*),group=1
+            type=match,pattern=oversync-core-v(\d+\.\d+),group=1
             type=raw,value=latest
 
       - uses: docker/setup-qemu-action@v3
