@@ -3,7 +3,7 @@ FROM rust:1.94-bookworm AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends cmake && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY . .
-RUN cargo build --release --features cli
+RUN cargo build --release --locked --bin oversync --features cli
 
 # ── Runtime stage ─────────────────────────────────────────
 FROM gcr.io/distroless/cc-debian12:nonroot
