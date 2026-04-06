@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4](https://github.com/overrealdb/oversync/compare/oversync-v0.4.3...oversync-v0.4.4) - 2026-04-06
+
+### Fixed
+
+- speed up docker release builds
+
 ## [0.4.3](https://github.com/overrealdb/oversync/compare/oversync-v0.4.2...oversync-v0.4.3) - 2026-04-06
 
 ### Other
