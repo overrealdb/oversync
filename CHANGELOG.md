@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- *(docker)* publish images when release-plz creates `oversync-core-v*` tags
+
 ## [0.4.2](https://github.com/overrealdb/oversync/compare/oversync-v0.4.1...oversync-v0.4.2) - 2026-04-05
 
 ### Fixed
