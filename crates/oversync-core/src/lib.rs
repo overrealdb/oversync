@@ -13,7 +13,7 @@ pub use config::OversyncConfig;
 pub use error::OversyncError;
 pub use model::{
 	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, KafkaAuth, OpType,
-	RawRow, compute_diff,
+	RawRow, compute_diff, hash_rows,
 };
 pub use table_names::TableNames;
 pub use traits::{

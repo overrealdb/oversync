@@ -322,7 +322,7 @@ impl TransformStep for Hash {
 				other => other.to_string(),
 			};
 			use sha2::{Digest, Sha256};
-			let hash = hex::encode(Sha256::digest(input.as_bytes()));
+			let hash = const_hex::encode(Sha256::digest(input.as_bytes()));
 			obj.insert(self.field.clone(), serde_json::Value::String(hash));
 		}
 		Ok(true)

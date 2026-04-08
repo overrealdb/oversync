@@ -6,8 +6,13 @@ license.workspace = true
 description = "Hash-based delta detection engine for oversync."
 repository = "https://github.com/overrealdb/oversync"
 
+[features]
+default = []
+parallel = ["dep:rayon", "oversync-core/parallel"]
+
 [dependencies]
 oversync-core = { workspace = true }
+rayon = { workspace = true, optional = true }
 oversync-links = { workspace = true }
 oversync-queries = { workspace = true }
 surrealdb = { workspace = true }

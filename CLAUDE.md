@@ -119,6 +119,7 @@ This ensures all .surql files live inside `oversync-queries` (required for crate
 | `schema` | Schema apply via overshift on engine build |
 | `api` | REST API via `engine.api_router()` |
 | `cli` | Standalone binary (api + schema + clap + otel) |
+| `parallel` | Rayon-based parallel row hashing (multi-core speedup) |
 
 ## Key Principles
 

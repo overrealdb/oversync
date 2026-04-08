@@ -68,8 +68,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1"
 clap = { version = "4", features = ["derive", "env"] }
 toml = "0.8"
-sha2 = "0.10"
-hex = "0.4"
+sha2 = "0.11"
+const-hex = "1"
+rayon = "1"
 aes-gcm = "0.10"
 rand = "0.9"
 base64 = "0.22"
@@ -137,6 +138,7 @@ cli = [
 	"dep:tracing-opentelemetry",
 ]
 validate-docker = []
+parallel = ["oversync-core/parallel", "oversync-delta/parallel"]
 
 [dependencies]
 oversync-core = { workspace = true }
