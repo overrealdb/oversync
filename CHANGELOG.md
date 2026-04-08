@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6](https://github.com/overrealdb/oversync/compare/oversync-v0.4.5...oversync-v0.4.6) - 2026-04-08
+
+### Fixed
+
+- fix cli schema loading without repo checkout
+
 ## [0.4.5](https://github.com/overrealdb/oversync/compare/oversync-v0.4.4...oversync-v0.4.5) - 2026-04-08
 
 ### Other
