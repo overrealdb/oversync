@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.4.4...oversync-delta-v0.4.5) - 2026-04-08
+
+### Other
+
+- optimize hash hot path — sha2 0.11, const-hex, rayon parallel
+
 ## [0.4.2](https://github.com/overrealdb/oversync/compare/oversync-delta-v0.4.1...oversync-delta-v0.4.2) - 2026-04-05
 
 ### Fixed
