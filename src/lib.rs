@@ -51,3 +51,8 @@ mod surql_functions {
 }
 #[allow(unused_imports)]
 pub use surql_functions::*;
+
+#[cfg(feature = "schema")]
+pub(crate) mod embedded_surql {
+	include!(concat!(env!("OUT_DIR"), "/embedded_surql.rs"));
+}

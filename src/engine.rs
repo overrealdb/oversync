@@ -712,8 +712,7 @@ pub(crate) async fn apply_schema(
 	ns: &str,
 	db_name: &str,
 ) -> Result<(), OversyncError> {
-	let surql_dir = std::env::var("OVERSYNC_SURQL_DIR")
-		.unwrap_or_else(|_| "crates/oversync-queries/surql/".to_string());
+	let surql_dir = resolve_surql_dir()?;
 	let mut manifest = overshift::Manifest::load(&surql_dir)
 		.map_err(|e| OversyncError::Migration(format!("load manifest: {e}")))?;
 	manifest.meta.ns = ns.to_string();
@@ -731,6 +730,37 @@ pub(crate) async fn apply_schema(
 		"schema applied"
 	);
 	Ok(())
+}
+
+#[cfg(feature = "schema")]
+fn resolve_surql_dir() -> Result<String, OversyncError> {
+	if let Ok(dir) = std::env::var("OVERSYNC_SURQL_DIR") {
+		return Ok(dir);
+	}
+
+	materialize_embedded_surql().map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(feature = "schema")]
+fn materialize_embedded_surql() -> Result<std::path::PathBuf, OversyncError> {
+	let root = std::env::temp_dir().join(format!("oversync-surql-{}", env!("CARGO_PKG_VERSION")));
+
+	for (rel_path, contents) in crate::embedded_surql::FILES {
+		let path = root.join(rel_path);
+		if let Some(parent) = path.parent() {
+			std::fs::create_dir_all(parent).map_err(|e| {
+				OversyncError::Migration(format!(
+					"prepare embedded surql dir {}: {e}",
+					parent.display()
+				))
+			})?;
+		}
+		std::fs::write(&path, contents).map_err(|e| {
+			OversyncError::Migration(format!("write embedded surql file {}: {e}", path.display()))
+		})?;
+	}
+
+	Ok(root)
 }
 
 #[cfg(feature = "api")]
