@@ -1,0 +1,14 @@
+-- Transform functions (SMT).
+-- Each function accepts an array of event envelope objects and returns the transformed array.
+-- Return NONE for an element to filter it out.
+--
+-- Example:
+--   DEFINE FUNCTION OVERWRITE fn::smt::normalize($events: array) {
+--       RETURN array::map($events, |$e| {
+--           ...$e,
+--           data: {
+--               full_name: string::concat($e.data.first_name, ' ', $e.data.last_name),
+--               email: string::lowercase($e.data.email),
+--           }
+--       });
+--   };

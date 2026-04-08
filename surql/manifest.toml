@@ -1,0 +1,25 @@
+[meta]
+ns = "oversync"
+db = "main"
+system_db = "_system"
+surrealdb = ">=3.0.0"
+
+[[modules]]
+name = "sync"
+path = "schema/sync"
+
+[[modules]]
+name = "config"
+path = "schema/config"
+
+[[modules]]
+name = "links"
+path = "schema/links"
+
+[[modules]]
+name = "plugin"
+path = "schema/plugin"
+
+[[modules]]
+name = "transforms"
+path = "schema/transforms"

@@ -3,16 +3,22 @@ use std::path::{Path, PathBuf};
 
 fn main() {
 	let out_dir = std::env::var("OUT_DIR").unwrap();
-	let surql_root = Path::new("crates/oversync-queries/surql");
+	let surql_root = if Path::new("crates/oversync-queries/surql").exists() {
+		Path::new("crates/oversync-queries/surql")
+	} else {
+		Path::new("surql")
+	};
 
 	// Layer 3a: validate schema + migration .surql files at compile time
-	surql_parser::build::validate_schema("crates/oversync-queries/surql/schema/");
-	surql_parser::build::validate_schema("crates/oversync-queries/surql/migrations/");
+	let schema_dir = surql_root.join("schema");
+	let migrations_dir = surql_root.join("migrations");
+	surql_parser::build::validate_schema(&schema_dir);
+	surql_parser::build::validate_schema(&migrations_dir);
 
 	// Layer 3b: generate typed Rust constants for DEFINE FUNCTION in schema
 	// Only scans schema/ (not queries/ which contain DML)
 	surql_parser::build::generate_typed_functions(
-		"crates/oversync-queries/surql/schema/",
+		&schema_dir,
 		format!("{out_dir}/surql_functions.rs"),
 	);
 
