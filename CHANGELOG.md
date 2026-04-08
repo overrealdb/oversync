@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5](https://github.com/overrealdb/oversync/compare/oversync-v0.4.4...oversync-v0.4.5) - 2026-04-08
+
+### Other
+
+- Merge pull request #27 from overrealdb/feat/perf-benchmarks
+- optimize hash hot path — sha2 0.11, const-hex, rayon parallel
+
 ## [0.4.4](https://github.com/overrealdb/oversync/compare/oversync-v0.4.3...oversync-v0.4.4) - 2026-04-06
 
 ### Fixed

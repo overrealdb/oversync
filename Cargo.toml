@@ -28,20 +28,20 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.4"
+version = "0.4.5"
 edition = "2024"
 license = "Apache-2.0"
 rust-version = "1.94"
 
 [workspace.dependencies]
-oversync-core = { version = "0.4.4", path = "crates/oversync-core" }
-oversync-connectors = { version = "0.4.4", path = "crates/oversync-connectors" }
-oversync-delta = { version = "0.4.4", path = "crates/oversync-delta" }
-oversync-links = { version = "0.4.4", path = "crates/oversync-links" }
-oversync-sinks = { version = "0.4.4", path = "crates/oversync-sinks" }
-oversync-api = { version = "0.4.4", path = "crates/oversync-api" }
-oversync-transforms = { version = "0.4.4", path = "crates/oversync-transforms" }
-oversync-queries = { version = "0.4.4", path = "crates/oversync-queries" }
+oversync-core = { version = "0.4.5", path = "crates/oversync-core" }
+oversync-connectors = { version = "0.4.5", path = "crates/oversync-connectors" }
+oversync-delta = { version = "0.4.5", path = "crates/oversync-delta" }
+oversync-links = { version = "0.4.5", path = "crates/oversync-links" }
+oversync-sinks = { version = "0.4.5", path = "crates/oversync-sinks" }
+oversync-api = { version = "0.4.5", path = "crates/oversync-api" }
+oversync-transforms = { version = "0.4.5", path = "crates/oversync-transforms" }
+oversync-queries = { version = "0.4.5", path = "crates/oversync-queries" }
 
 overshift = "0.2"
 surql-parser = { version = "0.1.4", features = ["build"] }
