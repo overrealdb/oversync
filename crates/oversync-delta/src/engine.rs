@@ -7,7 +7,7 @@ use tracing::{debug, info, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::{
-	CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, OpType, RawRow, hash_row_data,
+	CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, OpType, RawRow, hash_rows,
 };
 use oversync_core::table_names::TableNames;
 
@@ -296,15 +296,17 @@ impl DeltaEngine {
 		let mut total = 0;
 
 		for chunk in rows.chunks(BATCH_SIZE) {
+			let hashes = hash_rows(chunk);
 			let batch: Vec<serde_json::Value> = chunk
 				.iter()
-				.map(|row| {
+				.zip(hashes)
+				.map(|(row, row_hash)| {
 					serde_json::json!({
 						"origin_id": origin_id,
 						"query_id": query_id,
 						"row_key": row.row_key,
 						"row_data": row.row_data,
-						"row_hash": hash_row_data(&row.row_data),
+						"row_hash": row_hash,
 						"cycle_id": cycle_id,
 					})
 				})
@@ -358,15 +360,17 @@ impl DeltaEngine {
 		rows: &[RawRow],
 	) -> Result<usize, OversyncError> {
 		if rows.len() <= BATCH_SIZE {
+			let hashes = hash_rows(rows);
 			let batch: Vec<serde_json::Value> = rows
 				.iter()
-				.map(|row| {
+				.zip(hashes)
+				.map(|(row, row_hash)| {
 					serde_json::json!({
 						"origin_id": origin_id,
 						"query_id": query_id,
 						"row_key": row.row_key,
 						"row_data": row.row_data,
-						"row_hash": hash_row_data(&row.row_data),
+						"row_hash": row_hash,
 						"cycle_id": cycle_id,
 					})
 				})

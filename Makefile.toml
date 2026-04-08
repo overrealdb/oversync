@@ -55,6 +55,21 @@ description = "Run Criterion benchmarks (delta + transforms)"
 command = "cargo"
 args = ["bench"]
 
+[tasks.bench-baseline]
+description = "Save benchmark baseline (run before optimizations)"
+command = "cargo"
+args = ["bench", "--", "--save-baseline", "before"]
+
+[tasks.bench-compare]
+description = "Compare against saved baseline"
+command = "cargo"
+args = ["bench", "--", "--baseline", "before"]
+
+[tasks.bench-parallel]
+description = "Run benchmarks with parallel hashing feature"
+command = "cargo"
+args = ["bench", "--features", "parallel"]
+
 # ─── Coverage ───
 
 [tasks.coverage]

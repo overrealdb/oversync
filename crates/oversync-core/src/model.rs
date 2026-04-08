@@ -91,11 +91,11 @@ pub fn compute_diff(
 ) -> DeltaResult {
 	let now = Utc::now();
 	let mut result = DeltaResult::default();
-	let mut seen_keys = std::collections::HashSet::new();
+	let hashes = hash_rows(current);
+	let mut seen_keys = std::collections::HashSet::with_capacity(current.len());
 
-	for row in current {
+	for (row, row_hash) in current.iter().zip(hashes) {
 		seen_keys.insert(row.row_key.clone());
-		let row_hash = hash_row_data(&row.row_data);
 
 		match previous.get(&row.row_key) {
 			None => {
@@ -168,7 +168,22 @@ pub fn hash_row_data(data: &serde_json::Value) -> String {
 	let serialized = serde_json::to_string(data).expect("serde_json::Value is always serializable");
 	let mut hasher = Sha256::new();
 	hasher.update(serialized.as_bytes());
-	hex::encode(hasher.finalize())
+	const_hex::encode(hasher.finalize())
+}
+
+/// Hash multiple rows, using rayon parallelism when the `parallel` feature is enabled.
+pub fn hash_rows(rows: &[RawRow]) -> Vec<String> {
+	#[cfg(feature = "parallel")]
+	{
+		use rayon::prelude::*;
+		rows.par_iter()
+			.map(|r| hash_row_data(&r.row_data))
+			.collect()
+	}
+	#[cfg(not(feature = "parallel"))]
+	{
+		rows.iter().map(|r| hash_row_data(&r.row_data)).collect()
+	}
 }
 
 impl std::fmt::Display for OpType {

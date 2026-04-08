@@ -281,6 +281,33 @@ PipeConfig
 | `api` | REST API via `engine.api_router()` |
 | `cli` | Standalone binary (api + schema + clap + otel) |
 | `wasm` | WASM transform plugins via wasmtime |
+| `parallel` | Rayon-based parallel row hashing (multi-core speedup) |
+
+## Performance
+
+The hot path (row hashing + diff detection) is optimized for throughput:
+
+- **Hardware-accelerated SHA-256** via sha2 0.11 (SHA-NI on x86-64, SHA2 on Apple Silicon)
+- **SIMD hex encoding** via const-hex
+- **Optional parallel hashing** via rayon (`--features parallel`)
+
+Benchmarks on Apple M4 (10 cores), realistic rows (15 fields, nested JSON):
+
+| Operation | 1K rows | 10K rows | 100K rows |
+|-----------|---------|----------|-----------|
+| Hash (sequential) | 604 µs | 6.2 ms | 63 ms |
+| Hash (parallel) | 183 µs | 1.7 ms | 15 ms |
+| Diff no-change (seq) | 688 µs | 7.5 ms | 83 ms |
+| Diff no-change (par) | 282 µs | 2.3 ms | 28 ms |
+
+Run benchmarks:
+
+```bash
+cargo make bench                # all benchmarks
+cargo make bench-parallel       # with parallel feature
+cargo make bench-baseline       # save baseline
+cargo make bench-compare        # compare against baseline
+```
 
 ## Development
 

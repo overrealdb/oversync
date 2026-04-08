@@ -9,6 +9,7 @@ repository = "https://github.com/overrealdb/oversync"
 [features]
 default = []
 cli = ["dep:clap"]
+parallel = ["dep:rayon"]
 
 [dependencies]
 serde = { workspace = true }
@@ -18,8 +19,9 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 sha2 = { workspace = true }
-hex = { workspace = true }
+const-hex = { workspace = true }
 clap = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
