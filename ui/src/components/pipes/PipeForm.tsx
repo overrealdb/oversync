@@ -5,258 +5,189 @@ import {
   useMemo,
   useState,
 } from "react";
-import { BookmarkPlus, Plus, Trash2, X } from "lucide-react";
-import { useCreatePipe } from "@/api/pipes";
+import { BookmarkPlus, X } from "lucide-react";
+import { useCreatePipe, useResolvePipe, useUpdatePipe } from "@/api/pipes";
 import { useCreatePipePreset, usePipePresets } from "@/api/pipePresets";
+import { RecipeParameterValuesDialog } from "@/components/pipes/RecipeParameterValuesDialog";
 import { useSinks } from "@/api/sinks";
+import { RecipeSpecEditor, INPUT_CLS } from "@/components/pipes/RecipeSpecEditor";
 import { useToast } from "@/components/shared/useToast";
-import type { PipePresetInfo, PipePresetSpec, PipeQueryDefinition } from "@/types/api";
-
-type PipeMode = "manual" | "postgres_metadata" | "postgres_snapshot";
-type DiffMode = "db" | "memory";
-
-interface ManualQueryDraft {
-  id: string;
-  sql: string;
-  key_column: string;
-}
+import type {
+  PipePresetInfo,
+  RuntimePipeConfig,
+} from "@/types/api";
+import {
+  buildPipePayload,
+  buildPipePresetSpec,
+  createDefaultRecipeDraft,
+  draftFromPreset,
+  draftFromRuntimePipe,
+  hasCompleteManualQueries,
+  normalizePresetParameters,
+  type RecipeDraftState,
+} from "./recipeDraft";
 
 interface PipeFormProps {
   open: boolean;
   initialPresetName?: string | null;
+  pipeName?: string | null;
   onClose: () => void;
-}
-
-const INPUT_CLS =
-  "w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 outline-none transition-colors focus:border-emerald-300/35";
-
-function emptyManualQuery(): ManualQueryDraft {
-  return {
-    id: "",
-    sql: "",
-    key_column: "",
-  };
-}
-
-function manualDraftsFromQueries(queries: PipeQueryDefinition[]): ManualQueryDraft[] {
-  if (queries.length === 0) return [emptyManualQuery()];
-  return queries.map((query) => ({
-    id: query.id,
-    sql: query.sql,
-    key_column: query.key_column,
-  }));
-}
-
-function normalizeMode(preset: PipePresetInfo): PipeMode {
-  return preset.spec.recipe?.type ?? "manual";
 }
 
 export function PipeForm({
   open,
   initialPresetName = null,
+  pipeName = null,
   onClose,
 }: PipeFormProps) {
+  const isEditMode = Boolean(pipeName);
   const { data: sinksData } = useSinks();
   const { data: presetsData } = usePipePresets();
+  const resolvePipe = useResolvePipe(pipeName, open && isEditMode);
   const createPipe = useCreatePipe();
+  const updatePipe = useUpdatePipe(pipeName ?? "");
   const createPreset = useCreatePipePreset();
   const { toast } = useToast();
+  const resolvedPipeData = resolvePipe.data ?? null;
 
   const [name, setName] = useState("");
-  const [originDsn, setOriginDsn] = useState("");
-  const [originCredential, setOriginCredential] = useState("");
-  const [prefix, setPrefix] = useState("");
-  const [pipeMode, setPipeMode] = useState<PipeMode>("postgres_snapshot");
-  const [schemas, setSchemas] = useState("public");
-  const [intervalSecs, setIntervalSecs] = useState(300);
-  const [diffMode, setDiffMode] = useState<DiffMode>("db");
-  const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
-  const [manualQueries, setManualQueries] = useState<ManualQueryDraft[]>([
-    emptyManualQuery(),
-  ]);
+  const [draft, setDraft] = useState<RecipeDraftState>(createDefaultRecipeDraft);
+  const [enabled, setEnabled] = useState(true);
   const [selectedPresetName, setSelectedPresetName] = useState("");
   const [presetPanelOpen, setPresetPanelOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
+  const [parameterPreset, setParameterPreset] = useState<PipePresetInfo | null>(null);
 
   const sinks = sinksData?.sinks ?? [];
   const presets = useMemo(() => presetsData?.presets ?? [], [presetsData?.presets]);
-  const normalizedQueries = manualQueries
-    .map((query) => ({
-      id: query.id.trim(),
-      sql: query.sql.trim(),
-      key_column: query.key_column.trim(),
-    }))
-    .filter((query) => query.id || query.sql || query.key_column);
-  const hasManualQueries =
-    normalizedQueries.length > 0 &&
-    normalizedQueries.every((query) => query.id && query.sql && query.key_column);
+  const hasManualQueries = hasCompleteManualQueries(draft);
   const canSavePreset = useMemo(
-    () => (pipeMode === "manual" ? hasManualQueries : Boolean(prefix.trim())),
-    [hasManualQueries, pipeMode, prefix],
+    () => (draft.pipeMode === "manual" ? hasManualQueries : Boolean(draft.prefix.trim())),
+    [draft.pipeMode, draft.prefix, hasManualQueries],
   );
   const canSubmit = useMemo(
     () =>
-      pipeMode === "manual"
+      draft.pipeMode === "manual"
         ? Boolean(
             name.trim() &&
-              originDsn.trim() &&
-              selectedTargets.length > 0 &&
+              draft.originDsn.trim() &&
+              draft.selectedTargets.length > 0 &&
               hasManualQueries,
           )
         : Boolean(
             name.trim() &&
-              originDsn.trim() &&
-              prefix.trim() &&
-              selectedTargets.length > 0,
+              draft.originDsn.trim() &&
+              draft.prefix.trim() &&
+              draft.selectedTargets.length > 0,
           ),
-    [hasManualQueries, name, originDsn, pipeMode, prefix, selectedTargets.length],
+    [draft.originDsn, draft.pipeMode, draft.prefix, draft.selectedTargets.length, hasManualQueries, name],
   );
 
-  useEffect(() => {
-    if (!open) return;
+  const resetDraft = useCallback(() => {
     setName("");
-    setOriginDsn("");
-    setOriginCredential("");
-    setPrefix("");
-    setPipeMode("postgres_snapshot");
-    setSchemas("public");
-    setIntervalSecs(300);
-    setDiffMode("db");
-    setSelectedTargets([]);
-    setManualQueries([emptyManualQuery()]);
+    setDraft(createDefaultRecipeDraft());
+    setEnabled(true);
     setSelectedPresetName("");
     setPresetPanelOpen(false);
     setPresetName("");
     setPresetDescription("");
-  }, [open]);
+    setParameterPreset(null);
+  }, []);
 
-  const applyPreset = useCallback((preset: PipePresetInfo) => {
-    const mode = normalizeMode(preset);
-    const recipe = preset.spec.recipe;
-    const schedule = preset.spec.schedule;
-    const delta = preset.spec.delta;
-
-    setOriginDsn(preset.spec.origin_dsn ?? "");
-    setOriginCredential(preset.spec.origin_credential ?? "");
-    setPipeMode(mode);
-    setPrefix(recipe?.prefix ?? "");
-    setSchemas((recipe?.schemas ?? ["public"]).join(", "));
-    setIntervalSecs(schedule?.interval_secs ?? 300);
-    setDiffMode(delta?.diff_mode === "memory" ? "memory" : "db");
-    setSelectedTargets(preset.spec.targets ?? []);
-    setManualQueries(manualDraftsFromQueries(preset.spec.queries ?? []));
+  const applyResolvedPipe = useCallback((pipe: RuntimePipeConfig) => {
+    setName(pipe.name);
+    setDraft(draftFromRuntimePipe(pipe));
+    setEnabled(pipe.enabled);
+    setSelectedPresetName("");
     setPresetPanelOpen(false);
+    setPresetName("");
+    setPresetDescription("");
+    setParameterPreset(null);
   }, []);
 
   useEffect(() => {
-    if (!open || !initialPresetName) return;
+    if (!open) return;
+    resetDraft();
+  }, [open, resetDraft, pipeName]);
+
+  useEffect(() => {
+    if (!open || !isEditMode || !resolvedPipeData) return;
+    startTransition(() => applyResolvedPipe(resolvedPipeData.pipe));
+  }, [applyResolvedPipe, isEditMode, open, resolvedPipeData]);
+
+  const applyPreset = useCallback((preset: PipePresetInfo) => {
+    setDraft(draftFromPreset(preset));
+    setPresetPanelOpen(false);
+  }, []);
+
+  const requestPresetApplication = useCallback(
+    (preset: PipePresetInfo) => {
+      const parameters = normalizePresetParameters(preset.spec.parameters);
+      if (parameters.length === 0) {
+        setSelectedPresetName(preset.name);
+        startTransition(() => applyPreset(preset));
+        return;
+      }
+      setParameterPreset(preset);
+    },
+    [applyPreset],
+  );
+
+  useEffect(() => {
+    if (!open || !initialPresetName || isEditMode) return;
     const preset = presets.find((item) => item.name === initialPresetName);
     if (!preset) return;
-    setSelectedPresetName(initialPresetName);
-    startTransition(() => applyPreset(preset));
-  }, [applyPreset, initialPresetName, open, presets]);
+    requestPresetApplication(preset);
+  }, [initialPresetName, isEditMode, open, presets, requestPresetApplication]);
 
   if (!open) return null;
 
-  function toggleTarget(target: string) {
-    setSelectedTargets((current) =>
-      current.includes(target)
-        ? current.filter((item) => item !== target)
-        : [...current, target],
-    );
-  }
-
-  function updateManualQuery(index: number, patch: Partial<ManualQueryDraft>) {
-    setManualQueries((current) =>
-      current.map((query, queryIndex) =>
-        queryIndex === index ? { ...query, ...patch } : query,
-      ),
-    );
-  }
-
-  function addManualQuery() {
-    setManualQueries((current) => [...current, emptyManualQuery()]);
-  }
-
-  function removeManualQuery(index: number) {
-    setManualQueries((current) =>
-      current.length === 1
-        ? [emptyManualQuery()]
-        : current.filter((_, queryIndex) => queryIndex !== index),
-    );
-  }
-
-  function buildRecipe() {
-    if (pipeMode === "manual") return undefined;
-    return {
-      type: pipeMode,
-      prefix,
-      entity_type_id: "postgres",
-      schema_id: "table",
-      schemas: schemas
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean),
-    };
-  }
-
-  function buildPresetSpec(): PipePresetSpec {
-    return {
-      origin_connector: "postgres",
-      origin_dsn: originDsn.trim(),
-      origin_credential: originCredential.trim() || undefined,
-      origin_config: {},
-      targets: selectedTargets,
-      queries:
-        pipeMode === "manual"
-          ? normalizedQueries.map((query) => ({
-              id: query.id,
-              sql: query.sql,
-              key_column: query.key_column,
-            }))
-          : [],
-      schedule: {
-        interval_secs: intervalSecs,
-        missed_tick_policy: "skip",
-      },
-      delta: {
-        diff_mode: diffMode,
-        fail_safe_threshold: 30,
-      },
-      retry: {
-        max_retries: 3,
-        retry_base_delay_secs: 5,
-      },
-      recipe: buildRecipe(),
-      filters: [],
-      transforms: [],
-      links: [],
-    };
-  }
+  const resolvedPipe = resolvedPipeData ? resolvedPipeData.pipe : null;
+  const submitPending = createPipe.isPending || updatePipe.isPending;
+  const loadingEditState = isEditMode && resolvePipe.isLoading && !resolvedPipe;
 
   function handlePresetSelection(presetNameValue: string) {
-    setSelectedPresetName(presetNameValue);
-    if (!presetNameValue) return;
+    if (!presetNameValue) {
+      setSelectedPresetName("");
+      return;
+    }
     const preset = presets.find((item) => item.name === presetNameValue);
     if (!preset) return;
-    startTransition(() => applyPreset(preset));
+    requestPresetApplication(preset);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const spec = buildPresetSpec();
+    const payload = buildPipePayload(draft);
+
+    if (isEditMode && pipeName) {
+      updatePipe.mutate(
+        {
+          ...payload,
+          recipe: payload.recipe,
+          enabled,
+        },
+        {
+          onSuccess: () => {
+            toast("success", `Pipe "${pipeName}" updated`);
+            onClose();
+          },
+          onError: (err) => toast("error", err.message),
+        },
+      );
+      return;
+    }
 
     createPipe.mutate(
       {
-        name,
-        ...spec,
-        origin_credential: spec.origin_credential ?? undefined,
-        recipe: spec.recipe ?? undefined,
+        name: name.trim(),
+        ...payload,
+        recipe: payload.recipe ?? undefined,
       },
       {
         onSuccess: () => {
-          toast("success", `Pipe "${name}" created`);
+          toast("success", `Pipe "${name.trim()}" created`);
           onClose();
         },
         onError: (err) => toast("error", err.message),
@@ -266,11 +197,11 @@ export function PipeForm({
 
   function handleSavePreset() {
     if (!presetName.trim()) {
-      toast("error", "Preset name is required");
+      toast("error", "Recipe name is required");
       return;
     }
     if (!canSavePreset) {
-      toast("error", "Preset needs either a valid recipe or valid manual queries");
+      toast("error", "Saved recipe needs either a valid recipe draft or valid manual queries");
       return;
     }
 
@@ -278,12 +209,12 @@ export function PipeForm({
       {
         name: presetName.trim(),
         description: presetDescription.trim() || undefined,
-        spec: buildPresetSpec(),
+        spec: buildPipePresetSpec(draft),
       },
       {
         onSuccess: () => {
           const savedName = presetName.trim();
-          toast("success", `Preset "${savedName}" saved`);
+          toast("success", `Saved recipe "${savedName}" saved`);
           setSelectedPresetName(savedName);
           setPresetPanelOpen(false);
           setPresetName("");
@@ -302,7 +233,7 @@ export function PipeForm({
           <div>
             <div className="eyebrow">Runnable Onboarding</div>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-              Create PostgreSQL Pipe
+              {isEditMode ? "Edit PostgreSQL Pipe" : "Create PostgreSQL Pipe"}
             </h2>
           </div>
           <button
@@ -313,12 +244,24 @@ export function PipeForm({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {loadingEditState ? (
+          <div className="panel-subtle flex items-center justify-center p-10 text-sm text-slate-400">
+            Loading persisted pipe config...
+          </div>
+        ) : null}
+
+        {!loadingEditState && resolvePipe.isError ? (
+          <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+            Failed to load pipe details: {resolvePipe.error.message}
+          </div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} className={`space-y-6 ${loadingEditState ? "hidden" : ""}`}>
           <div className="panel-subtle p-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Preset
+                  Saved Recipe
                 </label>
                 <select
                   value={selectedPresetName}
@@ -333,7 +276,7 @@ export function PipeForm({
                   ))}
                 </select>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Saved presets are reusable control-plane templates. They are included in config export/import automatically.
+                  Saved recipes are reusable control-plane templates. They are included in config export/import automatically.
                 </p>
               </div>
               <button
@@ -349,7 +292,7 @@ export function PipeForm({
                 className="action-button-secondary"
               >
                 <BookmarkPlus className="h-4 w-4" />
-                Save As Preset
+                Save As Recipe
               </button>
             </div>
 
@@ -357,7 +300,7 @@ export function PipeForm({
               <div className="mt-4 grid gap-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-200">
-                    Preset Name
+                    Recipe Name
                   </label>
                   <input
                     type="text"
@@ -376,7 +319,7 @@ export function PipeForm({
                     value={presetDescription}
                     onChange={(e) => setPresetDescription(e.target.value)}
                     className={INPUT_CLS}
-                    placeholder="Reusable custom aspect preset"
+                    placeholder="Reusable custom aspect recipe"
                   />
                 </div>
                 <button
@@ -385,7 +328,7 @@ export function PipeForm({
                   disabled={createPreset.isPending || !canSavePreset}
                   className="action-button disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {createPreset.isPending ? "Saving..." : "Save Preset"}
+                  {createPreset.isPending ? "Saving..." : "Save Recipe"}
                 </button>
               </div>
             ) : null}
@@ -402,246 +345,36 @@ export function PipeForm({
                 onChange={(e) => setName(e.target.value)}
                 className={INPUT_CLS}
                 placeholder="some-postgresql-source-snapshot"
+                disabled={isEditMode}
                 required
               />
+              {isEditMode ? (
+                <p className="mt-2 text-sm leading-6 text-slate-400">
+                  Pipe renaming is not supported through the control plane yet. Edit the runtime config in place instead.
+                </p>
+              ) : null}
             </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-200">
-                Mode
-              </label>
-              <select
-                value={pipeMode}
-                onChange={(e) => setPipeMode(e.target.value as PipeMode)}
-                className={INPUT_CLS}
-              >
-                <option value="manual">manual</option>
-                <option value="postgres_snapshot">postgres_snapshot</option>
-                <option value="postgres_metadata">postgres_metadata</option>
-              </select>
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-slate-400">
+              Pipes are runnable sync units. Saved recipes fill defaults; pipe edits control actual scheduler state, enablement, and runtime expansion.
             </div>
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">
-              PostgreSQL DSN
-            </label>
+          <RecipeSpecEditor draft={draft} sinks={sinks} onDraftChange={setDraft} />
+
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
             <input
-              type="text"
-              value={originDsn}
-              onChange={(e) => setOriginDsn(e.target.value)}
-              className={INPUT_CLS}
-              placeholder="postgres://user:pass@host:5432/db"
-              required
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-white/20 bg-transparent"
             />
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              This is the actual runtime origin DSN used by the connector. Recipe introspection and manual SQL both use it directly.
-            </p>
-          </div>
-
-          {pipeMode === "manual" ? (
-            <div className="panel-subtle p-4">
-              <div className="mb-2 text-sm font-medium text-slate-200">
-                Manual Queries
-              </div>
-              <p className="text-sm leading-6 text-slate-400">
-                Define explicit query ids and SQL. This is the path for custom aspects and non-standard onboarding without a built-in recipe.
-              </p>
-
-              <div className="mt-4 space-y-4">
-                {manualQueries.map((query, index) => (
-                  <div
-                    key={`${index}-${query.id}`}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
-                  >
-                    <div className="mb-4 flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-slate-200">
-                        Query {index + 1}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeManualQuery(index)}
-                        className="rounded-xl border border-white/8 bg-white/[0.03] p-2 text-slate-400 transition-colors hover:border-rose-300/25 hover:text-rose-300"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-slate-200">
-                          Query ID
-                        </label>
-                        <input
-                          type="text"
-                          value={query.id}
-                          onChange={(e) =>
-                            updateManualQuery(index, { id: e.target.value })
-                          }
-                          className={INPUT_CLS}
-                          placeholder="aspect-columns"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-slate-200">
-                          Key Column
-                        </label>
-                        <input
-                          type="text"
-                          value={query.key_column}
-                          onChange={(e) =>
-                            updateManualQuery(index, {
-                              key_column: e.target.value,
-                            })
-                          }
-                          className={INPUT_CLS}
-                          placeholder="entityId"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <label className="mb-2 block text-sm font-medium text-slate-200">
-                        SQL
-                      </label>
-                      <textarea
-                        value={query.sql}
-                        onChange={(e) =>
-                          updateManualQuery(index, { sql: e.target.value })
-                        }
-                        rows={8}
-                        spellCheck={false}
-                        className="w-full rounded-2xl border border-white/10 bg-[#0a1320] px-4 py-3 font-mono text-sm text-slate-100 outline-none"
-                        placeholder="SELECT entity_id AS entityId, payload FROM ..."
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={addManualQuery}
-                className="action-button-secondary mt-4"
-              >
-                <Plus className="h-4 w-4" />
-                Add Query
-              </button>
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Prefix
-                </label>
-                <input
-                  type="text"
-                  value={prefix}
-                  onChange={(e) => setPrefix(e.target.value)}
-                  className={INPUT_CLS}
-                  placeholder="some-postgresql-source"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Schemas
-                </label>
-                <input
-                  type="text"
-                  value={schemas}
-                  onChange={(e) => setSchemas(e.target.value)}
-                  className={INPUT_CLS}
-                  placeholder="public, analytics"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">
-                  Credential Name
-                </label>
-                <input
-                  type="text"
-                  value={originCredential}
-                  onChange={(e) => setOriginCredential(e.target.value)}
-                  className={INPUT_CLS}
-                  placeholder="optional-credential-ref"
-                />
-              </div>
-            </div>
-          )}
-
-          {pipeMode === "manual" ? (
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-200">
-                Credential Name
-              </label>
-              <input
-                type="text"
-                value={originCredential}
-                onChange={(e) => setOriginCredential(e.target.value)}
-                className={INPUT_CLS}
-                placeholder="optional-credential-ref"
-              />
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-200">
-                Interval Seconds
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={intervalSecs}
-                onChange={(e) => setIntervalSecs(Number(e.target.value))}
-                className={INPUT_CLS}
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-200">
-                Diff Mode
-              </label>
-              <select
-                value={diffMode}
-                onChange={(e) => setDiffMode(e.target.value as DiffMode)}
-                className={INPUT_CLS}
-              >
-                <option value="db">db</option>
-                <option value="memory">memory</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="panel-subtle p-4">
-            <div className="mb-3 text-sm font-medium text-slate-200">Target Sinks</div>
-            {sinks.length === 0 ? (
-              <p className="text-sm leading-6 text-slate-400">
-                No sinks configured yet. Create a sink first, then return here to bind targets.
-              </p>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {sinks.map((sink) => (
-                  <label
-                    key={sink.name}
-                    className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedTargets.includes(sink.name)}
-                      onChange={() => toggleTarget(sink.name)}
-                      className="h-4 w-4 rounded border-white/20 bg-transparent"
-                    />
-                    <div>
-                      <div className="text-sm font-medium text-white">{sink.name}</div>
-                      <div className="text-xs font-mono text-slate-500">
-                        {sink.sink_type}
-                      </div>
-                    </div>
-                  </label>
-                ))}
+              <div className="text-sm font-medium text-white">Pipe enabled</div>
+              <div className="text-xs text-slate-500">
+                Disabled pipes stay persisted and exportable, but scheduler expansion skips them.
               </div>
-            )}
-          </div>
+            </div>
+          </label>
 
           <div className="flex justify-end gap-3 pt-2">
             <button
@@ -653,14 +386,30 @@ export function PipeForm({
             </button>
             <button
               type="submit"
-              disabled={createPipe.isPending || !canSubmit}
+              disabled={submitPending || !canSubmit}
               className="action-button disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {createPipe.isPending ? "Creating..." : "Create Pipe"}
+              {submitPending
+                ? isEditMode
+                  ? "Saving..."
+                  : "Creating..."
+                : isEditMode
+                  ? "Save Pipe"
+                  : "Create Pipe"}
             </button>
           </div>
         </form>
       </div>
+      <RecipeParameterValuesDialog
+        open={parameterPreset !== null}
+        preset={parameterPreset}
+        onCancel={() => setParameterPreset(null)}
+        onApply={(materializedPreset) => {
+          setSelectedPresetName(materializedPreset.name);
+          setParameterPreset(null);
+          startTransition(() => applyPreset(materializedPreset));
+        }}
+      />
     </div>
   );
 }

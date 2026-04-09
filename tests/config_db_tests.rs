@@ -4,7 +4,8 @@ use common::postgres::TestPostgres;
 use common::surreal::TestSurrealContainer;
 use oversync::config::{
 	DeltaDef, DiffMode, LinkDef, LinkStrategy, MissedTickPolicy, OriginDef, PipePresetDef,
-	PipePresetSpec, QueryDef, RetryDef, ScheduleDef, SurrealDbDef, SyncConfig,
+	PipePresetParameterDef, PipePresetSpec, QueryDef, RetryDef, ScheduleDef, SurrealDbDef,
+	SyncConfig,
 };
 use oversync::config_db::{load_config_from_db, replace_config_in_db};
 use oversync::recipes::expand_runtime_pipe;
@@ -25,7 +26,6 @@ async fn load_empty_config_returns_empty() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 	let config = load_config_from_db(&container.client, &def).await.unwrap();
-	assert!(config.sources.is_empty());
 	assert!(config.sinks.is_empty());
 	assert!(config.pipe_presets.is_empty());
 }
@@ -37,7 +37,6 @@ async fn replace_and_load_pipe_presets_round_trip() {
 
 	let config = SyncConfig {
 		surrealdb: def.clone(),
-		sources: vec![],
 		sinks: vec![],
 		pipes: vec![],
 		pipe_presets: vec![PipePresetDef {
@@ -51,6 +50,14 @@ async fn replace_and_load_pipe_presets_round_trip() {
 					trino_url: None,
 					config: serde_json::json!({ "sslmode": "require" }),
 				},
+				parameters: vec![PipePresetParameterDef {
+					name: "source_name".into(),
+					label: Some("Source Name".into()),
+					description: Some("Logical source prefix".into()),
+					default: Some("some-postgresql-source".into()),
+					required: true,
+					secret: false,
+				}],
 				targets: vec!["kafka-main".into()],
 				queries: vec![QueryDef {
 					id: "aspect-columns".into(),
@@ -99,6 +106,15 @@ async fn replace_and_load_pipe_presets_round_trip() {
 		Some("Reusable manual columns aspect")
 	);
 	assert_eq!(loaded.pipe_presets[0].spec.origin.connector, "postgres");
+	assert_eq!(loaded.pipe_presets[0].spec.parameters.len(), 1);
+	assert_eq!(
+		loaded.pipe_presets[0].spec.parameters[0].name,
+		"source_name"
+	);
+	assert_eq!(
+		loaded.pipe_presets[0].spec.parameters[0].default.as_deref(),
+		Some("some-postgresql-source")
+	);
 	assert_eq!(
 		loaded.pipe_presets[0].spec.origin.credential.as_deref(),
 		Some("shared-secret")
@@ -127,7 +143,7 @@ async fn replace_and_load_pipe_presets_round_trip() {
 }
 
 #[tokio::test]
-async fn load_sources_from_db() {
+async fn legacy_source_rows_are_ignored() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 
@@ -150,18 +166,7 @@ async fn load_sources_from_db() {
 		.unwrap();
 
 	let config = load_config_from_db(&container.client, &def).await.unwrap();
-	assert_eq!(config.sources.len(), 1);
-	assert_eq!(config.sources[0].name, "pg-main");
-	assert_eq!(config.sources[0].connector, "postgres");
-	assert_eq!(config.sources[0].dsn, "postgres://localhost/db");
-	assert_eq!(config.sources[0].interval_secs, 120);
-	assert_eq!(config.sources[0].queries.len(), 1);
-	assert_eq!(config.sources[0].queries[0].id, "users");
-	assert_eq!(config.sources[0].queries[0].key_column, "id");
-	assert_eq!(
-		config.sources[0].queries[0].transform.as_deref(),
-		Some("smt::normalize_users")
-	);
+	assert!(config.pipes.is_empty());
 }
 
 #[tokio::test]
@@ -186,7 +191,7 @@ async fn load_sinks_from_db() {
 }
 
 #[tokio::test]
-async fn disabled_sources_excluded() {
+async fn disabled_legacy_sources_are_ignored() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 
@@ -202,8 +207,7 @@ async fn disabled_sources_excluded() {
 		.unwrap();
 
 	let config = load_config_from_db(&container.client, &def).await.unwrap();
-	assert_eq!(config.sources.len(), 1);
-	assert_eq!(config.sources[0].name, "active");
+	assert!(config.pipes.is_empty());
 }
 
 #[tokio::test]
@@ -232,7 +236,7 @@ async fn disabled_sinks_excluded() {
 }
 
 #[tokio::test]
-async fn multiple_queries_per_source() {
+async fn legacy_source_queries_do_not_create_pipe_entries() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 
@@ -259,7 +263,7 @@ async fn multiple_queries_per_source() {
 		.unwrap();
 
 	let config = load_config_from_db(&container.client, &def).await.unwrap();
-	assert_eq!(config.sources[0].queries.len(), 2);
+	assert!(config.pipes.is_empty());
 }
 
 #[tokio::test]
@@ -400,6 +404,13 @@ async fn load_pipe_presets_from_db() {
 					"trino_url": null,
 					"config": {}
 				},
+				"parameters": [{
+					"name": "source_name",
+					"label": "Source Name",
+					"default": "some-postgresql-source",
+					"required": true,
+					"secret": false
+				}],
 				"targets": ["stdout"],
 				"queries": [{
 					"id": "aspect-columns",
@@ -447,14 +458,21 @@ async fn loaded_pipe_presets_export_to_toml() {
 		.bind((
 			"spec",
 			serde_json::json!({
-				"origin": {
-					"connector": "postgres",
-					"dsn": "postgres://localhost/db",
-					"credential": null,
-					"trino_url": null,
-					"config": {}
-				},
-				"targets": ["stdout"],
+					"origin": {
+						"connector": "postgres",
+						"dsn": "postgres://localhost/db",
+						"credential": null,
+						"trino_url": null,
+						"config": {}
+					},
+					"parameters": [{
+						"name": "source_name",
+						"label": "Source Name",
+						"default": "some-postgresql-source",
+						"required": true,
+						"secret": false
+					}],
+					"targets": ["stdout"],
 				"queries": [{
 					"id": "aspect-columns",
 					"sql": "SELECT id, payload FROM columns_view",
@@ -480,6 +498,8 @@ async fn loaded_pipe_presets_export_to_toml() {
 	assert!(toml.contains("[[pipe_presets]]"));
 	assert!(toml.contains("name = \"datacat-columns\""));
 	assert!(toml.contains("[pipe_presets.spec.origin]"));
+	assert!(toml.contains("[[pipe_presets.spec.parameters]]"));
+	assert!(toml.contains("name = \"source_name\""));
 }
 
 #[tokio::test]

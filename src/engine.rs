@@ -2,10 +2,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 #[cfg(feature = "api")]
-use serde::Serialize;
+use axum::http::StatusCode;
+#[cfg(feature = "api")]
+use serde::{Deserialize, Serialize};
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use tracing::info;
+#[cfg(feature = "api")]
+use utoipa::{OpenApi, ToSchema};
 
 use oversync_connectors::{
 	ClickHouseOriginFactory, FlightSqlOriginFactory, GraphqlOriginFactory, HttpOriginFactory,
@@ -216,7 +220,6 @@ impl OversyncEngine {
 	/// Requires the `api` feature. Mount into your own axum app or serve standalone.
 	#[cfg(feature = "api")]
 	pub async fn api_router(&self) -> Result<axum::Router, OversyncError> {
-		use std::collections::HashMap;
 		use tokio::sync::RwLock;
 
 		let lifecycle_adapter = LifecycleAdapter {
@@ -225,17 +228,15 @@ impl OversyncEngine {
 		};
 
 		let api_state = Arc::new(oversync_api::state::ApiState {
-			sources: Arc::new(RwLock::new(vec![])),
 			sinks: Arc::new(RwLock::new(vec![])),
 			pipes: Arc::new(RwLock::new(vec![])),
 			pipe_presets: Arc::new(RwLock::new(vec![])),
-			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: Some(self.state_client.clone()),
 			lifecycle: Some(Arc::new(lifecycle_adapter)),
 			api_key: self.api_key.clone(),
 		});
 
-		// Load initial cache from DB so history/sources/sinks are populated
+		// Load initial cache from DB so history, sinks, pipes, and recipes are populated.
 		oversync_api::mutations::refresh_read_cache(&api_state).await?;
 
 		// Install prometheus metrics exporter
@@ -243,7 +244,7 @@ impl OversyncEngine {
 			.install_recorder()
 			.ok();
 
-		let base = oversync_api::router(api_state.clone());
+		let base = oversync_api::router_with_openapi(api_state.clone(), merged_api_doc());
 
 		let registry = crate::engine::default_registry();
 		let dry_run_credential_store = credential_store_from_passphrase(
@@ -330,12 +331,139 @@ fn credential_store_from_passphrase(
 }
 
 #[cfg(feature = "api")]
+fn api_error(
+	status: StatusCode,
+	error: impl std::fmt::Display,
+) -> (StatusCode, axum::Json<oversync_api::types::ErrorResponse>) {
+	(
+		status,
+		axum::Json(oversync_api::types::ErrorResponse {
+			error: error.to_string(),
+		}),
+	)
+}
+
+#[cfg(feature = "api")]
 struct DryRunState {
 	registry: PluginRegistry,
 	delta_engine: Arc<DeltaEngine>,
 	state_db: Arc<Surreal<Any>>,
 	credential_store: crate::credential::AesGcmStore,
 	surreal_def: SurrealDbDef,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+enum DryRunModeDoc {
+	Mock,
+	Live,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+struct TransientCredentialsDoc {
+	username: String,
+	password: String,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+struct DryRunRequestDoc {
+	pipe: crate::config::PipeConfig,
+	query_id: String,
+	mode: DryRunModeDoc,
+	#[schema(value_type = Vec<Object>)]
+	mock_data: Vec<serde_json::Value>,
+	row_limit: usize,
+	#[schema(value_type = Vec<Object>)]
+	transforms: Vec<serde_json::Value>,
+	use_existing_state: bool,
+	credentials: Option<TransientCredentialsDoc>,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+struct DryRunChangesDoc {
+	created: usize,
+	updated: usize,
+	deleted: usize,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+struct DryRunStatsDoc {
+	rows_fetched: usize,
+	events_before_transform: usize,
+	events_after_transform: usize,
+	events_filtered_out: usize,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+struct DryRunResultDoc {
+	input_rows: usize,
+	#[schema(value_type = Vec<Object>)]
+	input_sample: Vec<serde_json::Value>,
+	changes: DryRunChangesDoc,
+	#[schema(value_type = Vec<Object>)]
+	after_transform: Vec<serde_json::Value>,
+	stats: DryRunStatsDoc,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Clone, Serialize, ToSchema)]
+struct PipeResolveResponseDoc {
+	pipe: crate::config::PipeConfig,
+	effective_queries: Vec<crate::config::QueryDef>,
+}
+
+#[cfg(feature = "api")]
+#[derive(OpenApi)]
+#[openapi(
+	paths(
+		dry_run_handler,
+		resolve_pipe_handler,
+		create_credential,
+		list_credentials,
+		delete_credential,
+		list_config_versions,
+	),
+	components(schemas(
+		DryRunModeDoc,
+		TransientCredentialsDoc,
+		DryRunRequestDoc,
+		DryRunChangesDoc,
+		DryRunStatsDoc,
+		DryRunResultDoc,
+		PipeResolveResponseDoc,
+		crate::config::PipeConfig,
+		crate::config::QueryDef,
+		crate::config::OriginDef,
+		crate::config::ScheduleDef,
+		crate::config::DeltaDef,
+		crate::config::RetryDef,
+		crate::config::PipeRecipeDef,
+		crate::config::PipeRecipeType,
+		crate::config::LinkDef,
+		crate::config::LinkStrategy,
+		crate::config::MissedTickPolicy,
+		crate::config::DiffMode,
+		crate::config_version::ConfigVersion,
+		oversync_api::types::CreateCredentialRequest,
+		oversync_api::types::CredentialListResponse,
+		oversync_api::types::CredentialInfo,
+		oversync_api::types::MutationResponse,
+		oversync_api::types::ErrorResponse,
+	))
+)]
+struct EngineApiDoc;
+
+#[cfg(feature = "api")]
+fn merged_api_doc() -> utoipa::openapi::OpenApi {
+	let mut openapi = oversync_api::ApiDoc::openapi();
+	openapi.merge(EngineApiDoc::openapi());
+	openapi
 }
 
 #[cfg(feature = "api")]
@@ -363,42 +491,67 @@ async fn resolve_stored_pipe_credentials(
 }
 
 #[cfg(feature = "api")]
+#[utoipa::path(
+	get,
+	path = "/pipes/{name}/resolve",
+	params(("name" = String, Path, description = "Pipe name")),
+	responses(
+		(
+			status = 200,
+			description = "Pipe definition with runtime-expanded effective queries",
+			body = PipeResolveResponseDoc
+		),
+		(status = 404, description = "Pipe not found", body = oversync_api::types::ErrorResponse),
+		(
+			status = 400,
+			description = "Pipe credentials or recipe expansion failed",
+			body = oversync_api::types::ErrorResponse
+		),
+		(
+			status = 500,
+			description = "Control-plane config could not be loaded",
+			body = oversync_api::types::ErrorResponse
+		)
+	)
+)]
 async fn resolve_pipe_handler(
 	axum::extract::State(state): axum::extract::State<Arc<DryRunState>>,
 	axum::extract::Path(name): axum::extract::Path<String>,
-) -> Result<axum::Json<PipeResolveResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+) -> Result<
+	axum::Json<PipeResolveResponse>,
+	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
+> {
 	let config = crate::config_db::load_config_from_db(&state.state_db, &state.surreal_def)
 		.await
 		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("load pipe config: {e}"),
-			})
+			api_error(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				format!("load pipe config: {e}"),
+			)
 		})?;
 
 	let pipe = config
 		.pipes
 		.into_iter()
 		.find(|pipe| pipe.name == name)
-		.ok_or_else(|| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("pipe not found: {name}"),
-			})
-		})?;
+		.ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("pipe not found: {name}")))?;
 
 	let mut runtime_pipe = pipe.clone();
 	resolve_stored_pipe_credentials(&mut runtime_pipe, &state)
 		.await
 		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("resolve pipe credentials: {e}"),
-			})
+			api_error(
+				StatusCode::BAD_REQUEST,
+				format!("resolve pipe credentials: {e}"),
+			)
 		})?;
 	let effective_queries = crate::recipes::expand_runtime_pipe(runtime_pipe)
 		.await
 		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("resolve runtime pipe: {e}"),
-			})
+			api_error(
+				StatusCode::BAD_REQUEST,
+				format!("resolve runtime pipe: {e}"),
+			)
 		})?
 		.queries;
 
@@ -409,28 +562,41 @@ async fn resolve_pipe_handler(
 }
 
 #[cfg(feature = "api")]
+#[utoipa::path(
+	post,
+	path = "/pipes/dry-run",
+	request_body = DryRunRequestDoc,
+	responses(
+		(status = 200, description = "Dry-run preview result", body = DryRunResultDoc),
+		(
+			status = 400,
+			description = "Request validation, credential resolution, or execution failed",
+			body = oversync_api::types::ErrorResponse
+		)
+	)
+)]
 async fn dry_run_handler(
 	axum::extract::State(state): axum::extract::State<Arc<DryRunState>>,
 	axum::Json(mut req): axum::Json<crate::dry_run::DryRunRequest>,
-) -> Result<axum::Json<crate::dry_run::DryRunResult>, axum::Json<oversync_api::types::ErrorResponse>>
-{
+) -> Result<
+	axum::Json<crate::dry_run::DryRunResult>,
+	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
+> {
 	resolve_stored_pipe_credentials(&mut req.pipe, &state)
 		.await
 		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("resolve pipe credentials: {e}"),
-			})
+			api_error(
+				StatusCode::BAD_REQUEST,
+				format!("resolve pipe credentials: {e}"),
+			)
 		})?;
 
 	let transform_hook: Option<std::sync::Arc<dyn oversync_core::traits::TransformHook>> =
 		if req.transforms.is_empty() {
 			None
 		} else {
-			let chain = oversync_transforms::parse_steps(&req.transforms).map_err(|e| {
-				axum::Json(oversync_api::types::ErrorResponse {
-					error: e.to_string(),
-				})
-			})?;
+			let chain = oversync_transforms::parse_steps(&req.transforms)
+				.map_err(|e| api_error(StatusCode::BAD_REQUEST, e))?;
 			Some(std::sync::Arc::new(chain))
 		};
 
@@ -441,11 +607,7 @@ async fn dry_run_handler(
 		Some(state.delta_engine.as_ref()),
 	)
 	.await
-	.map_err(|e| {
-		axum::Json(oversync_api::types::ErrorResponse {
-			error: e.to_string(),
-		})
-	})?;
+	.map_err(|e| api_error(StatusCode::BAD_REQUEST, e))?;
 	Ok(axum::Json(result))
 }
 
@@ -456,18 +618,30 @@ struct CredentialState {
 }
 
 #[cfg(feature = "api")]
+#[utoipa::path(
+	post,
+	path = "/credentials",
+	request_body = oversync_api::types::CreateCredentialRequest,
+	responses(
+		(status = 200, description = "Credential stored", body = oversync_api::types::MutationResponse),
+		(
+			status = 500,
+			description = "Credential could not be encrypted or persisted",
+			body = oversync_api::types::ErrorResponse
+		)
+	)
+)]
 async fn create_credential(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 	axum::Json(req): axum::Json<oversync_api::types::CreateCredentialRequest>,
 ) -> Result<
 	axum::Json<oversync_api::types::MutationResponse>,
-	axum::Json<oversync_api::types::ErrorResponse>,
+	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
 > {
-	let encrypted = state.store.encrypt(&req.secret).map_err(|e| {
-		axum::Json(oversync_api::types::ErrorResponse {
-			error: e.to_string(),
-		})
-	})?;
+	let encrypted = state
+		.store
+		.encrypt(&req.secret)
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
 	const SQL_DEL_CRED: &str = oversync_queries::credential::DELETE_CREDENTIAL;
 	const SQL_CREATE_CRED: &str = oversync_queries::credential::CREATE_CREDENTIAL;
@@ -477,11 +651,7 @@ async fn create_credential(
 		.query(SQL_DEL_CRED)
 		.bind(("name", req.name.clone()))
 		.await
-		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("db: {e}"),
-			})
-		})?;
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
 	state
 		.db
@@ -490,11 +660,7 @@ async fn create_credential(
 		.bind(("ctype", req.credential_type))
 		.bind(("enc", encrypted))
 		.await
-		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("db: {e}"),
-			})
-		})?;
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
 	Ok(axum::Json(oversync_api::types::MutationResponse {
 		ok: true,
@@ -503,25 +669,39 @@ async fn create_credential(
 }
 
 #[cfg(feature = "api")]
+#[utoipa::path(
+	get,
+	path = "/credentials",
+	responses(
+		(
+			status = 200,
+			description = "Stored credential metadata",
+			body = oversync_api::types::CredentialListResponse
+		),
+		(
+			status = 500,
+			description = "Credential metadata could not be loaded",
+			body = oversync_api::types::ErrorResponse
+		)
+	)
+)]
 async fn list_credentials(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 ) -> Result<
 	axum::Json<oversync_api::types::CredentialListResponse>,
-	axum::Json<oversync_api::types::ErrorResponse>,
+	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
 > {
 	const SQL_LIST_CREDS: &str = oversync_queries::credential::LIST_CREDENTIALS;
 
-	let mut resp = state.db.query(SQL_LIST_CREDS).await.map_err(|e| {
-		axum::Json(oversync_api::types::ErrorResponse {
-			error: format!("db: {e}"),
-		})
-	})?;
+	let mut resp = state
+		.db
+		.query(SQL_LIST_CREDS)
+		.await
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
-	let rows: Vec<serde_json::Value> = resp.take(0).map_err(|e| {
-		axum::Json(oversync_api::types::ErrorResponse {
-			error: format!("db: {e}"),
-		})
-	})?;
+	let rows: Vec<serde_json::Value> = resp
+		.take(0)
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
 	let credentials = rows
 		.iter()
@@ -540,12 +720,29 @@ async fn list_credentials(
 }
 
 #[cfg(feature = "api")]
+#[utoipa::path(
+	delete,
+	path = "/credentials/{name}",
+	params(("name" = String, Path, description = "Credential name")),
+	responses(
+		(
+			status = 200,
+			description = "Credential deleted",
+			body = oversync_api::types::MutationResponse
+		),
+		(
+			status = 500,
+			description = "Credential could not be deleted",
+			body = oversync_api::types::ErrorResponse
+		)
+	)
+)]
 async fn delete_credential(
 	axum::extract::State(state): axum::extract::State<Arc<CredentialState>>,
 	axum::extract::Path(name): axum::extract::Path<String>,
 ) -> Result<
 	axum::Json<oversync_api::types::MutationResponse>,
-	axum::Json<oversync_api::types::ErrorResponse>,
+	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
 > {
 	const SQL_DEL: &str = oversync_queries::credential::DELETE_CREDENTIAL;
 
@@ -554,11 +751,7 @@ async fn delete_credential(
 		.query(SQL_DEL)
 		.bind(("name", name.clone()))
 		.await
-		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: format!("db: {e}"),
-			})
-		})?;
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("db: {e}")))?;
 
 	Ok(axum::Json(oversync_api::types::MutationResponse {
 		ok: true,
@@ -567,21 +760,34 @@ async fn delete_credential(
 }
 
 #[cfg(feature = "api")]
+#[utoipa::path(
+	get,
+	path = "/config/versions",
+	responses(
+		(
+			status = 200,
+			description = "Saved config versions",
+			body = [crate::config_version::ConfigVersion]
+		),
+		(
+			status = 500,
+			description = "Config versions could not be loaded",
+			body = oversync_api::types::ErrorResponse
+		)
+	)
+)]
 async fn list_config_versions(
 	axum::extract::State(db): axum::extract::State<
 		Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>,
 	>,
-) -> Result<axum::Json<serde_json::Value>, axum::Json<oversync_api::types::ErrorResponse>> {
+) -> Result<
+	axum::Json<Vec<crate::config_version::ConfigVersion>>,
+	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
+> {
 	let versions = crate::config_version::list_versions(&db)
 		.await
-		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: e.to_string(),
-			})
-		})?;
-	Ok(axum::Json(
-		serde_json::to_value(&versions).unwrap_or_default(),
-	))
+		.map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e))?;
+	Ok(axum::Json(versions))
 }
 
 impl OversyncEngineBuilder {

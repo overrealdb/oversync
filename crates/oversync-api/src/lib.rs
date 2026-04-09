@@ -2,7 +2,6 @@ pub mod auth;
 pub mod handlers;
 pub mod mutations;
 pub mod operations;
-pub mod queries;
 pub mod state;
 pub mod types;
 
@@ -19,16 +18,11 @@ use crate::state::ApiState;
 #[openapi(
 	paths(
 		handlers::health,
-		handlers::list_sources,
-		handlers::get_source,
 		handlers::list_sinks,
 		handlers::list_pipes,
 		handlers::list_pipe_presets,
 		handlers::get_pipe,
 		handlers::get_pipe_preset,
-		mutations::create_source,
-		mutations::update_source,
-		mutations::delete_source,
 		mutations::create_sink,
 		mutations::update_sink,
 		mutations::delete_sink,
@@ -38,24 +32,15 @@ use crate::state::ApiState;
 		mutations::create_pipe_preset,
 		mutations::update_pipe_preset,
 		mutations::delete_pipe_preset,
-		operations::trigger_source,
 		operations::pause_sync,
 		operations::resume_sync,
 		operations::export_config,
 		operations::import_config,
 		operations::get_history,
 		operations::sync_status,
-		queries::list_queries,
-		queries::create_query,
-		queries::update_query,
-		queries::delete_query,
 	),
 	components(schemas(
 		types::HealthResponse,
-		types::SourceListResponse,
-		types::SourceInfo,
-		types::QueryInfo,
-		types::SourceStatus,
 		types::CycleInfo,
 		types::SinkListResponse,
 		types::SinkInfo,
@@ -64,11 +49,9 @@ use crate::state::ApiState;
 		types::PipePresetListResponse,
 		types::PipePresetInfo,
 		types::PipePresetSpecInput,
+		types::PipePresetParameterInput,
 		types::PipeQueryInput,
-		types::TriggerResponse,
 		types::ErrorResponse,
-		types::CreateSourceRequest,
-		types::UpdateSourceRequest,
 		types::CreateSinkRequest,
 		types::UpdateSinkRequest,
 		types::CreatePipeRequest,
@@ -83,41 +66,23 @@ use crate::state::ApiState;
 		types::ExportConfigResponse,
 		types::ImportConfigRequest,
 		types::ImportConfigResponse,
-		types::CreateQueryRequest,
-		types::UpdateQueryRequest,
-		types::QueryListResponse,
-		types::QueryDetail,
 	)),
 	info(
 		title = "oversync API",
 		version = "0.1.0",
-		description = "HTTP API for managing oversync sources, sinks, and sync status."
+		description = "HTTP API for managing oversync pipes, sinks, recipes, and sync status."
 	)
 )]
 pub struct ApiDoc;
 
 pub fn router(state: Arc<ApiState>) -> Router {
-	// Protected routes — require API key when configured
+	router_with_openapi(state, ApiDoc::openapi())
+}
+
+pub fn router_with_openapi(state: Arc<ApiState>, openapi: utoipa::openapi::OpenApi) -> Router {
+	let openapi = Arc::new(openapi);
+
 	let protected = Router::new()
-		.route(
-			"/sources",
-			get(handlers::list_sources).post(mutations::create_source),
-		)
-		.route(
-			"/sources/{name}",
-			get(handlers::get_source)
-				.put(mutations::update_source)
-				.delete(mutations::delete_source),
-		)
-		.route("/sources/{name}/trigger", post(operations::trigger_source))
-		.route(
-			"/sources/{source}/queries",
-			get(queries::list_queries).post(queries::create_query),
-		)
-		.route(
-			"/sources/{source}/queries/{name}",
-			put(queries::update_query).delete(queries::delete_query),
-		)
 		.route(
 			"/sinks",
 			get(handlers::list_sinks).post(mutations::create_sink),
@@ -157,12 +122,17 @@ pub fn router(state: Arc<ApiState>) -> Router {
 			auth::require_api_key,
 		));
 
-	// Public routes — no auth required
 	Router::new()
 		.route("/health", get(handlers::health))
 		.route(
 			"/openapi.json",
-			get(|| async { axum::Json(ApiDoc::openapi()) }),
+			get({
+				let openapi = Arc::clone(&openapi);
+				move || {
+					let openapi = Arc::clone(&openapi);
+					async move { axum::Json(openapi.as_ref().clone()) }
+				}
+			}),
 		)
 		.merge(protected)
 		.with_state(state)
@@ -175,37 +145,26 @@ mod tests {
 	use axum::http::{Request, StatusCode};
 	use http_body_util::BodyExt;
 	use state::*;
-	use std::collections::HashMap;
-	use tokio::sync::RwLock;
 	use tower::ServiceExt;
 
 	fn test_state() -> Arc<ApiState> {
 		Arc::new(ApiState {
-			sources: Arc::new(RwLock::new(vec![SourceConfig {
-				name: "pg-prod".into(),
-				connector: "postgres".into(),
-				interval_secs: 300,
-				queries: vec![QueryConfig {
-					id: "users".into(),
-					key_column: "id".into(),
-				}],
-			}])),
-			sinks: Arc::new(RwLock::new(vec![SinkConfig {
+			sinks: Arc::new(tokio::sync::RwLock::new(vec![SinkConfig {
 				name: "stdout".into(),
 				sink_type: "stdout".into(),
 				config: None,
 			}])),
-			pipes: Arc::new(RwLock::new(vec![state::PipeConfigCache {
+			pipes: Arc::new(tokio::sync::RwLock::new(vec![state::PipeConfigCache {
 				name: "catalog-sync".into(),
 				origin_connector: "postgres".into(),
 				origin_dsn: "postgres://ro@pg1:5432/meta".into(),
 				targets: vec!["kafka-main".into()],
 				interval_secs: 60,
+				query_count: 2,
 				recipe: None,
 				enabled: true,
 			}])),
-			pipe_presets: Arc::new(RwLock::new(vec![])),
-			cycle_status: Arc::new(RwLock::new(HashMap::new())),
+			pipe_presets: Arc::new(tokio::sync::RwLock::new(vec![])),
 			db_client: None,
 			lifecycle: None,
 			api_key: None,
@@ -231,34 +190,6 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn list_sources_returns_configured() {
-		let app = router(test_state());
-		let (status, json) = get_json(&app, "/sources").await;
-		assert_eq!(status, StatusCode::OK);
-		let sources = json["sources"].as_array().unwrap();
-		assert_eq!(sources.len(), 1);
-		assert_eq!(sources[0]["name"], "pg-prod");
-		assert_eq!(sources[0]["connector"], "postgres");
-		assert_eq!(sources[0]["queries"][0]["id"], "users");
-	}
-
-	#[tokio::test]
-	async fn get_source_by_name() {
-		let app = router(test_state());
-		let (status, json) = get_json(&app, "/sources/pg-prod").await;
-		assert_eq!(status, StatusCode::OK);
-		assert_eq!(json["name"], "pg-prod");
-	}
-
-	#[tokio::test]
-	async fn get_source_not_found() {
-		let app = router(test_state());
-		let (status, json) = get_json(&app, "/sources/nonexistent").await;
-		assert_eq!(status, StatusCode::NOT_FOUND);
-		assert!(json["error"].as_str().unwrap().contains("not found"));
-	}
-
-	#[tokio::test]
 	async fn list_sinks_returns_configured() {
 		let app = router(test_state());
 		let (status, json) = get_json(&app, "/sinks").await;
@@ -267,32 +198,6 @@ mod tests {
 		assert_eq!(sinks.len(), 1);
 		assert_eq!(sinks[0]["name"], "stdout");
 		assert_eq!(sinks[0]["sink_type"], "stdout");
-	}
-
-	#[tokio::test]
-	async fn openapi_spec_is_valid_json() {
-		let app = router(test_state());
-		let (status, json) = get_json(&app, "/openapi.json").await;
-		assert_eq!(status, StatusCode::OK);
-		assert_eq!(json["openapi"], "3.1.0");
-		assert_eq!(json["info"]["title"], "oversync API");
-		assert!(json["paths"]["/health"].is_object());
-		assert!(json["paths"]["/sources"].is_object());
-		assert!(json["paths"]["/sinks"].is_object());
-		assert!(json["paths"]["/pipes"].is_object());
-		assert!(json["paths"]["/config/import"].is_object());
-		assert!(json["paths"]["/config/export"].is_object());
-		assert!(json["paths"]["/history"].is_object());
-		assert!(json["paths"]["/sync/pause"].is_object());
-		assert!(json["paths"]["/sync/resume"].is_object());
-	}
-
-	#[tokio::test]
-	async fn sync_status_returns_default() {
-		let app = router(test_state());
-		let (status, json) = get_json(&app, "/sync/status").await;
-		assert_eq!(status, StatusCode::OK);
-		assert_eq!(json["running"], false);
 	}
 
 	#[tokio::test]
@@ -306,6 +211,7 @@ mod tests {
 		assert_eq!(pipes[0]["origin_connector"], "postgres");
 		assert_eq!(pipes[0]["targets"][0], "kafka-main");
 		assert_eq!(pipes[0]["interval_secs"], 60);
+		assert_eq!(pipes[0]["query_count"], 2);
 		assert!(pipes[0]["enabled"].as_bool().unwrap());
 	}
 
@@ -324,5 +230,32 @@ mod tests {
 		let (status, json) = get_json(&app, "/pipes/nonexistent").await;
 		assert_eq!(status, StatusCode::NOT_FOUND);
 		assert!(json["error"].as_str().unwrap().contains("not found"));
+	}
+
+	#[tokio::test]
+	async fn openapi_spec_is_valid_json() {
+		let app = router(test_state());
+		let (status, json) = get_json(&app, "/openapi.json").await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(json["openapi"], "3.1.0");
+		assert_eq!(json["info"]["title"], "oversync API");
+		assert!(json["paths"]["/health"].is_object());
+		assert!(json["paths"]["/sinks"].is_object());
+		assert!(json["paths"]["/pipes"].is_object());
+		assert!(json["paths"]["/pipe-presets"].is_object());
+		assert!(json["paths"]["/config/import"].is_object());
+		assert!(json["paths"]["/config/export"].is_object());
+		assert!(json["paths"]["/history"].is_object());
+		assert!(json["paths"]["/sync/pause"].is_object());
+		assert!(json["paths"]["/sync/resume"].is_object());
+		assert!(json["paths"]["/sources"].is_null());
+	}
+
+	#[tokio::test]
+	async fn sync_status_returns_default() {
+		let app = router(test_state());
+		let (status, json) = get_json(&app, "/sync/status").await;
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(json["running"], false);
 	}
 }

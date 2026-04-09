@@ -107,6 +107,8 @@ pub mod mutations {
 		include_str!("../surql/queries/mutations/update_pipe_retry.surql");
 	pub const UPDATE_PIPE_RECIPE: &str =
 		include_str!("../surql/queries/mutations/update_pipe_recipe.surql");
+	pub const UPDATE_PIPE_RECIPE_NONE: &str =
+		include_str!("../surql/queries/mutations/update_pipe_recipe_none.surql");
 	pub const UPDATE_PIPE_PRESET: &str =
 		include_str!("../surql/queries/mutations/update_pipe_preset.surql");
 	pub const UPDATE_PIPE_SCHEDULE: &str =

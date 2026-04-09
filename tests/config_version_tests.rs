@@ -14,7 +14,6 @@ fn test_config() -> SyncConfig {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![SinkDef {
 			name: "stdout".into(),
 			sink_type: "stdout".into(),

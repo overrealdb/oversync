@@ -1,27 +1,40 @@
 # oversync-api
 
-Type-safe HTTP API for managing oversync sources, sinks, and sync status.
+Type-safe HTTP API for the shared oversync control-plane surface.
 
 Part of [oversync](https://github.com/overrealdb/oversync).
 
 ## What this crate provides
 
-- **CRUD endpoints for sources, sinks, and pipes** -- create, read, update, delete via REST
-- **Query management** -- per-source query configuration endpoints
+- **CRUD endpoints for pipes, saved recipes, and sinks** -- create, read, update, delete via REST
+- **Pipe-first control plane** -- runtime onboarding, resolve, dry-run, and import/export all flow through pipes
 - **Operational controls** -- trigger sync, pause/resume, view sync status and cycle history
 - **OpenAPI spec** -- auto-generated via utoipa, served at `/openapi.json`
 - **API key auth middleware** -- optional authentication on protected routes
+
+## Engine vs crate routes
+
+`oversync-api::router(...)` serves the shared control-plane routes and its base OpenAPI document.
+
+`OversyncEngine::api_router()` in the root `oversync` crate merges this base spec with engine-owned routes such as:
+
+- `/pipes/dry-run`
+- `/pipes/{name}/resolve`
+- `/credentials`
+- `/config/versions`
+
+That merged router is the recommended surface for standalone and embedded API servers.
 
 ## Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
-| GET/POST | `/sources` | List / create sources |
-| GET/PUT/DELETE | `/sources/{name}` | Get / update / delete source |
-| POST | `/sources/{name}/trigger` | Trigger immediate sync |
-| GET/POST | `/sinks` | List / create sinks |
 | GET/POST | `/pipes` | List / create pipes |
+| GET/PUT/DELETE | `/pipes/{name}` | Get / update / delete pipe |
+| GET/POST | `/pipe-presets` | List / create saved recipes |
+| GET/PUT/DELETE | `/pipe-presets/{name}` | Get / update / delete saved recipe |
+| GET/POST | `/sinks` | List / create sinks |
 | POST | `/sync/pause` | Pause sync |
 | POST | `/sync/resume` | Resume sync |
 | GET | `/sync/status` | Current sync status |

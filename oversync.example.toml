@@ -5,14 +5,20 @@ password = "changeme"    # OVERSYNC_SURREALDB_PASS
 namespace = "oversync"
 database = "sync"
 
-[[sources]]
+[[pipes]]
 name = "product_a"
+
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://readonly@localhost:5432/metadata"
+
+[pipes.schedule]
 interval_secs = 300       # 5 minutes
+
+[pipes.delta]
 fail_safe_threshold = 30.0
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "tables"
 sql = """
 SELECT
@@ -24,7 +30,7 @@ WHERE relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
 """
 key_column = "oid"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "columns"
 sql = """
 SELECT

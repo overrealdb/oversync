@@ -1,16 +1,14 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::types::{PipePresetInfo, SinkInfo, SourceInfo, SourceStatus};
+use crate::types::PipePresetInfo;
+use crate::types::SinkInfo;
 
 pub struct ApiState {
-	pub sources: Arc<RwLock<Vec<SourceConfig>>>,
 	pub sinks: Arc<RwLock<Vec<SinkConfig>>>,
 	pub pipes: Arc<RwLock<Vec<PipeConfigCache>>>,
 	pub pipe_presets: Arc<RwLock<Vec<PipePresetCache>>>,
-	pub cycle_status: Arc<RwLock<HashMap<String, SourceStatus>>>,
 	pub db_client: Option<Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>>,
 	pub lifecycle: Option<Arc<dyn LifecycleControl>>,
 	pub api_key: Option<String>,
@@ -40,18 +38,6 @@ pub trait LifecycleControl: Send + Sync {
 	async fn is_paused(&self) -> bool;
 }
 
-pub struct SourceConfig {
-	pub name: String,
-	pub connector: String,
-	pub interval_secs: u64,
-	pub queries: Vec<QueryConfig>,
-}
-
-pub struct QueryConfig {
-	pub id: String,
-	pub key_column: String,
-}
-
 pub struct SinkConfig {
 	pub name: String,
 	pub sink_type: String,
@@ -64,6 +50,7 @@ pub struct PipeConfigCache {
 	pub origin_dsn: String,
 	pub targets: Vec<String>,
 	pub interval_secs: u64,
+	pub query_count: usize,
 	pub recipe: Option<serde_json::Value>,
 	pub enabled: bool,
 }
@@ -75,42 +62,6 @@ pub struct PipePresetCache {
 }
 
 impl ApiState {
-	pub fn sources_info(&self) -> Vec<SourceInfo> {
-		let sources = match self.sources.try_read() {
-			Ok(s) => s,
-			Err(_) => return vec![],
-		};
-		sources
-			.iter()
-			.map(|s| {
-				let status = self
-					.cycle_status
-					.try_read()
-					.ok()
-					.and_then(|map| map.get(&s.name).cloned())
-					.unwrap_or(SourceStatus {
-						last_cycle: None,
-						total_cycles: 0,
-					});
-
-				SourceInfo {
-					name: s.name.clone(),
-					connector: s.connector.clone(),
-					interval_secs: s.interval_secs,
-					queries: s
-						.queries
-						.iter()
-						.map(|q| crate::types::QueryInfo {
-							id: q.id.clone(),
-							key_column: q.key_column.clone(),
-						})
-						.collect(),
-					status,
-				}
-			})
-			.collect()
-	}
-
 	pub fn sinks_info(&self) -> Vec<SinkInfo> {
 		let sinks = match self.sinks.try_read() {
 			Ok(s) => s,
@@ -139,6 +90,7 @@ impl ApiState {
 				origin_dsn: p.origin_dsn.clone(),
 				targets: p.targets.clone(),
 				interval_secs: p.interval_secs,
+				query_count: p.query_count,
 				recipe: p.recipe.clone(),
 				enabled: p.enabled,
 			})

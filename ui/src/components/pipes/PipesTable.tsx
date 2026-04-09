@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Play, Plus, Trash2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ExternalLink, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useDeletePipe, usePipes } from "@/api/pipes";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -9,9 +10,10 @@ import { useToast } from "@/components/shared/useToast";
 
 interface PipesTableProps {
   onCreate: () => void;
+  onEdit: (name: string) => void;
 }
 
-export function PipesTable({ onCreate }: PipesTableProps) {
+export function PipesTable({ onCreate, onEdit }: PipesTableProps) {
   const { data, isLoading } = usePipes();
   const deletePipe = useDeletePipe();
   const { toast } = useToast();
@@ -80,7 +82,14 @@ export function PipesTable({ onCreate }: PipesTableProps) {
                 <tr key={pipe.name} className="transition-colors hover:bg-white/[0.03]">
                   <td className="px-6 py-4 font-medium text-white">
                     <div className="flex items-center gap-3">
-                      <span>{pipe.name}</span>
+                      <Link
+                        to="/pipes/$name"
+                        params={{ name: pipe.name }}
+                        className="flex items-center gap-1 text-white transition-colors hover:text-emerald-200"
+                      >
+                        <span>{pipe.name}</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
                       {pipe.enabled ? null : (
                         <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200">
                           disabled
@@ -117,6 +126,13 @@ export function PipesTable({ onCreate }: PipesTableProps) {
                         title="Dry Run"
                       >
                         <Play className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => onEdit(pipe.name)}
+                        className="rounded-xl border border-white/8 bg-white/[0.03] p-2 text-slate-400 transition-colors hover:border-blue-300/25 hover:text-blue-300"
+                        title="Edit"
+                      >
+                        <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(pipe.name)}

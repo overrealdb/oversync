@@ -8,13 +8,6 @@ use crate::types::*;
 
 use oversync_queries::mutations;
 
-const SQL_DELETE_SOURCE: &str = mutations::DELETE_SOURCE;
-const SQL_CREATE_SOURCE: &str = mutations::CREATE_SOURCE;
-const SQL_UPDATE_SOURCE_CONNECTOR: &str = mutations::UPDATE_SOURCE_CONNECTOR;
-const SQL_UPDATE_SOURCE_ENABLED: &str = mutations::UPDATE_SOURCE_ENABLED;
-const SQL_UPDATE_SOURCE_CONFIG: &str = mutations::UPDATE_SOURCE_CONFIG;
-const SQL_DELETE_SOURCE_QUERIES: &str = mutations::DELETE_SOURCE_QUERIES;
-
 const SQL_DELETE_SINK: &str = mutations::DELETE_SINK;
 const SQL_CREATE_SINK: &str = mutations::CREATE_SINK;
 const SQL_UPDATE_SINK_TYPE: &str = mutations::UPDATE_SINK_TYPE;
@@ -38,134 +31,12 @@ const SQL_UPDATE_PIPE_SCHEDULE: &str = mutations::UPDATE_PIPE_SCHEDULE;
 const SQL_UPDATE_PIPE_DELTA: &str = mutations::UPDATE_PIPE_DELTA;
 const SQL_UPDATE_PIPE_RETRY: &str = mutations::UPDATE_PIPE_RETRY;
 const SQL_UPDATE_PIPE_RECIPE: &str = mutations::UPDATE_PIPE_RECIPE;
+const SQL_UPDATE_PIPE_RECIPE_NONE: &str = mutations::UPDATE_PIPE_RECIPE_NONE;
 const SQL_UPDATE_PIPE_PRESET: &str = mutations::UPDATE_PIPE_PRESET;
 const SQL_UPDATE_PIPE_FILTERS: &str = mutations::UPDATE_PIPE_FILTERS;
 const SQL_UPDATE_PIPE_TRANSFORMS: &str = mutations::UPDATE_PIPE_TRANSFORMS;
 const SQL_UPDATE_PIPE_LINKS: &str = mutations::UPDATE_PIPE_LINKS;
 const SQL_UPDATE_PIPE_ENABLED: &str = mutations::UPDATE_PIPE_ENABLED;
-
-#[utoipa::path(
-	post,
-	path = "/sources",
-	request_body = CreateSourceRequest,
-	responses(
-		(status = 200, description = "Source created", body = MutationResponse),
-		(status = 400, description = "Bad request", body = ErrorResponse)
-	)
-)]
-pub async fn create_source(
-	State(state): State<Arc<ApiState>>,
-	Json(req): Json<CreateSourceRequest>,
-) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
-	let db = require_db(&state)?;
-
-	let config_json = if req.config.is_null() {
-		serde_json::json!({})
-	} else {
-		req.config
-	};
-
-	db.query(SQL_DELETE_SOURCE)
-		.bind(("name", req.name.clone()))
-		.await
-		.map_err(db_err)?;
-
-	db.query(SQL_CREATE_SOURCE)
-		.bind(("name", req.name.clone()))
-		.bind(("connector", req.connector))
-		.bind(("config", config_json))
-		.await
-		.map_err(db_err)?;
-
-	reload_config(&state).await?;
-
-	Ok(Json(MutationResponse {
-		ok: true,
-		message: format!("source '{}' created", req.name),
-	}))
-}
-
-#[utoipa::path(
-	put,
-	path = "/sources/{name}",
-	params(("name" = String, Path, description = "Source name")),
-	request_body = UpdateSourceRequest,
-	responses(
-		(status = 200, description = "Source updated", body = MutationResponse),
-		(status = 400, description = "Bad request", body = ErrorResponse)
-	)
-)]
-pub async fn update_source(
-	State(state): State<Arc<ApiState>>,
-	Path(name): Path<String>,
-	Json(req): Json<UpdateSourceRequest>,
-) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
-	let db = require_db(&state)?;
-
-	if let Some(connector) = req.connector {
-		db.query(SQL_UPDATE_SOURCE_CONNECTOR)
-			.bind(("name", name.clone()))
-			.bind(("connector", connector))
-			.await
-			.map_err(db_err)?;
-	}
-
-	if let Some(enabled) = req.enabled {
-		db.query(SQL_UPDATE_SOURCE_ENABLED)
-			.bind(("name", name.clone()))
-			.bind(("enabled", enabled))
-			.await
-			.map_err(db_err)?;
-	}
-
-	if let Some(config) = req.config {
-		db.query(SQL_UPDATE_SOURCE_CONFIG)
-			.bind(("name", name.clone()))
-			.bind(("config", config))
-			.await
-			.map_err(db_err)?;
-	}
-
-	reload_config(&state).await?;
-
-	Ok(Json(MutationResponse {
-		ok: true,
-		message: format!("source '{name}' updated"),
-	}))
-}
-
-#[utoipa::path(
-	delete,
-	path = "/sources/{name}",
-	params(("name" = String, Path, description = "Source name")),
-	responses(
-		(status = 200, description = "Source deleted", body = MutationResponse),
-		(status = 400, description = "Bad request", body = ErrorResponse)
-	)
-)]
-pub async fn delete_source(
-	State(state): State<Arc<ApiState>>,
-	Path(name): Path<String>,
-) -> Result<Json<MutationResponse>, Json<ErrorResponse>> {
-	let db = require_db(&state)?;
-
-	db.query(SQL_DELETE_SOURCE)
-		.bind(("name", name.clone()))
-		.await
-		.map_err(db_err)?;
-
-	db.query(SQL_DELETE_SOURCE_QUERIES)
-		.bind(("name", name.clone()))
-		.await
-		.map_err(db_err)?;
-
-	reload_config(&state).await?;
-
-	Ok(Json(MutationResponse {
-		ok: true,
-		message: format!("source '{name}' deleted"),
-	}))
-}
 
 #[utoipa::path(
 	post,
@@ -451,11 +322,21 @@ pub async fn update_pipe(
 	}
 
 	if let Some(recipe) = req.recipe {
-		db.query(SQL_UPDATE_PIPE_RECIPE)
-			.bind(("name", name.clone()))
-			.bind(("v", recipe))
-			.await
-			.map_err(db_err)?;
+		match recipe {
+			Some(recipe) => {
+				db.query(SQL_UPDATE_PIPE_RECIPE)
+					.bind(("name", name.clone()))
+					.bind(("v", recipe))
+					.await
+					.map_err(db_err)?;
+			}
+			None => {
+				db.query(SQL_UPDATE_PIPE_RECIPE_NONE)
+					.bind(("name", name.clone()))
+					.await
+					.map_err(db_err)?;
+			}
+		}
 	}
 
 	if let Some(filters) = req.filters {
@@ -723,6 +604,7 @@ fn storage_pipe_preset_spec_value(
 			"trino_url": spec.trino_url,
 			"config": origin_config,
 		},
+		"parameters": spec.parameters,
 		"targets": spec.targets,
 		"queries": spec.queries,
 		"schedule": schedule,
@@ -743,6 +625,7 @@ fn api_pipe_preset_spec_value(spec: &serde_json::Value) -> Option<serde_json::Va
 			"origin_credential": spec.get("origin_credential").cloned().unwrap_or(serde_json::Value::Null),
 			"trino_url": spec.get("trino_url").cloned().unwrap_or(serde_json::Value::Null),
 			"origin_config": spec.get("origin_config").cloned().unwrap_or_else(|| serde_json::json!({})),
+			"parameters": spec.get("parameters").cloned().unwrap_or_else(|| serde_json::json!([])),
 			"targets": spec.get("targets").cloned().unwrap_or_else(|| serde_json::json!([])),
 			"queries": spec.get("queries").cloned().unwrap_or_else(|| serde_json::json!([])),
 			"schedule": spec.get("schedule").cloned().unwrap_or_else(|| serde_json::json!({})),
@@ -765,6 +648,7 @@ fn api_pipe_preset_spec_value(spec: &serde_json::Value) -> Option<serde_json::Va
 			Some(value) if !value.is_null() => value.clone(),
 			_ => serde_json::json!({}),
 		},
+		"parameters": spec.get("parameters").cloned().unwrap_or_else(|| serde_json::json!([])),
 		"targets": spec.get("targets").cloned().unwrap_or_else(|| serde_json::json!([])),
 		"queries": spec.get("queries").cloned().unwrap_or_else(|| serde_json::json!([])),
 		"schedule": match spec.get("schedule") {
@@ -838,39 +722,26 @@ pub async fn refresh_read_cache(
 		return Ok(());
 	};
 
-	const SQL_READ_SOURCES_CACHE: &str = oversync_queries::config::READ_SOURCES_CACHE;
+	const SQL_LOAD_QUERIES: &str = oversync_queries::config::LOAD_QUERIES;
 	const SQL_READ_SINKS_CACHE: &str = oversync_queries::config::READ_SINKS_CACHE;
 	const SQL_READ_PIPES_CACHE: &str = oversync_queries::config::READ_PIPES_CACHE;
 	const SQL_READ_PIPE_PRESETS_CACHE: &str = oversync_queries::config::READ_PIPE_PRESETS_CACHE;
 
-	let mut sources_resp = db.query(SQL_READ_SOURCES_CACHE).await.map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh sources cache: {e}"))
-	})?;
-	let source_rows: Vec<serde_json::Value> = sources_resp.take(0).map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh sources cache take: {e}"))
-	})?;
-	let source_configs: Vec<crate::state::SourceConfig> = source_rows
-		.iter()
-		.filter_map(|r| {
-			Some(crate::state::SourceConfig {
-				name: r.get("name")?.as_str()?.to_string(),
-				connector: r.get("connector")?.as_str()?.to_string(),
-				interval_secs: r
-					.get("interval_secs")
-					.and_then(|v| v.as_u64())
-					.unwrap_or(300),
-				queries: vec![],
-			})
-		})
-		.collect();
-	*state.sources.write().await = source_configs;
+	let query_rows =
+		read_cache_rows_or_empty(db, SQL_LOAD_QUERIES, "refresh queries cache").await?;
+	let mut query_counts_by_origin: std::collections::HashMap<String, usize> =
+		std::collections::HashMap::new();
+	for row in &query_rows {
+		let Some(origin_id) = row.get("origin_id").and_then(|v| v.as_str()) else {
+			continue;
+		};
+		*query_counts_by_origin
+			.entry(origin_id.to_string())
+			.or_default() += 1;
+	}
 
-	let mut sinks_resp = db.query(SQL_READ_SINKS_CACHE).await.map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh sinks cache: {e}"))
-	})?;
-	let sink_rows: Vec<serde_json::Value> = sinks_resp.take(0).map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh sinks cache take: {e}"))
-	})?;
+	let sink_rows =
+		read_cache_rows_or_empty(db, SQL_READ_SINKS_CACHE, "refresh sinks cache").await?;
 	let sink_configs: Vec<crate::state::SinkConfig> = sink_rows
 		.iter()
 		.filter_map(|r| {
@@ -883,17 +754,14 @@ pub async fn refresh_read_cache(
 		.collect();
 	*state.sinks.write().await = sink_configs;
 
-	let mut pipes_resp = db.query(SQL_READ_PIPES_CACHE).await.map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh pipes cache: {e}"))
-	})?;
-	let pipe_rows: Vec<serde_json::Value> = pipes_resp.take(0).map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh pipes cache take: {e}"))
-	})?;
+	let pipe_rows =
+		read_cache_rows_or_empty(db, SQL_READ_PIPES_CACHE, "refresh pipes cache").await?;
 	let pipe_configs: Vec<crate::state::PipeConfigCache> = pipe_rows
 		.iter()
 		.filter_map(|r| {
+			let name = r.get("name")?.as_str()?.to_string();
 			Some(crate::state::PipeConfigCache {
-				name: r.get("name")?.as_str()?.to_string(),
+				name: name.clone(),
 				origin_connector: r.get("origin_connector")?.as_str()?.to_string(),
 				origin_dsn: r.get("origin_dsn")?.as_str()?.to_string(),
 				targets: r
@@ -909,6 +777,7 @@ pub async fn refresh_read_cache(
 					.get("interval_secs")
 					.and_then(|v| v.as_u64())
 					.unwrap_or(300),
+				query_count: *query_counts_by_origin.get(name.as_str()).unwrap_or(&0),
 				recipe: r.get("recipe").cloned().filter(|v| !v.is_null()),
 				enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
 			})
@@ -916,14 +785,12 @@ pub async fn refresh_read_cache(
 		.collect();
 	*state.pipes.write().await = pipe_configs;
 
-	let mut pipe_presets_resp = db.query(SQL_READ_PIPE_PRESETS_CACHE).await.map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!("refresh pipe presets cache: {e}"))
-	})?;
-	let pipe_preset_rows: Vec<serde_json::Value> = pipe_presets_resp.take(0).map_err(|e| {
-		oversync_core::error::OversyncError::SurrealDb(format!(
-			"refresh pipe presets cache take: {e}"
-		))
-	})?;
+	let pipe_preset_rows = read_cache_rows_or_empty(
+		db,
+		SQL_READ_PIPE_PRESETS_CACHE,
+		"refresh pipe presets cache",
+	)
+	.await?;
 	let pipe_preset_configs: Vec<crate::state::PipePresetCache> = pipe_preset_rows
 		.iter()
 		.filter_map(|r| {
@@ -942,9 +809,38 @@ pub async fn refresh_read_cache(
 	Ok(())
 }
 
+fn is_missing_table_error(error: &dyn std::fmt::Display) -> bool {
+	let message = error.to_string();
+	message.contains("does not exist") && message.contains("table")
+}
+
+async fn read_cache_rows_or_empty(
+	db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+	sql: &str,
+	context: &str,
+) -> Result<Vec<serde_json::Value>, oversync_core::error::OversyncError> {
+	let mut response = match db.query(sql).await {
+		Ok(response) => response,
+		Err(error) if is_missing_table_error(&error) => return Ok(Vec::new()),
+		Err(error) => {
+			return Err(oversync_core::error::OversyncError::SurrealDb(format!(
+				"{context}: {error}"
+			)));
+		}
+	};
+
+	match response.take(0) {
+		Ok(rows) => Ok(rows),
+		Err(error) if is_missing_table_error(&error) => Ok(Vec::new()),
+		Err(error) => Err(oversync_core::error::OversyncError::SurrealDb(format!(
+			"{context} take: {error}"
+		))),
+	}
+}
+
 #[cfg(test)]
 mod tests {
-	use super::api_pipe_preset_spec_value;
+	use super::{api_pipe_preset_spec_value, is_missing_table_error};
 
 	#[test]
 	fn api_pipe_preset_spec_value_accepts_legacy_flat_shape() {
@@ -973,5 +869,13 @@ mod tests {
 		assert_eq!(api["origin_connector"], "postgres");
 		assert_eq!(api["origin_config"]["sslmode"], "require");
 		assert_eq!(api["queries"][0]["id"], "aspect-columns");
+	}
+
+	#[test]
+	fn missing_table_error_detection_matches_surreal_message_shape() {
+		assert!(is_missing_table_error(
+			&"The table 'source_config' does not exist"
+		));
+		assert!(!is_missing_table_error(&"permission denied"));
 	}
 }

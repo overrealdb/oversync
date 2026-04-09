@@ -6,7 +6,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use oversync::config::{QueryDef, SinkDef, SourceDef, SurrealDbDef, SyncConfig};
+use oversync::config::{
+	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef, SinkDef,
+	SurrealDbDef, SyncConfig,
+};
 use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
 use oversync_connectors::PostgresOriginFactory;
@@ -34,6 +37,48 @@ fn stdout_sink() -> SinkDef {
 		name: "stdout".into(),
 		sink_type: "stdout".into(),
 		config: serde_json::json!({}),
+	}
+}
+
+fn make_pipe(
+	name: &str,
+	connector: &str,
+	dsn: String,
+	interval_secs: u64,
+	fail_safe_threshold: f64,
+	diff_mode: DiffMode,
+	queries: Vec<QueryDef>,
+) -> PipeConfig {
+	PipeConfig {
+		name: name.into(),
+		origin: OriginDef {
+			connector: connector.into(),
+			dsn,
+			credential: None,
+			trino_url: None,
+			config: serde_json::Value::Null,
+		},
+		targets: vec![],
+		queries,
+		schedule: ScheduleDef {
+			interval_secs,
+			missed_tick_policy: Default::default(),
+			max_requests_per_minute: None,
+		},
+		delta: DeltaDef {
+			diff_mode,
+			fail_safe_threshold,
+		},
+		retry: RetryDef {
+			max_retries: 1,
+			retry_base_delay_secs: 1,
+		},
+		recipe: None,
+		filters: vec![],
+		transforms: vec![],
+		links: vec![],
+		alert_webhook: None,
+		enabled: true,
 	}
 }
 
@@ -376,27 +421,22 @@ fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "pg-test".into(),
-			connector: "postgres".into(),
-			dsn: pg.dsn.clone(),
+		sinks: vec![stdout_sink()],
+		pipes: vec![make_pipe(
+			"pg-test",
+			"postgres",
+			pg.dsn.clone(),
 			interval_secs,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::Value::Null,
-			queries: vec![QueryDef {
+			30.0,
+			DiffMode::default(),
+			vec![QueryDef {
 				id: "items".into(),
 				sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![stdout_sink()],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	}
 }
@@ -491,27 +531,22 @@ async fn scheduler_handles_connector_error() {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "bad-source".into(),
-			connector: "postgres".into(),
-			dsn: "postgres://nonexistent:5432/db".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 0,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::Value::Null,
-			queries: vec![QueryDef {
+		sinks: vec![stdout_sink()],
+		pipes: vec![make_pipe(
+			"bad-source",
+			"postgres",
+			"postgres://nonexistent:5432/db".into(),
+			3600,
+			30.0,
+			DiffMode::default(),
+			vec![QueryDef {
 				id: "q".into(),
 				sql: "SELECT 1 AS id".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![stdout_sink()],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -529,7 +564,7 @@ async fn scheduler_handles_connector_error() {
 }
 
 #[tokio::test]
-async fn scheduler_no_sources_exits_immediately() {
+async fn scheduler_no_pipes_exits_immediately() {
 	let surreal = TestSurrealContainer::new().await;
 	let engine = DeltaEngine::single(surreal.client.clone());
 
@@ -542,14 +577,13 @@ async fn scheduler_no_sources_exits_immediately() {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![],
 		pipes: vec![],
 		pipe_presets: vec![],
 	};
 
 	let scheduler = Scheduler::new(engine, config, test_registry());
-	// Should return immediately with no sources
+	// Should return immediately with no runnable pipes.
 	scheduler.run().await.unwrap();
 }
 
@@ -567,27 +601,22 @@ async fn scheduler_requires_explicit_sink_config() {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "pg-test".into(),
-			connector: "postgres".into(),
-			dsn: "postgres://localhost/db".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::Value::Null,
-			queries: vec![QueryDef {
+		sinks: vec![],
+		pipes: vec![make_pipe(
+			"pg-test",
+			"postgres",
+			"postgres://localhost/db".into(),
+			3600,
+			30.0,
+			DiffMode::default(),
+			vec![QueryDef {
 				id: "items".into(),
 				sql: "SELECT 1 AS id".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -622,27 +651,22 @@ async fn scheduler_detects_data_changes() {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "pg-test".into(),
-			connector: "postgres".into(),
-			dsn: pg.dsn.clone(),
-			interval_secs: 1,
-			fail_safe_threshold: 50.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::Value::Null,
-			queries: vec![QueryDef {
+		sinks: vec![stdout_sink()],
+		pipes: vec![make_pipe(
+			"pg-test",
+			"postgres",
+			pg.dsn.clone(),
+			1,
+			50.0,
+			DiffMode::default(),
+			vec![QueryDef {
 				id: "items".into(),
 				sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![stdout_sink()],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -717,18 +741,15 @@ async fn scheduler_multiple_queries() {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "pg-multi-q".into(),
-			connector: "postgres".into(),
-			dsn: pg.dsn.clone(),
-			interval_secs: 3600,
-			fail_safe_threshold: 50.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::Value::Null,
-			queries: vec![
+		sinks: vec![stdout_sink()],
+		pipes: vec![make_pipe(
+			"pg-multi-q",
+			"postgres",
+			pg.dsn.clone(),
+			3600,
+			50.0,
+			DiffMode::default(),
+			vec![
 				QueryDef {
 					id: "items".into(),
 					sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
@@ -744,9 +765,7 @@ async fn scheduler_multiple_queries() {
 					transform: None,
 				},
 			],
-		}],
-		sinks: vec![stdout_sink()],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -813,48 +832,39 @@ async fn scheduler_multiple_sources() {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![
-			SourceDef {
-				name: "source-alpha".into(),
-				connector: "postgres".into(),
-				dsn: pg.dsn.clone(),
-				interval_secs: 3600,
-				fail_safe_threshold: 50.0,
-				max_retries: 1,
-				retry_base_delay_secs: 1,
-				diff_mode: oversync::config::DiffMode::default(),
-				missed_tick_policy: Default::default(),
-				config: serde_json::Value::Null,
-				queries: vec![QueryDef {
+		sinks: vec![stdout_sink()],
+		pipes: vec![
+			make_pipe(
+				"source-alpha",
+				"postgres",
+				pg.dsn.clone(),
+				3600,
+				50.0,
+				DiffMode::default(),
+				vec![QueryDef {
 					id: "items".into(),
 					sql: format!("SELECT id, name, value FROM {}.items", pg.schema),
 					key_column: "id".into(),
 					sinks: None,
 					transform: None,
 				}],
-			},
-			SourceDef {
-				name: "source-beta".into(),
-				connector: "postgres".into(),
-				dsn: pg.dsn.clone(),
-				interval_secs: 3600,
-				fail_safe_threshold: 50.0,
-				max_retries: 1,
-				retry_base_delay_secs: 1,
-				diff_mode: oversync::config::DiffMode::default(),
-				missed_tick_policy: Default::default(),
-				config: serde_json::Value::Null,
-				queries: vec![QueryDef {
+			),
+			make_pipe(
+				"source-beta",
+				"postgres",
+				pg.dsn.clone(),
+				3600,
+				50.0,
+				DiffMode::default(),
+				vec![QueryDef {
 					id: "users".into(),
 					sql: format!("SELECT id, email FROM {}.users", pg.schema),
 					key_column: "id".into(),
 					sinks: None,
 					transform: None,
 				}],
-			},
+			),
 		],
-		sinks: vec![stdout_sink()],
-		pipes: vec![],
 		pipe_presets: vec![],
 	};
 
@@ -928,31 +938,26 @@ async fn scheduler_two_instances_do_not_double_process_same_query() {
 			database: surreal.db.clone(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "static-shared".into(),
-			connector: "static".into(),
-			dsn: "memory://".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Db,
-			missed_tick_policy: Default::default(),
+		sinks: vec![SinkDef {
+			name: "recorder".into(),
+			sink_type: "recorder".into(),
 			config: serde_json::json!({}),
-			queries: vec![QueryDef {
+		}],
+		pipes: vec![make_pipe(
+			"static-shared",
+			"static",
+			"memory://".into(),
+			3600,
+			30.0,
+			DiffMode::Db,
+			vec![QueryDef {
 				id: "items".into(),
 				sql: "SELECT * FROM static_source".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![SinkDef {
-			name: "recorder".into(),
-			sink_type: "recorder".into(),
-			config: serde_json::json!({}),
-		}],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -1023,31 +1028,26 @@ async fn scheduler_failover_reuses_baseline_and_emits_only_post_failover_updates
 			database: surreal.db.clone(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "failover-source".into(),
-			connector: "mutable-static".into(),
-			dsn: "memory://".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Db,
-			missed_tick_policy: Default::default(),
+		sinks: vec![SinkDef {
+			name: "recorder".into(),
+			sink_type: "recorder".into(),
 			config: serde_json::json!({}),
-			queries: vec![QueryDef {
+		}],
+		pipes: vec![make_pipe(
+			"failover-source",
+			"mutable-static",
+			"memory://".into(),
+			3600,
+			30.0,
+			DiffMode::Db,
+			vec![QueryDef {
 				id: "items".into(),
 				sql: "SELECT * FROM mutable_static_source".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![SinkDef {
-			name: "recorder".into(),
-			sink_type: "recorder".into(),
-			config: serde_json::json!({}),
-		}],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -1185,31 +1185,26 @@ async fn scheduler_rolling_restarts_keep_sink_state_reconciled() {
 			database: surreal.db.clone(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "soak-source".into(),
-			connector: "mutable-static".into(),
-			dsn: "memory://".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Db,
-			missed_tick_policy: Default::default(),
+		sinks: vec![SinkDef {
+			name: "recorder".into(),
+			sink_type: "recorder".into(),
 			config: serde_json::json!({}),
-			queries: vec![QueryDef {
+		}],
+		pipes: vec![make_pipe(
+			"soak-source",
+			"mutable-static",
+			"memory://".into(),
+			3600,
+			30.0,
+			DiffMode::Db,
+			vec![QueryDef {
 				id: "items".into(),
 				sql: "SELECT * FROM mutable_static_source".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![SinkDef {
-			name: "recorder".into(),
-			sink_type: "recorder".into(),
-			config: serde_json::json!({}),
-		}],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -1351,31 +1346,26 @@ async fn scheduler_rolling_restart_soak_campaign() {
 			database: surreal.db.clone(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "soak-source".into(),
-			connector: "mutable-static".into(),
-			dsn: "memory://".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Db,
-			missed_tick_policy: Default::default(),
+		sinks: vec![SinkDef {
+			name: "recorder".into(),
+			sink_type: "recorder".into(),
 			config: serde_json::json!({}),
-			queries: vec![QueryDef {
+		}],
+		pipes: vec![make_pipe(
+			"soak-source",
+			"mutable-static",
+			"memory://".into(),
+			3600,
+			30.0,
+			DiffMode::Db,
+			vec![QueryDef {
 				id: "items".into(),
 				sql: "SELECT * FROM mutable_static_source".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![SinkDef {
-			name: "recorder".into(),
-			sink_type: "recorder".into(),
-			config: serde_json::json!({}),
-		}],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 

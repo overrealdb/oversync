@@ -32,17 +32,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			database: "sync_state".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
+		sinks: vec![SinkDef {
+			name: "sdb-events".into(),
+			sink_type: "surrealdb".into(),
+			config: serde_json::json!({
+				"url": "http://localhost:8000",
+				"namespace": "catalog",
+				"database": "events",
+				"table": "synced_data",
+			}),
+		}],
+		pipes: vec![PipeConfig {
 			name: "pg-prod".into(),
-			connector: "postgres".into(),
-			dsn: "postgres://readonly:pass@localhost:5432/demo".into(),
-			interval_secs: 60,
-			fail_safe_threshold: 30.0,
-			max_retries: 3,
-			retry_base_delay_secs: 5,
-			diff_mode: DiffMode::Memory,
-			missed_tick_policy: Default::default(),
-			config: serde_json::json!({}),
+			origin: OriginDef {
+				connector: "postgres".into(),
+				dsn: "postgres://readonly:pass@localhost:5432/demo".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec!["sdb-events".into()],
 			queries: vec![
 				QueryDef {
 					id: "users".into(),
@@ -59,18 +68,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 					transform: None,
 				},
 			],
+			schedule: ScheduleDef {
+				interval_secs: 60,
+				..ScheduleDef::default()
+			},
+			delta: DeltaDef {
+				diff_mode: DiffMode::Memory,
+				fail_safe_threshold: 30.0,
+			},
+			retry: RetryDef {
+				max_retries: 3,
+				retry_base_delay_secs: 5,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
 		}],
-		sinks: vec![SinkDef {
-			name: "sdb-events".into(),
-			sink_type: "surrealdb".into(),
-			config: serde_json::json!({
-				"url": "http://localhost:8000",
-				"namespace": "catalog",
-				"database": "events",
-				"table": "synced_data",
-			}),
-		}],
-		pipes: vec![],
 		pipe_presets: vec![],
 	};
 

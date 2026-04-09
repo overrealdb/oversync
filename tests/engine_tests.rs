@@ -5,7 +5,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use common::surreal::TestSurrealContainer;
 use oversync::OversyncEngine;
-use oversync::config::{QueryDef, SinkDef, SourceDef, SyncConfig};
+use oversync::config::{
+	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef, SinkDef, SyncConfig,
+};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
 use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TargetFactory};
@@ -21,7 +23,6 @@ fn make_config(container: &TestSurrealContainer) -> SyncConfig {
 			database: container.db.clone(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![SinkDef {
 			name: "debug".into(),
 			sink_type: "stdout".into(),
@@ -29,6 +30,46 @@ fn make_config(container: &TestSurrealContainer) -> SyncConfig {
 		}],
 		pipes: vec![],
 		pipe_presets: vec![],
+	}
+}
+
+fn make_pipe(
+	name: &str,
+	connector: &str,
+	dsn: &str,
+	diff_mode: DiffMode,
+	queries: Vec<QueryDef>,
+) -> PipeConfig {
+	PipeConfig {
+		name: name.into(),
+		origin: OriginDef {
+			connector: connector.into(),
+			dsn: dsn.into(),
+			credential: None,
+			trino_url: None,
+			config: serde_json::json!({}),
+		},
+		targets: vec![],
+		queries,
+		schedule: ScheduleDef {
+			interval_secs: 3600,
+			missed_tick_policy: Default::default(),
+			max_requests_per_minute: None,
+		},
+		delta: DeltaDef {
+			diff_mode,
+			fail_safe_threshold: 30.0,
+		},
+		retry: RetryDef {
+			max_retries: 1,
+			retry_base_delay_secs: 1,
+		},
+		recipe: None,
+		filters: vec![],
+		transforms: vec![],
+		links: vec![],
+		alert_webhook: None,
+		enabled: true,
 	}
 }
 
@@ -132,21 +173,13 @@ fn static_rows() -> Vec<RawRow> {
 
 #[tokio::test]
 async fn engine_build_with_mem_url() {
-	let engine = OversyncEngine::builder("mem://")
-		.skip_schema(true)
-		.build()
-		.await
-		.unwrap();
+	let engine = OversyncEngine::builder("mem://").build().await.unwrap();
 	assert!(!engine.is_running().await);
 }
 
 #[tokio::test]
 async fn engine_builder_applies_defaults() {
-	let engine = OversyncEngine::builder("mem://")
-		.skip_schema(true)
-		.build()
-		.await
-		.unwrap();
+	let engine = OversyncEngine::builder("mem://").build().await.unwrap();
 	let def = engine.surreal_def();
 	assert_eq!(def.namespace, "oversync");
 	assert_eq!(def.database, "sync");
@@ -208,31 +241,24 @@ async fn engine_builder_without_snapshot_url_reuses_shared_state_snapshot() {
 			database: container.db.clone(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "static-source".into(),
-			connector: "static".into(),
-			dsn: "memory://".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Db,
-			missed_tick_policy: Default::default(),
+		sinks: vec![SinkDef {
+			name: "recorder".into(),
+			sink_type: "recorder".into(),
 			config: serde_json::json!({}),
-			queries: vec![QueryDef {
+		}],
+		pipes: vec![make_pipe(
+			"static-source",
+			"static",
+			"memory://",
+			DiffMode::Db,
+			vec![QueryDef {
 				id: "items".into(),
 				sql: "SELECT * FROM static_source".into(),
 				key_column: "id".into(),
 				sinks: None,
 				transform: None,
 			}],
-		}],
-		sinks: vec![SinkDef {
-			name: "recorder".into(),
-			sink_type: "recorder".into(),
-			config: serde_json::json!({}),
-		}],
-		pipes: vec![],
+		)],
 		pipe_presets: vec![],
 	};
 
@@ -291,11 +317,7 @@ async fn engine_start_and_shutdown() {
 	let container = TestSurrealContainer::new().await;
 	let config = make_config(&container);
 
-	let engine = OversyncEngine::builder("mem://")
-		.skip_schema(true)
-		.build()
-		.await
-		.unwrap();
+	let engine = OversyncEngine::builder("mem://").build().await.unwrap();
 
 	engine.start(config).await.unwrap();
 	assert!(engine.is_running().await);
@@ -322,11 +344,7 @@ type = "stdout"
 	)
 	.unwrap();
 
-	let engine = OversyncEngine::builder("mem://")
-		.skip_schema(true)
-		.build()
-		.await
-		.unwrap();
+	let engine = OversyncEngine::builder("mem://").build().await.unwrap();
 
 	engine.start_from_toml(&path).await.unwrap();
 	assert!(engine.is_running().await);
@@ -380,7 +398,7 @@ async fn engine_api_resolve_pipe_returns_effective_queries() {
 	use axum::http::{Request, StatusCode};
 	use oversync::config::{
 		DeltaDef, DiffMode, MissedTickPolicy, OriginDef, PipeConfig, PipeRecipeDef, PipeRecipeType,
-		QueryDef, RetryDef, ScheduleDef, SourceDef,
+		QueryDef, RetryDef, ScheduleDef,
 	};
 	use tower::ServiceExt;
 
@@ -399,57 +417,77 @@ async fn engine_api_resolve_pipe_returns_effective_queries() {
 
 	let config = SyncConfig {
 		surrealdb: engine.surreal_def().clone(),
-		sources: vec![SourceDef {
-			name: "seed-source".into(),
-			connector: "http".into(),
-			dsn: "https://example.invalid".into(),
-			interval_secs: 300,
-			fail_safe_threshold: 30.0,
-			max_retries: 3,
-			retry_base_delay_secs: 5,
-			diff_mode: DiffMode::Db,
-			missed_tick_policy: MissedTickPolicy::Skip,
-			config: serde_json::json!({}),
-			queries: vec![QueryDef {
-				id: "seed-query".into(),
-				sql: "SELECT 1 AS id".into(),
-				key_column: "id".into(),
-				sinks: None,
-				transform: None,
-			}],
-		}],
 		sinks: vec![SinkDef {
 			name: "stdout".into(),
 			sink_type: "stdout".into(),
 			config: serde_json::json!({}),
 		}],
-		pipes: vec![PipeConfig {
-			name: "catalog-pg".into(),
-			origin: OriginDef {
-				connector: "postgres".into(),
-				dsn: "postgres://postgres:postgres@127.0.0.1:55432/postgres".into(),
-				credential: None,
-				trino_url: None,
-				config: serde_json::json!({}),
+		pipes: vec![
+			PipeConfig {
+				name: "seed-source".into(),
+				origin: OriginDef {
+					connector: "http".into(),
+					dsn: "https://example.invalid".into(),
+					credential: None,
+					trino_url: None,
+					config: serde_json::json!({}),
+				},
+				targets: vec![],
+				queries: vec![QueryDef {
+					id: "seed-query".into(),
+					sql: "SELECT 1 AS id".into(),
+					key_column: "id".into(),
+					sinks: None,
+					transform: None,
+				}],
+				schedule: ScheduleDef {
+					interval_secs: 300,
+					missed_tick_policy: MissedTickPolicy::Skip,
+					max_requests_per_minute: None,
+				},
+				delta: DeltaDef {
+					diff_mode: DiffMode::Db,
+					fail_safe_threshold: 30.0,
+				},
+				retry: RetryDef {
+					max_retries: 3,
+					retry_base_delay_secs: 5,
+				},
+				recipe: None,
+				filters: vec![],
+				transforms: vec![],
+				links: vec![],
+				alert_webhook: None,
+				enabled: true,
 			},
-			targets: vec!["stdout".into()],
-			queries: vec![],
-			schedule: ScheduleDef::default(),
-			delta: DeltaDef::default(),
-			retry: RetryDef::default(),
-			recipe: Some(PipeRecipeDef {
-				recipe_type: PipeRecipeType::PostgresMetadata,
-				prefix: "postgresdl".into(),
-				entity_type_id: Some("postgres".into()),
-				schema_id: "table".into(),
-				schemas: vec!["public".into()],
-			}),
-			filters: vec![],
-			transforms: vec![],
-			links: vec![],
-			alert_webhook: None,
-			enabled: true,
-		}],
+			PipeConfig {
+				name: "catalog-pg".into(),
+				origin: OriginDef {
+					connector: "postgres".into(),
+					dsn: "postgres://postgres:postgres@127.0.0.1:55432/postgres".into(),
+					credential: None,
+					trino_url: None,
+					config: serde_json::json!({}),
+				},
+				targets: vec!["stdout".into()],
+				queries: vec![],
+				schedule: ScheduleDef::default(),
+				delta: DeltaDef::default(),
+				retry: RetryDef::default(),
+				recipe: Some(PipeRecipeDef {
+					recipe_type: PipeRecipeType::PostgresMetadata,
+					prefix: "postgresdl".into(),
+					entity_type_id: Some("postgres".into()),
+					schema_id: "table".into(),
+					schemas: vec!["public".into()],
+				}),
+				filters: vec![],
+				transforms: vec![],
+				links: vec![],
+				alert_webhook: None,
+				enabled: true,
+			},
+		],
 		pipe_presets: vec![],
 	};
 
@@ -481,6 +519,113 @@ async fn engine_api_resolve_pipe_returns_effective_queries() {
 	assert_eq!(queries[0]["id"], "entity");
 	assert_eq!(queries[1]["id"], "aspect-table");
 
+	unsafe { std::env::remove_var("OVERSYNC_CREDENTIAL_KEY") };
+}
+
+#[cfg(feature = "api")]
+#[tokio::test]
+async fn engine_api_openapi_includes_engine_routes_and_legacy_source_deprecation() {
+	use axum::body::{self, Body};
+	use axum::http::{Request, StatusCode};
+	use tower::ServiceExt;
+
+	unsafe {
+		std::env::set_var(
+			"OVERSYNC_CREDENTIAL_KEY",
+			"engine-api-openapi-test-key-32-bytes",
+		)
+	};
+
+	let engine = OversyncEngine::builder("mem://")
+		.skip_schema(true)
+		.build()
+		.await
+		.unwrap();
+	let config = SyncConfig {
+		surrealdb: engine.surreal_def().clone(),
+		sinks: vec![],
+		pipes: vec![],
+		pipe_presets: vec![],
+	};
+	engine.start(config).await.unwrap();
+
+	let app = engine.api_router().await.unwrap();
+	let response = app
+		.oneshot(
+			Request::builder()
+				.uri("/openapi.json")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+
+	assert_eq!(response.status(), StatusCode::OK);
+	let body = body::to_bytes(response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+	assert!(json["paths"]["/pipes/dry-run"]["post"].is_object());
+	assert!(json["paths"]["/pipes/{name}/resolve"]["get"].is_object());
+	assert!(json["paths"]["/credentials"]["get"].is_object());
+	assert!(json["paths"]["/config/versions"]["get"].is_object());
+	assert!(json["paths"]["/sources"].is_null());
+
+	engine.shutdown().await;
+	unsafe { std::env::remove_var("OVERSYNC_CREDENTIAL_KEY") };
+}
+
+#[cfg(feature = "api")]
+#[tokio::test]
+async fn engine_api_resolve_missing_pipe_returns_404() {
+	use axum::body::{self, Body};
+	use axum::http::{Request, StatusCode};
+	use tower::ServiceExt;
+
+	unsafe {
+		std::env::set_var(
+			"OVERSYNC_CREDENTIAL_KEY",
+			"engine-api-missing-pipe-test-key-32",
+		)
+	};
+
+	let engine = OversyncEngine::builder("mem://")
+		.skip_schema(true)
+		.build()
+		.await
+		.unwrap();
+	let config = SyncConfig {
+		surrealdb: engine.surreal_def().clone(),
+		sinks: vec![],
+		pipes: vec![],
+		pipe_presets: vec![],
+	};
+	engine.start(config).await.unwrap();
+
+	let app = engine.api_router().await.unwrap();
+	let response = app
+		.oneshot(
+			Request::builder()
+				.uri("/pipes/does-not-exist/resolve")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+
+	assert_eq!(response.status(), StatusCode::NOT_FOUND);
+	let body = body::to_bytes(response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+	assert!(
+		json["error"]
+			.as_str()
+			.unwrap_or_default()
+			.contains("pipe not found")
+	);
+
+	engine.shutdown().await;
 	unsafe { std::env::remove_var("OVERSYNC_CREDENTIAL_KEY") };
 }
 
@@ -588,7 +733,6 @@ async fn engine_is_cloneable() {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![],
 		pipes: vec![],
 		pipe_presets: vec![],

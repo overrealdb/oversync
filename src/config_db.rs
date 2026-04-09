@@ -6,11 +6,10 @@ use oversync_core::error::OversyncError;
 
 use crate::config::{
 	DeltaDef, DiffMode, LinkDef, MissedTickPolicy, OriginDef, PipeConfig, PipePresetDef,
-	PipePresetSpec, PipeRecipeDef, QueryDef, RetryDef, ScheduleDef, SinkDef, SourceDef,
-	SurrealDbDef, SyncConfig,
+	PipePresetParameterDef, PipePresetSpec, PipeRecipeDef, QueryDef, RetryDef, ScheduleDef,
+	SinkDef, SurrealDbDef, SyncConfig,
 };
 
-const LOAD_SOURCES_SQL: &str = oversync_queries::config::LOAD_SOURCES;
 const LOAD_QUERIES_SQL: &str = oversync_queries::config::LOAD_QUERIES;
 const LOAD_SINKS_SQL: &str = oversync_queries::config::LOAD_SINKS;
 const LOAD_PIPES_SQL: &str = oversync_queries::config::LOAD_PIPES;
@@ -20,13 +19,11 @@ pub async fn load_config_from_db(
 	client: &Surreal<Any>,
 	surreal_def: &SurrealDbDef,
 ) -> Result<SyncConfig, OversyncError> {
-	let sources = load_sources(client).await?;
 	let sinks = load_sinks(client).await?;
 	let pipes = load_pipes(client).await?;
 	let pipe_presets = load_pipe_presets(client).await?;
 	Ok(SyncConfig {
 		surrealdb: surreal_def.clone(),
-		sources,
 		sinks,
 		pipes,
 		pipe_presets,
@@ -43,23 +40,6 @@ pub async fn replace_config_in_db(
 		)
 		.await
 		.map_err(|e| OversyncError::SurrealDb(format!("clear config tables: {e}")))?;
-
-	for source in &config.sources {
-		let source_config = source_config_json(source);
-		client
-			.query(oversync_queries::mutations::CREATE_SOURCE)
-			.bind(("name", source.name.clone()))
-			.bind(("connector", source.connector.clone()))
-			.bind(("config", source_config))
-			.await
-			.map_err(|e| {
-				OversyncError::SurrealDb(format!("create source '{}': {e}", source.name))
-			})?;
-
-		for query in &source.queries {
-			create_query_record(client, &source.name, query).await?;
-		}
-	}
 
 	for sink in &config.sinks {
 		let sink_config = if sink.config.is_null() {
@@ -143,14 +123,7 @@ pub async fn replace_config_in_db(
 }
 
 async fn load_pipe_presets(client: &Surreal<Any>) -> Result<Vec<PipePresetDef>, OversyncError> {
-	let mut response = client
-		.query(LOAD_PIPE_PRESETS_SQL)
-		.await
-		.map_err(|e| OversyncError::SurrealDb(format!("load_pipe_presets: {e}")))?;
-
-	let rows: Vec<serde_json::Value> = response
-		.take(0)
-		.map_err(|e| OversyncError::SurrealDb(format!("load_pipe_presets take: {e}")))?;
+	let rows = load_rows_or_empty(client, LOAD_PIPE_PRESETS_SQL, "load_pipe_presets").await?;
 
 	let mut presets = Vec::with_capacity(rows.len());
 	for row in &rows {
@@ -198,6 +171,13 @@ fn parse_pipe_preset_spec(
 		name,
 		"queries",
 	)?;
+	let parameters = parse_json_value::<Vec<PipePresetParameterDef>>(
+		spec.get("parameters")
+			.cloned()
+			.unwrap_or_else(|| serde_json::json!([])),
+		name,
+		"parameters",
+	)?;
 	let schedule = parse_json_value::<ScheduleDef>(
 		spec.get("schedule")
 			.cloned()
@@ -235,6 +215,7 @@ fn parse_pipe_preset_spec(
 
 	Ok(PipePresetSpec {
 		origin,
+		parameters,
 		targets: spec
 			.get("targets")
 			.and_then(|value| value.as_array())
@@ -282,24 +263,32 @@ fn json_optional_string(row: &serde_json::Value, field: &str) -> Option<String> 
 		.map(String::from)
 }
 
+fn is_missing_table_error(error: &dyn std::fmt::Display) -> bool {
+	let message = error.to_string();
+	message.contains("does not exist") && message.contains("table")
+}
+
+async fn load_rows_or_empty(
+	client: &Surreal<Any>,
+	sql: &str,
+	context: &str,
+) -> Result<Vec<serde_json::Value>, OversyncError> {
+	let mut response = match client.query(sql).await {
+		Ok(response) => response,
+		Err(error) if is_missing_table_error(&error) => return Ok(Vec::new()),
+		Err(error) => return Err(OversyncError::SurrealDb(format!("{context}: {error}"))),
+	};
+
+	match response.take(0) {
+		Ok(rows) => Ok(rows),
+		Err(error) if is_missing_table_error(&error) => Ok(Vec::new()),
+		Err(error) => Err(OversyncError::SurrealDb(format!("{context} take: {error}"))),
+	}
+}
+
 async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncError> {
-	let mut response = client
-		.query(LOAD_PIPES_SQL)
-		.await
-		.map_err(|e| OversyncError::SurrealDb(format!("load_pipes: {e}")))?;
-
-	let rows: Vec<serde_json::Value> = response
-		.take(0)
-		.map_err(|e| OversyncError::SurrealDb(format!("load_pipes take: {e}")))?;
-
-	let mut queries_response = client
-		.query(LOAD_QUERIES_SQL)
-		.await
-		.map_err(|e| OversyncError::SurrealDb(format!("load_queries for pipes: {e}")))?;
-
-	let query_rows: Vec<serde_json::Value> = queries_response
-		.take(0)
-		.map_err(|e| OversyncError::SurrealDb(format!("load_queries take: {e}")))?;
+	let rows = load_rows_or_empty(client, LOAD_PIPES_SQL, "load_pipes").await?;
+	let query_rows = load_rows_or_empty(client, LOAD_QUERIES_SQL, "load_queries for pipes").await?;
 
 	let mut pipes = Vec::with_capacity(rows.len());
 	for row in &rows {
@@ -509,144 +498,8 @@ async fn create_pipe_preset_record(
 	Ok(())
 }
 
-fn source_config_json(source: &SourceDef) -> serde_json::Value {
-	let mut config = match &source.config {
-		serde_json::Value::Object(map) => map.clone(),
-		_ => serde_json::Map::new(),
-	};
-
-	config.insert("dsn".into(), serde_json::Value::String(source.dsn.clone()));
-	config.insert(
-		"interval_secs".into(),
-		serde_json::Value::Number(source.interval_secs.into()),
-	);
-	config.insert(
-		"fail_safe_threshold".into(),
-		serde_json::json!(source.fail_safe_threshold),
-	);
-	config.insert(
-		"max_retries".into(),
-		serde_json::Value::Number(source.max_retries.into()),
-	);
-	config.insert(
-		"retry_base_delay_secs".into(),
-		serde_json::Value::Number(source.retry_base_delay_secs.into()),
-	);
-	config.insert(
-		"diff_mode".into(),
-		serde_json::Value::String(match source.diff_mode {
-			DiffMode::Db => "db".into(),
-			DiffMode::Memory => "memory".into(),
-		}),
-	);
-	config.insert(
-		"missed_tick_policy".into(),
-		serde_json::Value::String(match source.missed_tick_policy {
-			MissedTickPolicy::Skip => "skip".into(),
-			MissedTickPolicy::Burst => "burst".into(),
-		}),
-	);
-
-	serde_json::Value::Object(config)
-}
-
-async fn load_sources(client: &Surreal<Any>) -> Result<Vec<SourceDef>, OversyncError> {
-	let mut response = client
-		.query(LOAD_SOURCES_SQL)
-		.await
-		.map_err(|e| OversyncError::SurrealDb(format!("load_sources: {e}")))?;
-
-	let rows: Vec<serde_json::Value> = response
-		.take(0)
-		.map_err(|e| OversyncError::SurrealDb(format!("load_sources take: {e}")))?;
-
-	let mut queries_response = client
-		.query(LOAD_QUERIES_SQL)
-		.await
-		.map_err(|e| OversyncError::SurrealDb(format!("load_queries: {e}")))?;
-
-	let query_rows: Vec<serde_json::Value> = queries_response
-		.take(0)
-		.map_err(|e| OversyncError::SurrealDb(format!("load_queries take: {e}")))?;
-
-	let mut sources = Vec::with_capacity(rows.len());
-	for row in &rows {
-		let name = str_field(row, "name")?;
-		let connector = str_field(row, "connector")?;
-		let config = row
-			.get("config")
-			.cloned()
-			.unwrap_or(serde_json::Value::Null);
-
-		let dsn = config
-			.get("dsn")
-			.and_then(|v| v.as_str())
-			.unwrap_or_default()
-			.to_string();
-
-		let interval_secs = config
-			.get("interval_secs")
-			.and_then(|v| v.as_u64())
-			.unwrap_or(300);
-
-		let mut queries = Vec::new();
-		for q in query_rows
-			.iter()
-			.filter(|q| q.get("origin_id").and_then(|v| v.as_str()) == Some(&name))
-		{
-			let sinks = q.get("sinks").and_then(|v| v.as_array()).map(|arr| {
-				arr.iter()
-					.filter_map(|v| v.as_str().map(String::from))
-					.collect()
-			});
-			queries.push(QueryDef {
-				id: str_field(q, "name")?,
-				sql: str_field(q, "query")?,
-				key_column: str_field(q, "key_column")?,
-				sinks,
-				transform: q
-					.get("transform")
-					.and_then(|v| v.as_str())
-					.map(String::from),
-			});
-		}
-
-		sources.push(SourceDef {
-			name,
-			connector,
-			dsn,
-			interval_secs,
-			fail_safe_threshold: config
-				.get("fail_safe_threshold")
-				.and_then(|v| v.as_f64())
-				.unwrap_or(30.0),
-			max_retries: config
-				.get("max_retries")
-				.and_then(|v| v.as_u64())
-				.unwrap_or(3) as u32,
-			retry_base_delay_secs: config
-				.get("retry_base_delay_secs")
-				.and_then(|v| v.as_u64())
-				.unwrap_or(5),
-			diff_mode: DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config,
-			queries,
-		});
-	}
-
-	Ok(sources)
-}
-
 async fn load_sinks(client: &Surreal<Any>) -> Result<Vec<SinkDef>, OversyncError> {
-	let mut response = client
-		.query(LOAD_SINKS_SQL)
-		.await
-		.map_err(|e| OversyncError::SurrealDb(format!("load_sinks: {e}")))?;
-
-	let rows: Vec<serde_json::Value> = response
-		.take(0)
-		.map_err(|e| OversyncError::SurrealDb(format!("load_sinks take: {e}")))?;
+	let rows = load_rows_or_empty(client, LOAD_SINKS_SQL, "load_sinks").await?;
 
 	let mut sinks = Vec::with_capacity(rows.len());
 	for row in &rows {

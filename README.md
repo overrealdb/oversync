@@ -28,7 +28,8 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 - **Rate limiting** — token bucket per pipe to respect source API limits
 - **Fail-safe** — aborts cycle if deletion exceeds threshold
 - **Dual mode** — embeddable library (`cargo add oversync`) or standalone binary
-- **Full REST API** — CRUD pipes/sources/sinks/credentials, dry-run, lifecycle control, OpenAPI 3.1
+- **Full REST API** — CRUD pipes, saved recipes, sinks, credentials, dry-run, lifecycle control, OpenAPI 3.1
+- **Generated OpenAPI** — `utoipa`-driven base spec merged with engine-owned routes like dry-run, resolve, credentials, and config versions
 
 ## Quick Start
 
@@ -78,6 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```bash
 cargo install oversync --features cli
+export OVERSYNC_CREDENTIAL_KEY='replace-with-a-strong-passphrase'
 oversync --config oversync.toml --bind 0.0.0.0:4200
 ```
 
@@ -214,6 +216,50 @@ This recipe:
 - supports composite primary keys through an internal synthetic key column
 - omits the synthetic key from emitted row payloads
 
+### Saved recipes
+
+Reusable saved recipes can live inside the control-plane DB or a startup config and be materialized into concrete pipes later:
+
+```toml
+[[pipe_presets]]
+name = "postgres-metadata-template"
+description = "Reusable metadata onboarding template"
+
+[pipe_presets.spec.origin]
+connector = "postgres"
+dsn = "postgres://placeholder"
+credential = "{{credential_name}}"
+
+[[pipe_presets.spec.parameters]]
+name = "credential_name"
+label = "Credential"
+required = true
+secret = false
+
+[[pipe_presets.spec.parameters]]
+name = "source_name"
+label = "Source name"
+required = true
+secret = false
+
+[pipe_presets.spec.schedule]
+interval_secs = 900
+
+[pipe_presets.spec.delta]
+diff_mode = "db"
+
+[pipe_presets.spec.recipe]
+type = "postgres_metadata"
+prefix = "{{source_name}}"
+schemas = ["public"]
+
+[pipe_presets.spec.retry]
+max_retries = 3
+retry_base_delay_secs = 5
+```
+
+The UI can author these saved recipes directly, prompt for parameter values, preview the materialized TOML/JSON draft, and then create a runnable pipe from that template.
+
 ### Non-native databases via Trino
 
 ```toml
@@ -234,10 +280,6 @@ Oversync automatically creates a Trino catalog and routes queries through it. Su
 - If you want a separate snapshot store, configure `[surrealdb.snapshot]` or `OversyncEngine::builder(...).snapshot_url(...)`.
 - `OVERSYNC_INSTANCE_ID` is optional. If unset, each scheduler instance generates a unique process-scoped identity automatically. Set it only when you need an explicit stable identifier in logs or orchestration.
 - Horizontal scale is currently per query, not within one query. Adding replicas helps many independent queries; it does not split one large table scan across workers.
-
-### Legacy format (backward compatible)
-
-The `[[sources]]` format still works and is auto-converted to pipes internally.
 
 ## Architecture
 
@@ -317,9 +359,13 @@ PipeConfig
 | POST | `/pipes` | Create pipe |
 | PUT | `/pipes/{name}` | Update pipe |
 | DELETE | `/pipes/{name}` | Delete pipe |
+| GET | `/pipes/{name}/resolve` | Resolve a pipe into effective runtime queries |
 | POST | `/pipes/dry-run` | Preview pipeline (mock/live) |
-| GET | `/sources` | List sources (legacy) |
-| POST | `/sources` | Create source |
+| GET | `/pipe-presets` | List saved recipes |
+| GET | `/pipe-presets/{name}` | Get saved recipe details |
+| POST | `/pipe-presets` | Create saved recipe |
+| PUT | `/pipe-presets/{name}` | Update saved recipe |
+| DELETE | `/pipe-presets/{name}` | Delete saved recipe |
 | GET | `/sinks` | List sinks |
 | POST | `/sinks` | Create sink |
 | GET | `/credentials` | List credentials (no secrets) |
@@ -330,7 +376,9 @@ PipeConfig
 | POST | `/sync/resume` | Resume sync |
 | GET | `/sync/status` | Running/paused state |
 | GET | `/history` | Last 100 cycle results |
-| GET | `/openapi.json` | OpenAPI 3.1 spec |
+| GET | `/openapi.json` | Merged OpenAPI 3.1 spec for control-plane + engine routes, generated via `utoipa` |
+
+Legacy source endpoints still exist for compatibility and migration, but they are deprecated in the generated OpenAPI and intentionally no longer drive the main UI onboarding flow.
 
 ## Crate Structure
 
@@ -342,7 +390,7 @@ PipeConfig
 | `oversync-sinks` | Target implementations (Kafka, HTTP, SurrealDB, MCP, stdout) |
 | `oversync-transforms` | Transform step library + WASM plugin support |
 | `oversync-delta` | DeltaEngine (SurrealDB state operations) |
-| `oversync-api` | Axum REST API (CRUD, operations, OpenAPI) |
+| `oversync-api` | Axum REST API for shared control-plane routes and base OpenAPI document |
 | `oversync-links` | Entity linking (stub) |
 
 ## Feature Flags
@@ -398,6 +446,19 @@ What it proves:
 
 This is intentionally query-level proof. It does not claim that one heavy query can be split across replicas.
 
+Observed local baseline on the shared test stack:
+
+| Shape | Result |
+|-------|--------|
+| `12 queries x 10k rows` | first sync `~8.7k rows/sec`, no-change `~8.1k scanned rows/sec`, partial-update `~10.0k scanned rows/sec` |
+| `20 queries x 20k rows` | first sync `~7.4k rows/sec`, no-change `~9.0k scanned rows/sec`, partial-update `~8.8k scanned rows/sec` |
+
+How to read this honestly:
+- This is a local engineering baseline, not a production SLA.
+- The limiting cost is full-scan work per query, especially on no-change cycles.
+- “Millions of rows per day” is realistic across many independent queries at this scan rate, but it is still query-level scale-out, not parallelization of one giant table scan.
+- If your workload is dominated by a few huge tables with frequent no-change polls, you should expect scan cost to dominate and tune schedule/query shape accordingly.
+
 Run the rolling-restart cluster soak harness against the shared Docker test stack:
 
 ```bash
@@ -410,6 +471,10 @@ What it proves:
 - repeated scheduler restarts keep `cycle_id` moving forward against shared state
 - no duplicate `created` wave is emitted during leader handoff
 - sink state remains reconciled with the source after many restart/mutation rounds
+
+Current regression baseline:
+- `SOAK_WAVES=25` passed on the shared test stack.
+- This proves short rolling-restart handoff stability, but it is still a bounded soak campaign rather than a long-duration production burn-in.
 
 ## Development
 

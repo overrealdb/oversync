@@ -45,7 +45,6 @@ fn make_recipe_pipe(dsn: &str, schema: &str) -> PipeConfig {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![],
 		pipes: vec![PipeConfig {
 			name: "postgresdl".into(),

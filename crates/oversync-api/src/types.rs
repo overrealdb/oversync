@@ -2,31 +2,23 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+fn deserialize_optional_json_value<'de, D>(
+	deserializer: D,
+) -> Result<Option<Option<serde_json::Value>>, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	Option::<serde_json::Value>::deserialize(deserializer).map(Some)
+}
+
+fn default_true() -> bool {
+	true
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct HealthResponse {
 	pub status: &'static str,
 	pub version: &'static str,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SourceInfo {
-	pub name: String,
-	pub connector: String,
-	pub interval_secs: u64,
-	pub queries: Vec<QueryInfo>,
-	pub status: SourceStatus,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QueryInfo {
-	pub id: String,
-	pub key_column: String,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct SourceStatus {
-	pub last_cycle: Option<CycleInfo>,
-	pub total_cycles: u64,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -53,19 +45,8 @@ pub struct SinkInfo {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct TriggerResponse {
-	pub source: String,
-	pub message: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorResponse {
 	pub error: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct SourceListResponse {
-	pub sources: Vec<SourceInfo>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -74,21 +55,6 @@ pub struct SinkListResponse {
 }
 
 // ── Mutation request types ──────────────────────────────────
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateSourceRequest {
-	pub name: String,
-	pub connector: String,
-	#[serde(default)]
-	pub config: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateSourceRequest {
-	pub connector: Option<String>,
-	pub config: Option<serde_json::Value>,
-	pub enabled: Option<bool>,
-}
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateSinkRequest {
@@ -103,42 +69,6 @@ pub struct UpdateSinkRequest {
 	pub sink_type: Option<String>,
 	pub config: Option<serde_json::Value>,
 	pub enabled: Option<bool>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CreateQueryRequest {
-	pub name: String,
-	pub query: String,
-	pub key_column: String,
-	#[serde(default)]
-	pub sinks: Option<Vec<String>>,
-	#[serde(default)]
-	pub transform: Option<String>,
-}
-
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct UpdateQueryRequest {
-	pub query: Option<String>,
-	pub key_column: Option<String>,
-	pub sinks: Option<Vec<String>>,
-	pub transform: Option<String>,
-	pub enabled: Option<bool>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QueryListResponse {
-	pub queries: Vec<QueryDetail>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct QueryDetail {
-	pub name: String,
-	pub query: String,
-	pub key_column: String,
-	pub sinks: Option<Vec<String>>,
-	#[serde(skip_serializing_if = "Option::is_none")]
-	pub transform: Option<String>,
-	pub enabled: bool,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -208,6 +138,7 @@ pub struct PipeInfo {
 	pub origin_dsn: String,
 	pub targets: Vec<String>,
 	pub interval_secs: u64,
+	pub query_count: usize,
 	#[serde(skip_serializing_if = "Option::is_none")]
 	pub recipe: Option<serde_json::Value>,
 	pub enabled: bool,
@@ -223,6 +154,8 @@ pub struct PipePresetSpecInput {
 	pub trino_url: Option<String>,
 	#[serde(default)]
 	pub origin_config: serde_json::Value,
+	#[serde(default)]
+	pub parameters: Vec<PipePresetParameterInput>,
 	#[serde(default)]
 	pub targets: Vec<String>,
 	#[serde(default)]
@@ -241,6 +174,21 @@ pub struct PipePresetSpecInput {
 	pub transforms: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub links: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PipePresetParameterInput {
+	pub name: String,
+	#[serde(default)]
+	pub label: Option<String>,
+	#[serde(default)]
+	pub description: Option<String>,
+	#[serde(default)]
+	pub default: Option<String>,
+	#[serde(default = "default_true")]
+	pub required: bool,
+	#[serde(default)]
+	pub secret: bool,
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
@@ -304,7 +252,8 @@ pub struct UpdatePipeRequest {
 	pub schedule: Option<serde_json::Value>,
 	pub delta: Option<serde_json::Value>,
 	pub retry: Option<serde_json::Value>,
-	pub recipe: Option<serde_json::Value>,
+	#[serde(default, deserialize_with = "deserialize_optional_json_value")]
+	pub recipe: Option<Option<serde_json::Value>>,
 	pub filters: Option<Vec<serde_json::Value>>,
 	pub transforms: Option<Vec<serde_json::Value>>,
 	pub links: Option<Vec<serde_json::Value>>,
@@ -352,4 +301,28 @@ pub struct CreateCredentialRequest {
 pub struct UpdateCredentialRequest {
 	pub secret: Option<String>,
 	pub credential_type: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+	use super::UpdatePipeRequest;
+
+	#[test]
+	fn update_pipe_request_distinguishes_null_recipe_from_omitted() {
+		let cleared: UpdatePipeRequest = serde_json::from_value(serde_json::json!({
+			"recipe": null
+		}))
+		.expect("request with null recipe should deserialize");
+		assert!(matches!(cleared.recipe, Some(None)));
+
+		let set: UpdatePipeRequest = serde_json::from_value(serde_json::json!({
+			"recipe": {"type": "postgres_snapshot", "prefix": "demo"}
+		}))
+		.expect("request with recipe object should deserialize");
+		assert!(matches!(set.recipe, Some(Some(_))));
+
+		let omitted: UpdatePipeRequest = serde_json::from_value(serde_json::json!({}))
+			.expect("empty request should deserialize");
+		assert!(omitted.recipe.is_none());
+	}
 }

@@ -2,9 +2,9 @@
 //!
 //! Run: `cargo run --example basic_stdout`
 //!
-//! This starts an in-memory SurrealDB, creates a sync config with no sources
+//! This starts an in-memory SurrealDB, creates a sync config with no pipes
 //! and a stdout sink, runs for 2 seconds, then shuts down. In a real app
-//! you would configure actual sources (postgres, http, graphql, etc).
+//! you would configure actual pipes (postgres, http, graphql, etc).
 
 use oversync::OversyncEngine;
 use oversync::config::{SinkDef, SurrealDbDef, SyncConfig};
@@ -27,7 +27,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![SinkDef {
 			name: "console".into(),
 			sink_type: "stdout".into(),

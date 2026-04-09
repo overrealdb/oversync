@@ -1,6 +1,5 @@
 mod common;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -17,11 +16,9 @@ use oversync_api::state::*;
 
 fn test_state_with_db(client: surrealdb::Surreal<surrealdb::engine::any::Any>) -> Arc<ApiState> {
 	Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(client.into()),
 		lifecycle: None,
 		api_key: None,
@@ -30,11 +27,9 @@ fn test_state_with_db(client: surrealdb::Surreal<surrealdb::engine::any::Any>) -
 
 fn test_state_no_db() -> Arc<ApiState> {
 	Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: None,
 		lifecycle: None,
 		api_key: None,
@@ -52,11 +47,9 @@ async fn test_state_with_export_lifecycle(container: &TestSurrealContainer) -> A
 	};
 
 	Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(container.client.clone().into()),
 		lifecycle: Some(Arc::new(ExportLifecycle { surreal_def })),
 		api_key: None,
@@ -201,111 +194,6 @@ async fn get_json(app: &axum::Router, path: &str) -> (StatusCode, serde_json::Va
 	(status, json)
 }
 
-// ── Source CRUD ─────────────────────────────────────────────
-
-#[tokio::test]
-async fn create_source_stores_in_db() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	let (status, json) = post_json(
-		&app,
-		"/sources",
-		serde_json::json!({
-			"name": "my-pg",
-			"connector": "postgres",
-			"config": {"dsn": "postgres://localhost/db"}
-		}),
-	)
-	.await;
-
-	assert_eq!(status, StatusCode::OK);
-	assert_eq!(json["ok"], true);
-	assert!(json["message"].as_str().unwrap().contains("my-pg"));
-
-	// Verify it's in the DB
-	let mut resp = container
-		.client
-		.query("SELECT * FROM source_config WHERE name = 'my-pg'")
-		.await
-		.unwrap();
-	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
-	assert_eq!(rows.len(), 1);
-	assert_eq!(rows[0]["connector"], "postgres");
-}
-
-#[tokio::test]
-async fn update_source_modifies_db() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	// Create first
-	post_json(
-		&app,
-		"/sources",
-		serde_json::json!({
-			"name": "src1",
-			"connector": "postgres",
-			"config": {"dsn": "postgres://old"}
-		}),
-	)
-	.await;
-
-	// Update
-	let (status, json) = put_json(
-		&app,
-		"/sources/src1",
-		serde_json::json!({
-			"config": {"dsn": "postgres://new"},
-		}),
-	)
-	.await;
-
-	assert_eq!(status, StatusCode::OK);
-	assert_eq!(json["ok"], true);
-
-	// Verify the DB was actually updated
-	let mut resp = container
-		.client
-		.query("SELECT * FROM source_config WHERE name = 'src1'")
-		.await
-		.unwrap();
-	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
-	assert_eq!(rows.len(), 1);
-	assert_eq!(rows[0]["config"]["dsn"], "postgres://new");
-}
-
-#[tokio::test]
-async fn delete_source_removes_from_db() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	post_json(
-		&app,
-		"/sources",
-		serde_json::json!({
-			"name": "to-delete",
-			"connector": "postgres",
-		}),
-	)
-	.await;
-
-	let (status, json) = delete_req(&app, "/sources/to-delete").await;
-	assert_eq!(status, StatusCode::OK);
-	assert_eq!(json["ok"], true);
-
-	let mut resp = container
-		.client
-		.query("SELECT * FROM source_config WHERE name = 'to-delete'")
-		.await
-		.unwrap();
-	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
-	assert!(rows.is_empty());
-}
-
 // ── Sink CRUD ───────────────────────────────────────────────
 
 #[tokio::test]
@@ -415,37 +303,6 @@ async fn history_returns_empty_when_no_cycles() {
 	assert_eq!(json["cycles"].as_array().unwrap().len(), 0);
 }
 
-// ── Read-cache sync ─────────────────────────────────────────
-
-#[tokio::test]
-async fn get_sources_reflects_created_source() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	// Initially empty
-	let (_, json) = get_json(&app, "/sources").await;
-	assert_eq!(json["sources"].as_array().unwrap().len(), 0);
-
-	// Create a source
-	post_json(
-		&app,
-		"/sources",
-		serde_json::json!({
-			"name": "new-pg",
-			"connector": "postgres",
-		}),
-	)
-	.await;
-
-	// GET /sources now shows it
-	let (_, json) = get_json(&app, "/sources").await;
-	let sources = json["sources"].as_array().unwrap();
-	assert_eq!(sources.len(), 1);
-	assert_eq!(sources[0]["name"], "new-pg");
-	assert_eq!(sources[0]["connector"], "postgres");
-}
-
 #[tokio::test]
 async fn get_sinks_reflects_created_sink() {
 	let container = TestSurrealContainer::new().await;
@@ -469,138 +326,15 @@ async fn get_sinks_reflects_created_sink() {
 	assert_eq!(sinks[0]["sink_type"], "http");
 }
 
-// ── Query CRUD ──────────────────────────────────────────────
-
-#[tokio::test]
-async fn create_and_list_queries() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	// Create a source first
-	post_json(
-		&app,
-		"/sources",
-		serde_json::json!({"name": "pg", "connector": "postgres"}),
-	)
-	.await;
-
-	// Create a query
-	let (status, json) = post_json(
-		&app,
-		"/sources/pg/queries",
-		serde_json::json!({
-			"name": "users",
-			"query": "SELECT id, name FROM users",
-			"key_column": "id",
-			"transform": "smt::normalize_users"
-		}),
-	)
-	.await;
-	assert_eq!(status, StatusCode::OK);
-	assert_eq!(json["ok"], true);
-
-	// List queries
-	let (status, json) = get_json(&app, "/sources/pg/queries").await;
-	assert_eq!(status, StatusCode::OK);
-	let queries = json["queries"].as_array().unwrap();
-	assert_eq!(queries.len(), 1);
-	assert_eq!(queries[0]["name"], "users");
-	assert_eq!(queries[0]["key_column"], "id");
-	assert_eq!(queries[0]["transform"], "smt::normalize_users");
-}
-
-#[tokio::test]
-async fn update_query_changes_db() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	post_json(
-		&app,
-		"/sources",
-		serde_json::json!({"name": "pg", "connector": "postgres"}),
-	)
-	.await;
-	post_json(
-		&app,
-		"/sources/pg/queries",
-		serde_json::json!({
-			"name": "q1",
-			"query": "SELECT 1 AS id",
-			"key_column": "id",
-			"transform": "smt::before"
-		}),
-	)
-	.await;
-
-	let (status, json) = put_json(
-		&app,
-		"/sources/pg/queries/q1",
-		serde_json::json!({"query": "SELECT 2 AS id", "transform": "smt::after"}),
-	)
-	.await;
-	assert_eq!(status, StatusCode::OK);
-	assert_eq!(json["ok"], true);
-
-	// Verify
-	let mut resp = container
-		.client
-		.query("SELECT * FROM query_config WHERE origin_id = 'pg' AND name = 'q1'")
-		.await
-		.unwrap();
-	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
-	assert_eq!(rows[0]["query"], "SELECT 2 AS id");
-	assert_eq!(rows[0]["transform"], "smt::after");
-}
-
-#[tokio::test]
-async fn delete_query_removes_from_db() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	post_json(
-		&app,
-		"/sources",
-		serde_json::json!({"name": "pg", "connector": "postgres"}),
-	)
-	.await;
-	post_json(
-		&app,
-		"/sources/pg/queries",
-		serde_json::json!({
-			"name": "to-del",
-			"query": "SELECT 1 AS id",
-			"key_column": "id",
-		}),
-	)
-	.await;
-
-	let (status, json) = delete_req(&app, "/sources/pg/queries/to-del").await;
-	assert_eq!(status, StatusCode::OK);
-	assert_eq!(json["ok"], true);
-
-	let mut resp = container
-		.client
-		.query("SELECT * FROM query_config WHERE origin_id = 'pg' AND name = 'to-del'")
-		.await
-		.unwrap();
-	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
-	assert!(rows.is_empty());
-}
-
 // ── Auth middleware ─────────────────────────────────────────
 
 #[tokio::test]
 async fn auth_key_blocks_unauthorized_requests() {
 	let container = TestSurrealContainer::new().await;
 	let state = Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(container.client.clone().into()),
 		lifecycle: None,
 		api_key: Some("secret-key".into()),
@@ -612,7 +346,7 @@ async fn auth_key_blocks_unauthorized_requests() {
 	assert_eq!(status, StatusCode::OK);
 
 	// Protected route without key → 401
-	let req = Request::get("/sources").body(Body::empty()).unwrap();
+	let req = Request::get("/pipes").body(Body::empty()).unwrap();
 	let resp = app.clone().oneshot(req).await.unwrap();
 	assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
@@ -621,11 +355,9 @@ async fn auth_key_blocks_unauthorized_requests() {
 async fn auth_key_allows_authorized_requests() {
 	let container = TestSurrealContainer::new().await;
 	let state = Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(container.client.clone().into()),
 		lifecycle: None,
 		api_key: Some("secret-key".into()),
@@ -633,7 +365,7 @@ async fn auth_key_allows_authorized_requests() {
 	let app = oversync_api::router(state);
 
 	// Bearer auth
-	let req = Request::get("/sources")
+	let req = Request::get("/pipes")
 		.header("authorization", "Bearer secret-key")
 		.body(Body::empty())
 		.unwrap();
@@ -652,18 +384,16 @@ async fn auth_key_allows_authorized_requests() {
 #[tokio::test]
 async fn auth_key_wrong_key_returns_401() {
 	let state = Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: None,
 		lifecycle: None,
 		api_key: Some("correct-key".into()),
 	});
 	let app = oversync_api::router(state);
 
-	let req = Request::get("/sources")
+	let req = Request::get("/pipes")
 		.header("authorization", "Bearer wrong-key")
 		.body(Body::empty())
 		.unwrap();
@@ -672,25 +402,6 @@ async fn auth_key_wrong_key_returns_401() {
 }
 
 // ── Error cases ─────────────────────────────────────────────
-
-#[tokio::test]
-async fn create_source_without_db_errors() {
-	let state = test_state_no_db();
-	let app = oversync_api::router(state);
-
-	let (status, json) = post_json(
-		&app,
-		"/sources",
-		serde_json::json!({
-			"name": "x",
-			"connector": "postgres",
-		}),
-	)
-	.await;
-
-	assert_eq!(status, StatusCode::OK);
-	assert!(json["error"].as_str().unwrap().contains("database"));
-}
 
 // ── Pipe CRUD ───────────────────────────────────────────────
 
@@ -829,6 +540,10 @@ async fn create_manual_pipe_stores_queries_in_query_config() {
 	assert_eq!(rows.len(), 1);
 	assert_eq!(rows[0]["query"], "SELECT id, name FROM accounts");
 	assert_eq!(rows[0]["key_column"], "id");
+
+	let (status, pipe_list) = get_json(&app, "/pipes").await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(pipe_list["pipes"][0]["query_count"], 1);
 }
 
 #[tokio::test]
@@ -895,6 +610,13 @@ async fn create_pipe_preset_stores_in_db_and_lists_in_api() {
 			"spec": {
 				"origin_connector": "postgres",
 				"origin_dsn": "",
+				"parameters": [{
+					"name": "source_name",
+					"label": "Source Name",
+					"default": "some-postgresql-source",
+					"required": true,
+					"secret": false
+				}],
 				"targets": ["stdout"],
 				"queries": [{
 					"id": "aspect-columns",
@@ -927,6 +649,7 @@ async fn create_pipe_preset_stores_in_db_and_lists_in_api() {
 		rows[0]["spec"]["queries"][0]["name"],
 		serde_json::Value::Null
 	);
+	assert_eq!(rows[0]["spec"]["parameters"][0]["name"], "source_name");
 	assert_eq!(rows[0]["spec"]["queries"][0]["id"], "aspect-columns");
 
 	let (status, json) = get_json(&app, "/pipe-presets").await;
@@ -935,6 +658,10 @@ async fn create_pipe_preset_stores_in_db_and_lists_in_api() {
 	assert_eq!(
 		json["presets"][0]["spec"]["queries"][0]["id"],
 		"aspect-columns"
+	);
+	assert_eq!(
+		json["presets"][0]["spec"]["parameters"][0]["default"],
+		"some-postgresql-source"
 	);
 }
 
@@ -953,6 +680,12 @@ async fn update_pipe_preset_rewrites_spec() {
 			"spec": {
 				"origin_connector": "postgres",
 				"origin_dsn": "",
+				"parameters": [{
+					"name": "schema_name",
+					"default": "public",
+					"required": true,
+					"secret": false
+				}],
 				"targets": [],
 				"queries": [],
 				"schedule": { "interval_secs": 300, "missed_tick_policy": "skip" },
@@ -981,6 +714,12 @@ async fn update_pipe_preset_rewrites_spec() {
 			"spec": {
 				"origin_connector": "postgres",
 				"origin_dsn": "",
+				"parameters": [{
+					"name": "schema_name",
+					"default": "analytics",
+					"required": true,
+					"secret": false
+				}],
 				"targets": ["stdout"],
 				"queries": [],
 				"schedule": { "interval_secs": 600, "missed_tick_policy": "skip" },
@@ -1008,6 +747,7 @@ async fn update_pipe_preset_rewrites_spec() {
 	assert_eq!(status, StatusCode::OK);
 	assert_eq!(json["description"], "Updated metadata preset");
 	assert_eq!(json["spec"]["targets"][0], "stdout");
+	assert_eq!(json["spec"]["parameters"][0]["default"], "analytics");
 	assert_eq!(json["spec"]["delta"]["diff_mode"], "memory");
 	assert_eq!(json["spec"]["recipe"]["type"], "postgres_snapshot");
 	assert_eq!(json["spec"]["recipe"]["schemas"][1], "analytics");
@@ -1334,6 +1074,73 @@ async fn update_pipe_modifies_db() {
 }
 
 #[tokio::test]
+async fn update_pipe_can_clear_recipe_for_manual_mode() {
+	let container = TestSurrealContainer::new().await;
+	let state = test_state_with_db(container.client.clone());
+	let app = oversync_api::router(state);
+
+	post_json(
+		&app,
+		"/pipes",
+		serde_json::json!({
+			"name": "manual-switch",
+			"origin_connector": "postgres",
+			"origin_dsn": "postgres://runtime",
+			"targets": ["stdout"],
+			"schedule": {"interval_secs": 60},
+			"delta": {"diff_mode": "db", "fail_safe_threshold": 30},
+			"recipe": {
+				"type": "postgres_snapshot",
+				"prefix": "some-postgresql-source",
+				"schemas": ["public"]
+			}
+		}),
+	)
+	.await;
+
+	let (status, json) = put_json(
+		&app,
+		"/pipes/manual-switch",
+		serde_json::json!({
+			"recipe": null,
+			"queries": [
+				{
+					"id": "custom-aspect",
+					"sql": "SELECT id, payload FROM custom_aspect",
+					"key_column": "id"
+				}
+			]
+		}),
+	)
+	.await;
+
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["ok"], true);
+
+	let mut resp = container
+		.client
+		.query("SELECT * FROM pipe_config WHERE name = 'manual-switch'")
+		.await
+		.unwrap();
+	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
+	assert_eq!(rows.len(), 1);
+	assert!(
+		rows[0]["recipe"].is_null(),
+		"expected recipe to be null after manual switch, got row: {:?}",
+		rows[0]
+	);
+
+	let mut queries_resp = container
+		.client
+		.query("SELECT * FROM query_config WHERE origin_id = 'manual-switch'")
+		.await
+		.unwrap();
+	let query_rows: Vec<serde_json::Value> = queries_resp.take(0).unwrap();
+	assert_eq!(query_rows.len(), 1);
+	assert_eq!(query_rows[0]["name"], "custom-aspect");
+}
+
+#[tokio::test]
 async fn delete_pipe_removes_from_db() {
 	let container = TestSurrealContainer::new().await;
 	let state = test_state_with_db(container.client.clone());
@@ -1485,32 +1292,15 @@ async fn update_sink_modifies_db() {
 	assert_eq!(json["ok"], true);
 }
 
-// ── Trigger source ──────────────────────────────────────────
-
-#[tokio::test]
-async fn trigger_source_without_lifecycle() {
-	let container = TestSurrealContainer::new().await;
-	let state = test_state_with_db(container.client.clone());
-	let app = oversync_api::router(state);
-
-	let (status, json) =
-		post_json(&app, "/sources/nonexistent/trigger", serde_json::json!({})).await;
-
-	assert_eq!(status, StatusCode::OK);
-	assert!(json["error"].as_str().is_some() || json["message"].as_str().is_some());
-}
-
 // ── Auth on write endpoints ─────────────────────────────────
 
 #[tokio::test]
 async fn auth_blocks_write_endpoints() {
 	let container = TestSurrealContainer::new().await;
 	let state = Arc::new(ApiState {
-		sources: Arc::new(RwLock::new(vec![])),
 		sinks: Arc::new(RwLock::new(vec![])),
 		pipes: Arc::new(RwLock::new(vec![])),
 		pipe_presets: Arc::new(RwLock::new(vec![])),
-		cycle_status: Arc::new(RwLock::new(HashMap::new())),
 		db_client: Some(container.client.clone().into()),
 		lifecycle: None,
 		api_key: Some("secret".into()),
@@ -1535,18 +1325,6 @@ async fn auth_blocks_write_endpoints() {
 		app.clone().oneshot(req).await.unwrap().status()
 	}
 
-	assert_eq!(
-		status_of(&app, "POST", "/sources").await,
-		StatusCode::UNAUTHORIZED
-	);
-	assert_eq!(
-		status_of(&app, "PUT", "/sources/x").await,
-		StatusCode::UNAUTHORIZED
-	);
-	assert_eq!(
-		status_of(&app, "DELETE", "/sources/x").await,
-		StatusCode::UNAUTHORIZED
-	);
 	assert_eq!(
 		status_of(&app, "POST", "/sinks").await,
 		StatusCode::UNAUTHORIZED

@@ -24,47 +24,6 @@ pub async fn health() -> Json<HealthResponse> {
 
 #[utoipa::path(
 	get,
-	path = "/sources",
-	responses(
-		(status = 200, description = "List configured sources", body = SourceListResponse)
-	)
-)]
-pub async fn list_sources(State(state): State<Arc<ApiState>>) -> Json<SourceListResponse> {
-	Json(SourceListResponse {
-		sources: state.sources_info(),
-	})
-}
-
-#[utoipa::path(
-	get,
-	path = "/sources/{name}",
-	params(("name" = String, Path, description = "Source name")),
-	responses(
-		(status = 200, description = "Source details", body = SourceInfo),
-		(status = 404, description = "Source not found", body = ErrorResponse)
-	)
-)]
-pub async fn get_source(
-	State(state): State<Arc<ApiState>>,
-	Path(name): Path<String>,
-) -> Result<Json<SourceInfo>, impl IntoResponse> {
-	state
-		.sources_info()
-		.into_iter()
-		.find(|s| s.name == name)
-		.map(Json)
-		.ok_or_else(|| {
-			(
-				StatusCode::NOT_FOUND,
-				Json(ErrorResponse {
-					error: format!("source not found: {name}"),
-				}),
-			)
-		})
-}
-
-#[utoipa::path(
-	get,
 	path = "/sinks",
 	responses(
 		(status = 200, description = "List configured sinks", body = SinkListResponse)

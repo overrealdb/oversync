@@ -4,11 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use oversync_core::error::OversyncError;
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncConfig {
 	pub surrealdb: SurrealDbDef,
-	#[serde(default)]
-	pub sources: Vec<SourceDef>,
 	#[serde(default)]
 	pub sinks: Vec<SinkDef>,
 	#[serde(default)]
@@ -17,6 +16,7 @@ pub struct SyncConfig {
 	pub pipe_presets: Vec<PipePresetDef>,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SurrealDbDef {
 	pub url: String,
@@ -32,6 +32,7 @@ pub struct SurrealDbDef {
 	pub snapshot: Option<SnapshotDbDef>,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotDbDef {
 	pub url: String,
@@ -58,30 +59,8 @@ fn default_db() -> String {
 	"sync".into()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceDef {
-	pub name: String,
-	pub connector: String,
-	pub dsn: String,
-	#[serde(default = "default_interval")]
-	pub interval_secs: u64,
-	#[serde(default = "default_threshold")]
-	pub fail_safe_threshold: f64,
-	#[serde(default = "default_max_retries")]
-	pub max_retries: u32,
-	#[serde(default = "default_retry_delay")]
-	pub retry_base_delay_secs: u64,
-	#[serde(default)]
-	pub diff_mode: DiffMode,
-	#[serde(default)]
-	pub missed_tick_policy: MissedTickPolicy,
-	#[serde(default)]
-	pub config: serde_json::Value,
-	#[serde(default)]
-	pub queries: Vec<QueryDef>,
-}
-
 /// What to do when a cycle takes longer than the polling interval.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MissedTickPolicy {
@@ -92,6 +71,7 @@ pub enum MissedTickPolicy {
 	Burst,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SinkDef {
 	pub name: String,
@@ -101,6 +81,7 @@ pub struct SinkDef {
 	pub config: serde_json::Value,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffMode {
@@ -127,6 +108,7 @@ fn default_true() -> bool {
 	true
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryDef {
 	pub id: String,
@@ -140,8 +122,9 @@ pub struct QueryDef {
 
 /// A pipe is a complete data pipeline: origin → delta → transform → targets.
 ///
-/// Replaces the flat `SourceDef` with structured sub-configs for origin,
-/// schedule, delta, and retry. Targets are references to named sinks.
+/// Pipes are the only supported runtime onboarding surface. Targets are
+/// references to named sinks.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipeConfig {
 	pub name: String,
@@ -172,6 +155,7 @@ pub struct PipeConfig {
 
 /// Reusable control-plane preset for bootstrapping new pipes in UI/API.
 /// Presets are not runnable by themselves; they store defaults for future pipes.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipePresetDef {
 	pub name: String,
@@ -180,9 +164,12 @@ pub struct PipePresetDef {
 	pub spec: PipePresetSpec,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipePresetSpec {
 	pub origin: OriginDef,
+	#[serde(default)]
+	pub parameters: Vec<PipePresetParameterDef>,
 	#[serde(default)]
 	pub targets: Vec<String>,
 	#[serde(default)]
@@ -203,6 +190,23 @@ pub struct PipePresetSpec {
 	pub links: Vec<LinkDef>,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipePresetParameterDef {
+	pub name: String,
+	#[serde(default)]
+	pub label: Option<String>,
+	#[serde(default)]
+	pub description: Option<String>,
+	#[serde(default)]
+	pub default: Option<String>,
+	#[serde(default = "default_true")]
+	pub required: bool,
+	#[serde(default)]
+	pub secret: bool,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PipeRecipeDef {
 	#[serde(rename = "type")]
@@ -216,6 +220,7 @@ pub struct PipeRecipeDef {
 	pub schemas: Vec<String>,
 }
 
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PipeRecipeType {
@@ -228,6 +233,7 @@ fn default_recipe_schema_id() -> String {
 }
 
 /// Matching strategy for entity linking rules.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkStrategy {
@@ -237,6 +243,7 @@ pub enum LinkStrategy {
 }
 
 /// Cross-source entity linking rule in TOML config.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkDef {
 	pub name: String,
@@ -264,6 +271,7 @@ const TRINO_BRIDGE_CONNECTORS: &[&str] = &[
 ];
 
 /// Origin connector configuration within a pipe.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OriginDef {
 	pub connector: String,
@@ -288,6 +296,7 @@ impl OriginDef {
 }
 
 /// Polling schedule for a pipe.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleDef {
 	#[serde(default = "default_interval")]
@@ -309,6 +318,7 @@ impl Default for ScheduleDef {
 }
 
 /// Delta detection settings for a pipe.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaDef {
 	#[serde(default)]
@@ -327,6 +337,7 @@ impl Default for DeltaDef {
 }
 
 /// Retry policy for failed cycles.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryDef {
 	#[serde(default = "default_max_retries")]
@@ -340,42 +351,6 @@ impl Default for RetryDef {
 		Self {
 			max_retries: default_max_retries(),
 			retry_base_delay_secs: default_retry_delay(),
-		}
-	}
-}
-
-impl From<&SourceDef> for PipeConfig {
-	fn from(src: &SourceDef) -> Self {
-		Self {
-			name: src.name.clone(),
-			origin: OriginDef {
-				connector: src.connector.clone(),
-				dsn: src.dsn.clone(),
-				credential: None,
-				trino_url: None,
-				config: src.config.clone(),
-			},
-			targets: vec![],
-			queries: src.queries.clone(),
-			schedule: ScheduleDef {
-				interval_secs: src.interval_secs,
-				missed_tick_policy: src.missed_tick_policy.clone(),
-				max_requests_per_minute: None,
-			},
-			delta: DeltaDef {
-				diff_mode: src.diff_mode.clone(),
-				fail_safe_threshold: src.fail_safe_threshold,
-			},
-			retry: RetryDef {
-				max_retries: src.max_retries,
-				retry_base_delay_secs: src.retry_base_delay_secs,
-			},
-			recipe: None,
-			filters: vec![],
-			transforms: vec![],
-			links: vec![],
-			alert_webhook: None,
-			enabled: true,
 		}
 	}
 }
@@ -401,14 +376,9 @@ pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
 	let mut issues = Vec::new();
 	let mut explicit_pipe_counts: std::collections::HashMap<&str, usize> =
 		std::collections::HashMap::new();
-	let mut source_counts: std::collections::HashMap<&str, usize> =
-		std::collections::HashMap::new();
 
 	for pipe in &config.pipes {
 		*explicit_pipe_counts.entry(pipe.name.as_str()).or_default() += 1;
-	}
-	for source in &config.sources {
-		*source_counts.entry(source.name.as_str()).or_default() += 1;
 	}
 
 	for (name, count) in explicit_pipe_counts.iter().filter(|(_, count)| **count > 1) {
@@ -418,26 +388,6 @@ pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
 				"pipe name '{name}' is defined {count} times in [[pipes]]; last definition wins"
 			),
 		});
-	}
-
-	for (name, count) in source_counts.iter().filter(|(_, count)| **count > 1) {
-		issues.push(ConfigIssue {
-			severity: Severity::Warning,
-			message: format!(
-				"source name '{name}' is defined {count} times in [[sources]]; first definition wins when auto-converted to pipes"
-			),
-		});
-	}
-
-	for name in explicit_pipe_counts.keys() {
-		if source_counts.contains_key(name) {
-			issues.push(ConfigIssue {
-				severity: Severity::Warning,
-				message: format!(
-					"name '{name}' is defined in both [[pipes]] and [[sources]]; explicit [[pipes]] entry wins"
-				),
-			});
-		}
 	}
 
 	for pipe in &config.pipes {
@@ -643,31 +593,46 @@ pub fn expand_env_vars(input: &str) -> Result<String, OversyncError> {
 	Ok(result)
 }
 
+fn parse_config_value(toml_str: &str) -> Result<toml::Value, OversyncError> {
+	let value: toml::Value =
+		toml::from_str(toml_str).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))?;
+	if value.get("sources").is_some() {
+		return Err(OversyncError::Config(
+			"legacy [[sources]] config is no longer supported; migrate to [[pipes]]".into(),
+		));
+	}
+	Ok(value)
+}
+
 impl SyncConfig {
 	/// Load config from a TOML file with `${VAR}` env var expansion.
 	pub fn from_file(path: &Path) -> Result<Self, OversyncError> {
 		let content = std::fs::read_to_string(path)
 			.map_err(|e| OversyncError::Config(format!("read {}: {e}", path.display())))?;
 		let expanded = expand_env_vars(&content)?;
-		toml::from_str(&expanded).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
+		parse_config_value(&expanded)?
+			.try_into()
+			.map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
 
 	/// Parse config from a TOML string (no env var expansion).
 	#[allow(clippy::should_implement_trait)]
 	pub fn from_str(toml_str: &str) -> Result<Self, OversyncError> {
-		toml::from_str(toml_str).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
+		parse_config_value(toml_str)?
+			.try_into()
+			.map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
 
 	/// Parse config from a TOML string with `${VAR}` env var expansion.
 	pub fn from_str_with_env(toml_str: &str) -> Result<Self, OversyncError> {
 		let expanded = expand_env_vars(toml_str)?;
-		toml::from_str(&expanded).map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
+		parse_config_value(&expanded)?
+			.try_into()
+			.map_err(|e| OversyncError::Config(format!("parse TOML: {e}")))
 	}
 
-	/// Returns all pipes: explicit `[[pipes]]` entries plus auto-converted `[[sources]]`.
+	/// Returns the effective pipes after de-duplicating explicit `[[pipes]]` entries.
 	///
-	/// Legacy `[[sources]]` are converted to `PipeConfig` for backward compatibility.
-	/// When both `pipes` and `sources` define the same name, explicit pipes take precedence.
 	/// Duplicate names within `[[pipes]]` are deduplicated (last wins).
 	pub fn effective_pipes(&self) -> Vec<PipeConfig> {
 		let mut seen = std::collections::HashSet::new();
@@ -680,12 +645,6 @@ impl SyncConfig {
 			}
 		}
 		pipes.reverse();
-
-		for source in &self.sources {
-			if seen.insert(source.name.clone()) {
-				pipes.push(PipeConfig::from(source));
-			}
-		}
 		pipes
 	}
 }
@@ -840,11 +799,11 @@ mod tests {
 		assert!(config.surrealdb.username.is_empty());
 		assert!(config.surrealdb.password.is_empty());
 		assert_eq!(config.surrealdb.namespace, "oversync");
-		assert!(config.sources.is_empty());
+		assert!(config.pipes.is_empty());
 	}
 
 	#[test]
-	fn parse_full_config() {
+	fn parse_full_pipe_config() {
 		let toml = r#"
 [surrealdb]
 url = "http://localhost:8000"
@@ -853,84 +812,92 @@ password = "secret"
 namespace = "prod"
 database = "sync_state"
 
-[[sources]]
+[[pipes]]
 name = "product_a"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://ro@pg1:5432/meta"
+
+[pipes.schedule]
 interval_secs = 60
+
+[pipes.delta]
 fail_safe_threshold = 25.0
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "tables"
 sql = "SELECT oid::text, relname FROM pg_class WHERE relnamespace = 2200"
 key_column = "oid"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "columns"
 sql = "SELECT attrelid::text || '.' || attnum::text AS id, attname FROM pg_attribute"
 key_column = "id"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert_eq!(config.surrealdb.username, "admin");
-		assert_eq!(config.sources.len(), 1);
-		assert_eq!(config.sources[0].name, "product_a");
-		assert_eq!(config.sources[0].interval_secs, 60);
-		assert_eq!(config.sources[0].queries.len(), 2);
-		assert_eq!(config.sources[0].queries[0].id, "tables");
-		assert_eq!(config.sources[0].queries[1].id, "columns");
+		assert_eq!(config.pipes.len(), 1);
+		assert_eq!(config.pipes[0].name, "product_a");
+		assert_eq!(config.pipes[0].schedule.interval_secs, 60);
+		assert_eq!(config.pipes[0].queries.len(), 2);
+		assert_eq!(config.pipes[0].queries[0].id, "tables");
+		assert_eq!(config.pipes[0].queries[1].id, "columns");
 	}
 
 	#[test]
-	fn parse_defaults() {
+	fn parse_pipe_defaults() {
 		let toml = r#"
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "src"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://localhost/db"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "q"
 sql = "SELECT 1 AS id"
 key_column = "id"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
-		assert_eq!(config.sources[0].interval_secs, 300);
-		assert_eq!(config.sources[0].fail_safe_threshold, 30.0);
+		assert_eq!(config.pipes[0].schedule.interval_secs, 300);
+		assert_eq!(config.pipes[0].delta.fail_safe_threshold, 30.0);
 	}
 
 	#[test]
-	fn parse_multiple_sources() {
+	fn parse_two_minimal_pipes() {
 		let toml = r#"
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "pg_a"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://a/db"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "q1"
 sql = "SELECT 1 AS id"
 key_column = "id"
 
-[[sources]]
+[[pipes]]
 name = "pg_b"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://b/db"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "q2"
 sql = "SELECT 2 AS id"
 key_column = "id"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
-		assert_eq!(config.sources.len(), 2);
-		assert_eq!(config.sources[0].name, "pg_a");
-		assert_eq!(config.sources[1].name, "pg_b");
+		assert_eq!(config.pipes.len(), 2);
+		assert_eq!(config.pipes[0].name, "pg_a");
+		assert_eq!(config.pipes[1].name, "pg_b");
 	}
 
 	#[test]
@@ -970,7 +937,7 @@ url = "http://localhost:8000"
 	}
 
 	#[test]
-	fn source_without_queries_is_valid() {
+	fn legacy_sources_are_rejected() {
 		let toml = r#"
 [surrealdb]
 url = "http://localhost:8000"
@@ -980,49 +947,52 @@ name = "empty"
 connector = "postgres"
 dsn = "postgres://localhost/db"
 "#;
-		let config = SyncConfig::from_str(toml).unwrap();
-		assert!(config.sources[0].queries.is_empty());
+		let error = SyncConfig::from_str(toml).unwrap_err();
+		assert!(error.to_string().contains("legacy [[sources]]"));
 	}
 
 	#[test]
-	fn parse_http_source_with_config() {
+	fn parse_http_pipe_with_config() {
 		let toml = r#"
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "github-repos"
+[pipes.origin]
 connector = "http"
 dsn = "https://api.github.com"
-interval_secs = 3600
 
-[sources.config]
+[pipes.origin.config]
 headers = { "Accept" = "application/vnd.github+json" }
 response_path = "items"
 
-[sources.config.auth]
+[pipes.origin.config.auth]
 type = "bearer"
 token = "ghp_test123"
 
-[sources.config.pagination]
+[pipes.origin.config.pagination]
 type = "offset"
 page_size = 100
 limit_param = "per_page"
 offset_param = "page"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "repos"
 sql = "/orgs/example/repos"
 key_column = "id"
+
+[pipes.schedule]
+interval_secs = 3600
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
-		let src = &config.sources[0];
-		assert_eq!(src.name, "github-repos");
-		assert_eq!(src.connector, "http");
-		assert_eq!(src.dsn, "https://api.github.com");
-		assert_eq!(src.interval_secs, 3600);
+		let pipe = &config.pipes[0];
+		assert_eq!(pipe.name, "github-repos");
+		assert_eq!(pipe.origin.connector, "http");
+		assert_eq!(pipe.origin.dsn, "https://api.github.com");
+		assert_eq!(pipe.schedule.interval_secs, 3600);
 
-		let cfg = src.config.as_object().unwrap();
+		let cfg = pipe.origin.config.as_object().unwrap();
 		assert_eq!(cfg["response_path"], "items");
 		assert_eq!(cfg["auth"]["type"], "bearer");
 		assert_eq!(cfg["auth"]["token"], "ghp_test123");
@@ -1036,19 +1006,20 @@ key_column = "id"
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "pg"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://localhost/db"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "q1"
 sql = "SELECT 1 AS id"
 key_column = "id"
 sinks = ["kafka-main", "stdout-debug"]
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
-		let sinks = config.sources[0].queries[0].sinks.as_ref().unwrap();
+		let sinks = config.pipes[0].queries[0].sinks.as_ref().unwrap();
 		assert_eq!(sinks, &["kafka-main", "stdout-debug"]);
 	}
 
@@ -1058,12 +1029,13 @@ sinks = ["kafka-main", "stdout-debug"]
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "pg"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://localhost/db"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "q1"
 sql = "SELECT 1 AS id"
 key_column = "id"
@@ -1071,7 +1043,7 @@ transform = "smt::normalize_users"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert_eq!(
-			config.sources[0].queries[0].transform.as_deref(),
+			config.pipes[0].queries[0].transform.as_deref(),
 			Some("smt::normalize_users")
 		);
 	}
@@ -1082,33 +1054,35 @@ transform = "smt::normalize_users"
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "pg"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://localhost/db"
 
-[[sources.queries]]
+[[pipes.queries]]
 id = "q1"
 sql = "SELECT 1 AS id"
 key_column = "id"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
-		assert!(config.sources[0].queries[0].sinks.is_none());
+		assert!(config.pipes[0].queries[0].sinks.is_none());
 	}
 
 	#[test]
-	fn source_config_defaults_to_null() {
+	fn pipe_origin_config_defaults_to_null() {
 		let toml = r#"
 [surrealdb]
 url = "http://localhost:8000"
 
-[[sources]]
+[[pipes]]
 name = "pg"
+[pipes.origin]
 connector = "postgres"
 dsn = "postgres://localhost/db"
 "#;
 		let config = SyncConfig::from_str(toml).unwrap();
-		assert!(config.sources[0].config.is_null());
+		assert!(config.pipes[0].origin.config.is_null());
 	}
 
 	#[test]
@@ -1309,132 +1283,6 @@ dsn = "mysql://b/db"
 		assert_eq!(config.pipes[0].origin.connector, "postgres");
 		assert_eq!(config.pipes[1].name, "pipe-b");
 		assert_eq!(config.pipes[1].origin.connector, "mysql");
-	}
-
-	#[test]
-	fn effective_pipes_from_sources() {
-		let toml = r#"
-[surrealdb]
-url = "http://localhost:8000"
-
-[[sources]]
-name = "pg"
-connector = "postgres"
-dsn = "postgres://localhost/db"
-interval_secs = 120
-fail_safe_threshold = 20.0
-
-[[sources.queries]]
-id = "q1"
-sql = "SELECT 1 AS id"
-key_column = "id"
-"#;
-		let config = SyncConfig::from_str(toml).unwrap();
-		assert!(config.pipes.is_empty());
-		let pipes = config.effective_pipes();
-		assert_eq!(pipes.len(), 1);
-		let pipe = &pipes[0];
-		assert_eq!(pipe.name, "pg");
-		assert_eq!(pipe.origin.connector, "postgres");
-		assert_eq!(pipe.origin.dsn, "postgres://localhost/db");
-		assert_eq!(pipe.schedule.interval_secs, 120);
-		assert_eq!(pipe.delta.fail_safe_threshold, 20.0);
-		assert_eq!(pipe.queries.len(), 1);
-	}
-
-	#[test]
-	fn effective_pipes_merges_both() {
-		let toml = r#"
-[surrealdb]
-url = "http://localhost:8000"
-
-[[sources]]
-name = "legacy-src"
-connector = "postgres"
-dsn = "postgres://localhost/db"
-
-[[pipes]]
-name = "new-pipe"
-
-[pipes.origin]
-connector = "mysql"
-dsn = "mysql://localhost/db"
-"#;
-		let config = SyncConfig::from_str(toml).unwrap();
-		let pipes = config.effective_pipes();
-		assert_eq!(pipes.len(), 2);
-		let names: Vec<&str> = pipes.iter().map(|p| p.name.as_str()).collect();
-		assert!(names.contains(&"new-pipe"));
-		assert!(names.contains(&"legacy-src"));
-	}
-
-	#[test]
-	fn effective_pipes_explicit_takes_precedence() {
-		let toml = r#"
-[surrealdb]
-url = "http://localhost:8000"
-
-[[sources]]
-name = "same-name"
-connector = "postgres"
-dsn = "postgres://old"
-
-[[pipes]]
-name = "same-name"
-
-[pipes.origin]
-connector = "mysql"
-dsn = "mysql://new"
-"#;
-		let config = SyncConfig::from_str(toml).unwrap();
-		let pipes = config.effective_pipes();
-		assert_eq!(pipes.len(), 1);
-		assert_eq!(pipes[0].origin.connector, "mysql");
-		assert_eq!(pipes[0].origin.dsn, "mysql://new");
-	}
-
-	#[test]
-	fn source_def_converts_to_pipe() {
-		let src = SourceDef {
-			name: "pg".into(),
-			connector: "postgres".into(),
-			dsn: "postgres://localhost/db".into(),
-			interval_secs: 120,
-			fail_safe_threshold: 20.0,
-			max_retries: 5,
-			retry_base_delay_secs: 10,
-			diff_mode: DiffMode::Memory,
-			missed_tick_policy: MissedTickPolicy::Burst,
-			config: serde_json::json!({"ssl": true}),
-			queries: vec![QueryDef {
-				id: "q1".into(),
-				sql: "SELECT 1".into(),
-				key_column: "id".into(),
-				sinks: Some(vec!["kafka".into()]),
-				transform: Some("smt::x".into()),
-			}],
-		};
-		let pipe = PipeConfig::from(&src);
-		assert_eq!(pipe.name, "pg");
-		assert_eq!(pipe.origin.connector, "postgres");
-		assert_eq!(pipe.origin.dsn, "postgres://localhost/db");
-		assert_eq!(pipe.origin.config["ssl"], true);
-		assert_eq!(pipe.schedule.interval_secs, 120);
-		assert!(matches!(
-			pipe.schedule.missed_tick_policy,
-			MissedTickPolicy::Burst
-		));
-		assert!(matches!(pipe.delta.diff_mode, DiffMode::Memory));
-		assert_eq!(pipe.delta.fail_safe_threshold, 20.0);
-		assert_eq!(pipe.retry.max_retries, 5);
-		assert_eq!(pipe.retry.retry_base_delay_secs, 10);
-		assert_eq!(pipe.queries.len(), 1);
-		assert_eq!(
-			pipe.queries[0].sinks.as_deref(),
-			Some(&["kafka".to_string()][..])
-		);
-		assert!(pipe.targets.is_empty());
-		assert!(pipe.enabled);
 	}
 
 	#[test]

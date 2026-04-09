@@ -42,7 +42,7 @@ async fn build_engine(state: &TestSurrealContainer, snap: &TestSurrealContainer)
 fn make_config(
 	state: &TestSurrealContainer,
 	snap: &TestSurrealContainer,
-	source: SourceDef,
+	pipe: PipeConfig,
 	sinks: Vec<SinkDef>,
 ) -> SyncConfig {
 	let url = "unused-engine-already-connected".into();
@@ -61,10 +61,51 @@ fn make_config(
 				database: snap.db.clone(),
 			}),
 		},
-		sources: vec![source],
 		sinks,
-		pipes: vec![],
+		pipes: vec![pipe],
 		pipe_presets: vec![],
+	}
+}
+
+fn make_pipe(
+	name: &str,
+	connector: &str,
+	dsn: String,
+	interval_secs: u64,
+	diff_mode: DiffMode,
+	config: serde_json::Value,
+	queries: Vec<QueryDef>,
+) -> PipeConfig {
+	PipeConfig {
+		name: name.into(),
+		origin: OriginDef {
+			connector: connector.into(),
+			dsn,
+			credential: None,
+			trino_url: None,
+			config,
+		},
+		targets: vec![],
+		queries,
+		schedule: ScheduleDef {
+			interval_secs,
+			missed_tick_policy: Default::default(),
+			max_requests_per_minute: None,
+		},
+		delta: DeltaDef {
+			diff_mode,
+			fail_safe_threshold: 30.0,
+		},
+		retry: RetryDef {
+			max_retries: 0,
+			retry_base_delay_secs: 1,
+		},
+		recipe: None,
+		filters: vec![],
+		transforms: vec![],
+		links: vec![],
+		alert_webhook: None,
+		enabled: true,
 	}
 }
 
@@ -88,25 +129,21 @@ async fn engine_http_source_to_stdout_produces_cycle() {
 
 	let engine = build_engine(&state_db, &snap_db).await;
 
-	let source = SourceDef {
-		name: "mock-http".into(),
-		connector: "http".into(),
-		dsn: source_url.clone(),
-		interval_secs: 9999,
-		fail_safe_threshold: 30.0,
-		max_retries: 0,
-		retry_base_delay_secs: 1,
-		diff_mode: DiffMode::Memory,
-		missed_tick_policy: Default::default(),
-		config: serde_json::json!({"dsn": source_url}),
-		queries: vec![QueryDef {
+	let pipe = make_pipe(
+		"mock-http",
+		"http",
+		source_url.clone(),
+		9999,
+		DiffMode::Memory,
+		serde_json::json!({"dsn": source_url}),
+		vec![QueryDef {
 			id: "items".into(),
 			sql: "/items".into(),
 			key_column: "id".into(),
 			sinks: None,
 			transform: None,
 		}],
-	};
+	);
 	let sinks = vec![SinkDef {
 		name: "debug".into(),
 		sink_type: "stdout".into(),
@@ -114,7 +151,7 @@ async fn engine_http_source_to_stdout_produces_cycle() {
 	}];
 
 	engine
-		.start(make_config(&state_db, &snap_db, source, sinks))
+		.start(make_config(&state_db, &snap_db, pipe, sinks))
 		.await
 		.unwrap();
 	tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -171,25 +208,21 @@ async fn engine_http_source_to_http_sink_delivers_events() {
 
 	let engine = build_engine(&state_db, &snap_db).await;
 
-	let source = SourceDef {
-		name: "src".into(),
-		connector: "http".into(),
-		dsn: source_url.clone(),
-		interval_secs: 9999,
-		fail_safe_threshold: 30.0,
-		max_retries: 0,
-		retry_base_delay_secs: 1,
-		diff_mode: DiffMode::Memory,
-		missed_tick_policy: Default::default(),
-		config: serde_json::json!({"dsn": source_url}),
-		queries: vec![QueryDef {
+	let pipe = make_pipe(
+		"src",
+		"http",
+		source_url.clone(),
+		9999,
+		DiffMode::Memory,
+		serde_json::json!({"dsn": source_url}),
+		vec![QueryDef {
 			id: "data".into(),
 			sql: "/data".into(),
 			key_column: "id".into(),
 			sinks: None,
 			transform: None,
 		}],
-	};
+	);
 	let sinks = vec![SinkDef {
 		name: "webhook".into(),
 		sink_type: "http".into(),
@@ -197,7 +230,7 @@ async fn engine_http_source_to_http_sink_delivers_events() {
 	}];
 
 	engine
-		.start(make_config(&state_db, &snap_db, source, sinks))
+		.start(make_config(&state_db, &snap_db, pipe, sinks))
 		.await
 		.unwrap();
 	tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -233,34 +266,30 @@ async fn engine_graphql_source_produces_cycle() {
 
 	let engine = build_engine(&state_db, &snap_db).await;
 
-	let source = SourceDef {
-		name: "gql-src".into(),
-		connector: "graphql".into(),
-		dsn: gql_endpoint.clone(),
-		interval_secs: 9999,
-		fail_safe_threshold: 30.0,
-		max_retries: 0,
-		retry_base_delay_secs: 1,
-		diff_mode: DiffMode::Memory,
-		missed_tick_policy: Default::default(),
-		config: serde_json::json!({
+	let pipe = make_pipe(
+		"gql-src",
+		"graphql",
+		gql_endpoint.clone(),
+		9999,
+		DiffMode::Memory,
+		serde_json::json!({
 			"dsn": gql_endpoint,
 			"response_path": "data.items",
 		}),
-		queries: vec![QueryDef {
+		vec![QueryDef {
 			id: "items".into(),
 			sql: "{ items { id title } }".into(),
 			key_column: "id".into(),
 			sinks: None,
 			transform: None,
 		}],
-	};
+	);
 
 	engine
 		.start(make_config(
 			&state_db,
 			&snap_db,
-			source,
+			pipe,
 			vec![SinkDef {
 				name: "debug".into(),
 				sink_type: "stdout".into(),
@@ -299,31 +328,27 @@ async fn engine_second_cycle_detects_no_changes() {
 
 	let engine = build_engine(&state_db, &snap_db).await;
 
-	let source = SourceDef {
-		name: "stable-src".into(),
-		connector: "http".into(),
-		dsn: source_url.clone(),
-		interval_secs: 1,
-		fail_safe_threshold: 30.0,
-		max_retries: 0,
-		retry_base_delay_secs: 1,
-		diff_mode: DiffMode::Memory,
-		missed_tick_policy: Default::default(),
-		config: serde_json::json!({"dsn": source_url}),
-		queries: vec![QueryDef {
+	let pipe = make_pipe(
+		"stable-src",
+		"http",
+		source_url.clone(),
+		1,
+		DiffMode::Memory,
+		serde_json::json!({"dsn": source_url}),
+		vec![QueryDef {
 			id: "items".into(),
 			sql: "/items".into(),
 			key_column: "id".into(),
 			sinks: None,
 			transform: None,
 		}],
-	};
+	);
 
 	engine
 		.start(make_config(
 			&state_db,
 			&snap_db,
-			source,
+			pipe,
 			vec![SinkDef {
 				name: "debug".into(),
 				sink_type: "stdout".into(),

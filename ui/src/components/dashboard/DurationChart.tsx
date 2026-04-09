@@ -31,7 +31,7 @@ export function DurationChart({ cycles }: DurationChartProps) {
       <div className="mb-5">
         <div className="eyebrow">Latency</div>
         <h3 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-white">
-          Average cycle duration by source
+          Average cycle duration by pipe
         </h3>
       </div>
       {data.length === 0 ? (

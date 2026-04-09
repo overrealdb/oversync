@@ -1,5 +1,5 @@
 import { Pause, Play } from "lucide-react";
-import { useSources } from "@/api/sources";
+import { usePipes } from "@/api/pipes";
 import { useSinks } from "@/api/sinks";
 import { useHistory } from "@/api/history";
 import { useSyncStatus, usePauseSync, useResumeSync } from "@/api/sync";
@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useToast } from "@/components/shared/useToast";
 
 export function Dashboard() {
-  const sources = useSources();
+  const pipes = usePipes();
   const sinks = useSinks();
   const history = useHistory();
   const syncStatus = useSyncStatus();
@@ -22,11 +22,11 @@ export function Dashboard() {
   const isPaused = syncStatus.data?.paused ?? false;
   const isRunning = syncStatus.data?.running ?? false;
 
-  const sourcesList = sources.data?.sources ?? [];
+  const pipesList = pipes.data?.pipes ?? [];
   const sinksList = sinks.data?.sinks ?? [];
   const cycles = history.data?.cycles ?? [];
 
-  const totalQueries = sourcesList.reduce((sum, s) => sum + s.queries.length, 0);
+  const totalQueries = pipesList.reduce((sum, pipe) => sum + pipe.query_count, 0);
   const today = new Date().toDateString();
   const cyclesToday = cycles.filter(
     (c) => new Date(c.started_at).toDateString() === today,
@@ -55,7 +55,7 @@ export function Dashboard() {
             <div className="eyebrow">Control Plane</div>
             <h1 className="page-title mt-3">Dashboard</h1>
             <p className="page-copy mt-4">
-              Track sync posture, watch cycle output, and keep connector changes grounded in live system state.
+              Track sync posture, watch cycle output, and keep pipe changes grounded in live system state.
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <StatusBadge status={isPaused ? "paused" : isRunning ? "running" : "idle"} />
@@ -73,11 +73,11 @@ export function Dashboard() {
             </div>
             <div className="mt-4 space-y-4">
               <div className="flex items-center justify-between text-sm text-slate-400">
-                <span>Sources online</span>
-                <span className="font-mono text-lg text-white">{sourcesList.length}</span>
+                <span>Pipes configured</span>
+                <span className="font-mono text-lg text-white">{pipesList.length}</span>
               </div>
               <div className="flex items-center justify-between text-sm text-slate-400">
-                <span>Sinks online</span>
+                <span>Sinks configured</span>
                 <span className="font-mono text-lg text-white">{sinksList.length}</span>
               </div>
               <button
@@ -98,7 +98,7 @@ export function Dashboard() {
       </section>
 
       <OverviewCards
-        sourcesCount={sourcesList.length}
+        pipesCount={pipesList.length}
         sinksCount={sinksList.length}
         queriesCount={totalQueries}
         cyclesToday={cyclesToday}
@@ -109,7 +109,7 @@ export function Dashboard() {
         <DurationChart cycles={cycles} />
       </div>
 
-      <ErrorSparklines sources={sourcesList} cycles={cycles} />
+      <ErrorSparklines pipes={pipesList} cycles={cycles} />
     </div>
   );
 }

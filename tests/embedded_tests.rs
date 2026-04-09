@@ -6,7 +6,9 @@ use async_trait::async_trait;
 
 use common::surreal::TestSurrealContainer;
 use oversync::EmbeddedSync;
-use oversync::config::{QueryDef, SourceDef};
+use oversync::config::{
+	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef,
+};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
 use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TransformHook};
@@ -91,18 +93,17 @@ impl TransformHook for UppercaseTransform {
 	}
 }
 
-fn test_source_def() -> SourceDef {
-	SourceDef {
+fn test_pipe() -> PipeConfig {
+	PipeConfig {
 		name: "test-src".into(),
-		connector: "static".into(),
-		dsn: "memory://".into(),
-		interval_secs: 60,
-		fail_safe_threshold: 50.0,
-		max_retries: 0,
-		retry_base_delay_secs: 1,
-		diff_mode: oversync::config::DiffMode::Memory,
-		missed_tick_policy: Default::default(),
-		config: serde_json::Value::Null,
+		origin: OriginDef {
+			connector: "static".into(),
+			dsn: "memory://".into(),
+			credential: None,
+			trino_url: None,
+			config: serde_json::Value::Null,
+		},
+		targets: vec![],
 		queries: vec![QueryDef {
 			id: "q1".into(),
 			sql: "SELECT * FROM test".into(),
@@ -110,6 +111,25 @@ fn test_source_def() -> SourceDef {
 			sinks: None,
 			transform: None,
 		}],
+		schedule: ScheduleDef {
+			interval_secs: 60,
+			missed_tick_policy: Default::default(),
+			max_requests_per_minute: None,
+		},
+		delta: DeltaDef {
+			diff_mode: DiffMode::Memory,
+			fail_safe_threshold: 50.0,
+		},
+		retry: RetryDef {
+			max_retries: 0,
+			retry_base_delay_secs: 1,
+		},
+		recipe: None,
+		filters: vec![],
+		transforms: vec![],
+		links: vec![],
+		alert_webhook: None,
+		enabled: true,
 	}
 }
 
@@ -163,7 +183,7 @@ async fn run_once_delivers_events_to_custom_sink() {
 		.state_db(container.client.clone())
 		.snapshot_db(container.client.clone())
 		.skip_schema()
-		.add_source(test_source_def())
+		.add_pipe(test_pipe())
 		.add_sink("rec", sink)
 		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
@@ -194,7 +214,7 @@ async fn run_once_second_cycle_detects_no_changes() {
 		.state_db(container.client.clone())
 		.snapshot_db(container.client.clone())
 		.skip_schema()
-		.add_source(test_source_def())
+		.add_pipe(test_pipe())
 		.add_sink("rec", sink)
 		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
@@ -235,7 +255,7 @@ async fn run_once_unknown_query_errors() {
 	let sync = EmbeddedSync::builder()
 		.state_db(db)
 		.skip_schema()
-		.add_source(test_source_def())
+		.add_pipe(test_pipe())
 		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
 		.await
@@ -257,14 +277,14 @@ async fn transform_hook_modifies_events_before_sink() {
 		events: Arc::clone(&events),
 	});
 
-	let mut source = test_source_def();
-	source.queries[0].transform = Some("uppercase".into());
+	let mut pipe = test_pipe();
+	pipe.queries[0].transform = Some("uppercase".into());
 
 	let sync = EmbeddedSync::builder()
 		.state_db(container.client.clone())
 		.snapshot_db(container.client.clone())
 		.skip_schema()
-		.add_source(source)
+		.add_pipe(pipe)
 		.add_sink("rec", sink)
 		.add_transform("uppercase", Arc::new(UppercaseTransform))
 		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
@@ -292,14 +312,14 @@ async fn start_spawns_polling_shutdown_stops() {
 		events: Arc::clone(&events),
 	});
 
-	let mut source = test_source_def();
-	source.interval_secs = 1;
+	let mut pipe = test_pipe();
+	pipe.schedule.interval_secs = 1;
 
 	let sync = EmbeddedSync::builder()
 		.state_db(container.client.clone())
 		.snapshot_db(container.client.clone())
 		.skip_schema()
-		.add_source(source)
+		.add_pipe(pipe)
 		.add_sink("rec", sink)
 		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))
 		.build()
@@ -348,7 +368,7 @@ async fn transform_hook_ignored_when_query_has_no_transform() {
 		.state_db(container.client.clone())
 		.snapshot_db(container.client.clone())
 		.skip_schema()
-		.add_source(test_source_def()) // query.transform = None
+		.add_pipe(test_pipe()) // query.transform = None
 		.add_sink("rec", sink)
 		.add_transform("uppercase", Arc::new(UppercaseTransform))
 		.register_source(Box::new(StaticOriginFactory { rows: test_rows() }))

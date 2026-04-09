@@ -9,15 +9,30 @@ export function Pipes() {
   const { data } = usePipes();
   const [formOpen, setFormOpen] = useState(false);
   const [presetName, setPresetName] = useState<string | null>(null);
+  const [editPipeName, setEditPipeName] = useState<string | null>(null);
 
   function openBlankForm() {
     setPresetName(null);
+    setEditPipeName(null);
     setFormOpen(true);
   }
 
   function openFromPreset(name: string) {
     setPresetName(name);
+    setEditPipeName(null);
     setFormOpen(true);
+  }
+
+  function openEdit(name: string) {
+    setPresetName(null);
+    setEditPipeName(name);
+    setFormOpen(true);
+  }
+
+  function handleClose() {
+    setFormOpen(false);
+    setPresetName(null);
+    setEditPipeName(null);
   }
 
   return (
@@ -42,12 +57,17 @@ export function Pipes() {
         </div>
       </section>
 
-      <PipePresetLibrary onUsePreset={openFromPreset} />
-      <PipesTable onCreate={openBlankForm} />
+      <PipePresetLibrary
+        onUsePreset={openFromPreset}
+        showManageLink
+        primaryActionLabel="Create Pipe"
+      />
+      <PipesTable onCreate={openBlankForm} onEdit={openEdit} />
       <PipeForm
         open={formOpen}
         initialPresetName={presetName}
-        onClose={() => setFormOpen(false)}
+        pipeName={editPipeName}
+        onClose={handleClose}
       />
     </div>
   );

@@ -1,32 +1,32 @@
 import { SparkAreaChart } from "@tremor/react";
-import type { CycleInfo, SourceInfo } from "@/types/api";
+import type { CycleInfo, PipeInfo } from "@/types/api";
 
 interface ErrorSparklinesProps {
-  sources: SourceInfo[];
+  pipes: PipeInfo[];
   cycles: CycleInfo[];
 }
 
-export function ErrorSparklines({ sources, cycles }: ErrorSparklinesProps) {
-  if (sources.length === 0) return null;
+export function ErrorSparklines({ pipes, cycles }: ErrorSparklinesProps) {
+  if (pipes.length === 0) return null;
 
-  const cyclesBySource = new Map<string, CycleInfo[]>();
+  const cyclesByPipe = new Map<string, CycleInfo[]>();
   for (const c of cycles) {
-    const arr = cyclesBySource.get(c.source) ?? [];
+    const arr = cyclesByPipe.get(c.source) ?? [];
     arr.push(c);
-    cyclesBySource.set(c.source, arr);
+    cyclesByPipe.set(c.source, arr);
   }
 
-  const rows = sources.map((s) => {
-    const srcCycles = cyclesBySource.get(s.name) ?? [];
-    const total = srcCycles.length;
-    const failed = srcCycles.filter(
+  const rows = pipes.map((pipe) => {
+    const pipeCycles = cyclesByPipe.get(pipe.name) ?? [];
+    const total = pipeCycles.length;
+    const failed = pipeCycles.filter(
       (c) => c.status === "failed" || c.status === "aborted",
     ).length;
     const rate = total > 0 ? Math.round((failed / total) * 100) : 0;
 
     // Build sparkline data: group cycles by hour, compute error % per hour
     const hourBuckets = new Map<string, { total: number; errors: number }>();
-    for (const c of srcCycles) {
+    for (const c of pipeCycles) {
       const hour = new Date(c.started_at).toISOString().slice(0, 13);
       const bucket = hourBuckets.get(hour) ?? { total: 0, errors: 0 };
       bucket.total++;
@@ -40,7 +40,7 @@ export function ErrorSparklines({ sources, cycles }: ErrorSparklinesProps) {
         "Error %": b.total > 0 ? Math.round((b.errors / b.total) * 100) : 0,
       }));
 
-    return { name: s.name, rate, total, failed, sparkData };
+    return { name: pipe.name, rate, total, failed, sparkData };
   });
 
   return (
@@ -48,12 +48,12 @@ export function ErrorSparklines({ sources, cycles }: ErrorSparklinesProps) {
       <div className="mb-5">
         <div className="eyebrow">Reliability</div>
         <h3 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-white">
-          Error rate by source
+          Error rate by pipe
         </h3>
       </div>
       {rows.every((r) => r.total === 0) ? (
         <div className="panel-subtle flex items-center justify-center px-6 py-10 text-center text-sm leading-6 text-slate-500">
-          No cycle data yet. Error profiles will show up once sources begin producing execution history.
+          No cycle data yet. Error profiles will show up once pipes begin producing execution history.
         </div>
       ) : (
         <div className="space-y-3">

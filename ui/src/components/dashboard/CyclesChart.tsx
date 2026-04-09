@@ -49,7 +49,7 @@ export function CyclesChart({ cycles }: CyclesChartProps) {
       </div>
       {data.length === 0 ? (
         <div className="panel-subtle flex h-56 items-center justify-center px-6 text-center text-sm leading-6 text-slate-500">
-          No cycle data yet. Once sources start running, this panel turns into a rolling throughput view.
+          No cycle data yet. Once pipes start running, this panel turns into a rolling throughput view.
         </div>
       ) : (
         <AreaChart

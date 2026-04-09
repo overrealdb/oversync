@@ -8,7 +8,8 @@ use async_trait::async_trait;
 use common::postgres::TestPostgres;
 use common::surreal::TestSurrealContainer;
 use oversync::config::{
-	DiffMode, MissedTickPolicy, QueryDef, SinkDef, SourceDef, SurrealDbDef, SyncConfig,
+	DiffMode, MissedTickPolicy, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef, SinkDef,
+	SurrealDbDef, SyncConfig,
 };
 use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
@@ -114,25 +115,42 @@ fn throughput_config(pg: &TestPostgres, query_count: usize) -> SyncConfig {
 			database: "test".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "throughput-bench".into(),
-			connector: "postgres".into(),
-			dsn: pg.dsn.clone(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 1,
-			retry_base_delay_secs: 1,
-			diff_mode: DiffMode::Db,
-			missed_tick_policy: MissedTickPolicy::Skip,
-			config: serde_json::json!({}),
-			queries,
-		}],
 		sinks: vec![SinkDef {
 			name: "bench-counter".into(),
 			sink_type: "bench-counter".into(),
 			config: serde_json::json!({}),
 		}],
-		pipes: vec![],
+		pipes: vec![PipeConfig {
+			name: "throughput-bench".into(),
+			origin: OriginDef {
+				connector: "postgres".into(),
+				dsn: pg.dsn.clone(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec!["bench-counter".into()],
+			queries,
+			schedule: ScheduleDef {
+				interval_secs: 3600,
+				missed_tick_policy: MissedTickPolicy::Skip,
+				..ScheduleDef::default()
+			},
+			delta: oversync::config::DeltaDef {
+				diff_mode: DiffMode::Db,
+				fail_safe_threshold: 30.0,
+			},
+			retry: RetryDef {
+				max_retries: 1,
+				retry_base_delay_secs: 1,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
+		}],
 		pipe_presets: vec![],
 	}
 }

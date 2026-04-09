@@ -13,7 +13,7 @@ use oversync_core::model::DeltaResult;
 use oversync_core::traits::{OriginFactory, Sink, TargetFactory, TransformHook};
 use oversync_delta::DeltaEngine;
 
-use crate::config::{MissedTickPolicy, PipeConfig, SourceDef};
+use crate::config::{MissedTickPolicy, PipeConfig};
 use crate::cycle::{CycleConfig, CycleRunner};
 use crate::registry::PluginRegistry;
 
@@ -297,12 +297,6 @@ impl EmbeddedSyncBuilder {
 	/// Add a pipe to the embedded sync engine.
 	pub fn add_pipe(mut self, pipe: PipeConfig) -> Self {
 		self.pipes.push(pipe);
-		self
-	}
-
-	/// Add a legacy source definition. Internally converted to PipeConfig.
-	pub fn add_source(mut self, def: SourceDef) -> Self {
-		self.pipes.push(PipeConfig::from(&def));
 		self
 	}
 

@@ -26,36 +26,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
-			name: "catalog-api".into(),
-			connector: "http".into(),
-			dsn: "https://api.example.com".into(),
-			interval_secs: 300,
-			fail_safe_threshold: 30.0,
-			max_retries: 3,
-			retry_base_delay_secs: 5,
-			diff_mode: DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::json!({
-				"dsn": "https://api.example.com",
-				"auth": {"type": "bearer", "token": "sk-api-key"},
-				"headers": {"Accept": "application/json"},
-				"response_path": "data.items",
-				"pagination": {
-					"type": "offset",
-					"page_size": 100,
-					"limit_param": "limit",
-					"offset_param": "offset"
-				}
-			}),
-			queries: vec![QueryDef {
-				id: "datasets".into(),
-				sql: "/v1/datasets".into(),
-				key_column: "id".into(),
-				sinks: None,
-				transform: None,
-			}],
-		}],
 		sinks: vec![
 			SinkDef {
 				name: "my-webhook".into(),
@@ -74,7 +44,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				config: serde_json::json!({"pretty": true}),
 			},
 		],
-		pipes: vec![],
+		pipes: vec![PipeConfig {
+			name: "catalog-api".into(),
+			origin: OriginDef {
+				connector: "http".into(),
+				dsn: "https://api.example.com".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({
+					"dsn": "https://api.example.com",
+					"auth": {"type": "bearer", "token": "sk-api-key"},
+					"headers": {"Accept": "application/json"},
+					"response_path": "data.items",
+					"pagination": {
+						"type": "offset",
+						"page_size": 100,
+						"limit_param": "limit",
+						"offset_param": "offset"
+					}
+				}),
+			},
+			targets: vec!["my-webhook".into(), "debug".into()],
+			queries: vec![QueryDef {
+				id: "datasets".into(),
+				sql: "/v1/datasets".into(),
+				key_column: "id".into(),
+				sinks: None,
+				transform: None,
+			}],
+			schedule: ScheduleDef {
+				interval_secs: 300,
+				..ScheduleDef::default()
+			},
+			delta: DeltaDef {
+				fail_safe_threshold: 30.0,
+				..DeltaDef::default()
+			},
+			retry: RetryDef {
+				max_retries: 3,
+				retry_base_delay_secs: 5,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
+		}],
 		pipe_presets: vec![],
 	};
 

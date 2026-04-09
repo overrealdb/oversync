@@ -26,29 +26,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
+		sinks: vec![SinkDef {
+			name: "console".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({"pretty": true}),
+		}],
+		pipes: vec![PipeConfig {
 			name: "github-repos".into(),
-			connector: "graphql".into(),
-			dsn: "https://api.github.com/graphql".into(),
-			interval_secs: 3600,
-			fail_safe_threshold: 30.0,
-			max_retries: 2,
-			retry_base_delay_secs: 10,
-			diff_mode: DiffMode::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::json!({
-				"dsn": "https://api.github.com/graphql",
-				"auth": {
-					"type": "bearer",
-					"token": "ghp_YOUR_TOKEN_HERE"
-				},
-				"response_path": "data.organization.repositories.nodes",
-				"pagination": {
-					"cursor_variable": "cursor",
-					"has_next_path": "pageInfo.hasNextPage",
-					"end_cursor_path": "pageInfo.endCursor"
-				}
-			}),
+			origin: OriginDef {
+				connector: "graphql".into(),
+				dsn: "https://api.github.com/graphql".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({
+					"dsn": "https://api.github.com/graphql",
+					"auth": {
+						"type": "bearer",
+						"token": "ghp_YOUR_TOKEN_HERE"
+					},
+					"response_path": "data.organization.repositories.nodes",
+					"pagination": {
+						"cursor_variable": "cursor",
+						"has_next_path": "pageInfo.hasNextPage",
+						"end_cursor_path": "pageInfo.endCursor"
+					}
+				}),
+			},
+			targets: vec!["console".into()],
 			queries: vec![QueryDef {
 				id: "repos".into(),
 				sql: r#"query($cursor: String) {
@@ -64,13 +68,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				sinks: None,
 				transform: None,
 			}],
+			schedule: ScheduleDef {
+				interval_secs: 3600,
+				..ScheduleDef::default()
+			},
+			delta: DeltaDef {
+				fail_safe_threshold: 30.0,
+				..DeltaDef::default()
+			},
+			retry: RetryDef {
+				max_retries: 2,
+				retry_base_delay_secs: 10,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
 		}],
-		sinks: vec![SinkDef {
-			name: "console".into(),
-			sink_type: "stdout".into(),
-			config: serde_json::json!({"pretty": true}),
-		}],
-		pipes: vec![],
 		pipe_presets: vec![],
 	};
 

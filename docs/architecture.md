@@ -145,12 +145,13 @@ Custom factories can be registered via `engine.register_source()` / `engine.regi
 
 ### Config DB (src/config_db.rs)
 
-Loads config from SurrealDB tables (`source_config`, `query_config`, `sink_config`) into `SyncConfig`. Used by the Config API for runtime CRUD operations.
+Loads config from SurrealDB tables (`pipe_config`, `query_config`, `sink_config`, `pipe_preset_config`) into `SyncConfig`. Used by the control-plane API for runtime CRUD operations.
 
 SurrealQL queries in `surql/queries/config/`:
-- `load_sources.surql` — `SELECT * FROM source_config WHERE enabled = true`
+- `load_pipes.surql` — `SELECT * FROM pipe_config WHERE enabled = true`
 - `load_queries.surql` — `SELECT * FROM query_config WHERE enabled = true`
 - `load_sinks.surql` — `SELECT * FROM sink_config WHERE enabled = true`
+- `load_pipe_presets.surql` — `SELECT * FROM pipe_preset_config`
 
 ## Source Connectors
 
@@ -214,14 +215,16 @@ Prints JSON to stdout. Optional `"pretty": true`. Records events internally for 
 Axum router with OpenAPI 3.1 (utoipa). Two layers:
 
 **Read routes** (from in-memory cache, updated after mutations):
-- `GET /health`, `GET /sources`, `GET /sources/{name}`, `GET /sinks`
+- `GET /health`, `GET /pipes`, `GET /pipes/{name}`, `GET /pipe-presets`, `GET /sinks`
 
 **Mutation routes** (write to SurrealDB, reload lifecycle):
-- `POST /sources`, `PUT /sources/{name}`, `DELETE /sources/{name}`
+- `POST /pipes`, `PUT /pipes/{name}`, `DELETE /pipes/{name}`
+- `POST /pipe-presets`, `PUT /pipe-presets/{name}`, `DELETE /pipe-presets/{name}`
 - `POST /sinks`, `PUT /sinks/{name}`, `DELETE /sinks/{name}`
 
 **Operation routes**:
-- `POST /sources/{name}/trigger` — restart scheduler (triggers immediate cycle)
+- `GET /pipes/{name}/resolve` — view the effective runtime pipe after recipe expansion
+- `POST /pipes/dry-run` — run diff logic without mutating scheduler state
 - `POST /sync/pause` / `POST /sync/resume` — lifecycle control
 - `GET /sync/status` — running/paused state
 - `GET /history` — last 100 cycle_log entries
@@ -234,7 +237,7 @@ If more than threshold% of previous rows are deleted, the cycle aborts. Snapshot
 
 Rationale: if the source temporarily returns empty results (network error, truncated response), without fail-safe we would generate thousands of false DELETE events.
 
-Default: 30%. Configurable per-source via `fail_safe_threshold`.
+Default: 30%. Configurable per pipe via `fail_safe_threshold`.
 
 ## Schema and Migrations (overshift)
 
@@ -251,7 +254,7 @@ Five schema domains:
 | Domain | Tables |
 |--------|--------|
 | sync | snapshot, cycle_log, pending_event |
-| config | source_config, query_config, sink_config |
+| config | pipe_config, query_config, pipe_preset_config, sink_config, legacy source_config |
 | links | link_rule, resolved_link |
 | plugin | plugin |
 | transforms | SMT functions |
@@ -273,7 +276,7 @@ src/
   lifecycle.rs       — LifecycleManager (start/pause/resume/shutdown)
   scheduler.rs       — Per-query polling tasks with retry
   cycle.rs           — CycleRunner (single-cycle orchestrator)
-  config.rs          — SyncConfig, SourceDef, SinkDef, QueryDef
+  config.rs          — SyncConfig, PipeConfig, SinkDef, QueryDef
   config_db.rs       — Load config from SurrealDB tables
   registry.rs        — PluginRegistry (factory pattern, Clone via Arc)
   lib.rs             — Re-exports

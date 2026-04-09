@@ -3,24 +3,6 @@ export interface HealthResponse {
   version: string;
 }
 
-export interface SourceInfo {
-  name: string;
-  connector: string;
-  interval_secs: number;
-  queries: QueryInfo[];
-  status: SourceStatus;
-}
-
-export interface QueryInfo {
-  id: string;
-  key_column: string;
-}
-
-export interface SourceStatus {
-  last_cycle: CycleInfo | null;
-  total_cycles: number;
-}
-
 export interface CycleInfo {
   cycle_id: number;
   source: string;
@@ -41,17 +23,8 @@ export interface SinkInfo {
   config?: Record<string, unknown>;
 }
 
-export interface TriggerResponse {
-  source: string;
-  message: string;
-}
-
 export interface ErrorResponse {
   error: string;
-}
-
-export interface SourceListResponse {
-  sources: SourceInfo[];
 }
 
 export interface SinkListResponse {
@@ -72,6 +45,7 @@ export interface PipeInfo {
   origin_dsn: string;
   targets: string[];
   interval_secs: number;
+  query_count: number;
   recipe?: PipeRecipe | null;
   enabled: boolean;
 }
@@ -96,12 +70,22 @@ export interface PipeRetryDefinition {
   retry_base_delay_secs?: number;
 }
 
+export interface PipePresetParameter {
+  name: string;
+  label?: string | null;
+  description?: string | null;
+  default?: string | null;
+  required?: boolean;
+  secret?: boolean;
+}
+
 export interface PipePresetSpec {
   origin_connector: string;
   origin_dsn: string;
   origin_credential?: string;
   trino_url?: string;
   origin_config?: Record<string, unknown>;
+  parameters?: PipePresetParameter[];
   targets: string[];
   queries: PipeQueryDefinition[];
   schedule?: PipeScheduleDefinition;
@@ -160,18 +144,6 @@ export interface ResolvePipeResponse {
   effective_queries: PipeQueryDefinition[];
 }
 
-export interface CreateSourceRequest {
-  name: string;
-  connector: string;
-  config: Record<string, unknown>;
-}
-
-export interface UpdateSourceRequest {
-  connector?: string;
-  config?: Record<string, unknown>;
-  enabled?: boolean;
-}
-
 export interface CreateSinkRequest {
   name: string;
   sink_type: string;
@@ -200,7 +172,7 @@ export interface CreatePipeRequest {
   schedule?: PipeScheduleDefinition;
   delta?: PipeDeltaDefinition;
   retry?: PipeRetryDefinition;
-  recipe?: PipeRecipe;
+  recipe?: PipeRecipe | null;
   filters?: unknown[];
   transforms?: unknown[];
   links?: unknown[];
@@ -217,23 +189,12 @@ export interface UpdatePipeRequest {
   schedule?: PipeScheduleDefinition;
   delta?: PipeDeltaDefinition;
   retry?: PipeRetryDefinition;
-  recipe?: PipeRecipe;
+  recipe?: PipeRecipe | null;
   filters?: unknown[];
   transforms?: unknown[];
   links?: unknown[];
   queries?: PipeQueryDefinition[];
   enabled?: boolean;
-}
-
-export interface CreatePipePresetRequest {
-  name: string;
-  description?: string;
-  spec: PipePresetSpec;
-}
-
-export interface UpdatePipePresetRequest {
-  description?: string;
-  spec?: PipePresetSpec;
 }
 
 export interface CreatePipePresetRequest {

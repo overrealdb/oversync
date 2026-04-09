@@ -10,7 +10,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use oversync::EmbeddedSync;
-use oversync::config::{QueryDef, SourceDef};
+use oversync::config::{
+	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef,
+};
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
 use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TransformHook};
@@ -147,17 +149,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.snapshot_db(db)
 		.skip_schema()
 		.register_source(Box::new(InMemoryFactory))
-		.add_source(SourceDef {
+		.add_pipe(PipeConfig {
 			name: "demo".into(),
-			connector: "in-memory".into(),
-			dsn: "memory://".into(),
-			interval_secs: 60,
-			fail_safe_threshold: 50.0,
-			max_retries: 0,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Memory,
-			missed_tick_policy: Default::default(),
-			config: serde_json::Value::Null,
+			origin: OriginDef {
+				connector: "in-memory".into(),
+				dsn: "memory://".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::Value::Null,
+			},
+			targets: vec![],
 			queries: vec![QueryDef {
 				id: "orders".into(),
 				sql: "SELECT * FROM orders".into(),
@@ -165,6 +166,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				sinks: None,
 				transform: Some("js-enrich".into()),
 			}],
+			schedule: ScheduleDef {
+				interval_secs: 60,
+				missed_tick_policy: Default::default(),
+				max_requests_per_minute: None,
+			},
+			delta: DeltaDef {
+				diff_mode: DiffMode::Memory,
+				fail_safe_threshold: 50.0,
+			},
+			retry: RetryDef {
+				max_retries: 0,
+				retry_base_delay_secs: 1,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
 		})
 		.add_transform("js-enrich", transform)
 		.add_sink("collect", sink.clone())

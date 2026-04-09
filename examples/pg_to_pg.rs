@@ -21,7 +21,9 @@
 use std::sync::Arc;
 
 use oversync::EmbeddedSync;
-use oversync::config::{QueryDef, SourceDef};
+use oversync::config::{
+	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef,
+};
 use oversync_connectors::PostgresOriginFactory;
 use oversync_sinks::{PostgresSink, PostgresTargetFactory};
 
@@ -78,17 +80,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.skip_schema()
 		.register_source(Box::new(PostgresOriginFactory))
 		.register_sink(Box::new(PostgresTargetFactory))
-		.add_source(SourceDef {
+		.add_pipe(PipeConfig {
 			name: "pg-source".into(),
-			connector: "postgres".into(),
-			dsn: source_dsn.clone(),
-			interval_secs: 10,
-			fail_safe_threshold: 50.0,
-			max_retries: 0,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Memory,
-			missed_tick_policy: Default::default(),
-			config: serde_json::json!({"dsn": source_dsn}),
+			origin: OriginDef {
+				connector: "postgres".into(),
+				dsn: source_dsn.clone(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec![],
 			queries: vec![QueryDef {
 				id: "users".into(),
 				sql: "SELECT id::text, name, email FROM users".into(),
@@ -96,6 +97,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				sinks: None,
 				transform: None,
 			}],
+			schedule: ScheduleDef {
+				interval_secs: 10,
+				missed_tick_policy: Default::default(),
+				max_requests_per_minute: None,
+			},
+			delta: DeltaDef {
+				diff_mode: DiffMode::Memory,
+				fail_safe_threshold: 50.0,
+			},
+			retry: RetryDef {
+				max_retries: 0,
+				retry_base_delay_secs: 1,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
 		})
 		.add_sink("pg-sink", Arc::new(pg_sink))
 		.build()

@@ -9,7 +9,9 @@
 use std::sync::Arc;
 
 use oversync::EmbeddedSync;
-use oversync::config::{QueryDef, SourceDef};
+use oversync::config::{
+	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef,
+};
 use oversync_connectors::KafkaOriginFactory;
 use oversync_sinks::StdoutSink;
 
@@ -58,21 +60,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		.snapshot_db(db)
 		.skip_schema()
 		.register_source(Box::new(KafkaOriginFactory))
-		.add_source(SourceDef {
+		.add_pipe(PipeConfig {
 			name: "kafka-demo".into(),
-			connector: "kafka".into(),
-			dsn: "localhost:9092".into(),
-			interval_secs: 5,
-			fail_safe_threshold: 50.0,
-			max_retries: 0,
-			retry_base_delay_secs: 1,
-			diff_mode: oversync::config::DiffMode::Memory,
-			missed_tick_policy: Default::default(),
-			config: serde_json::json!({
-				"brokers": "localhost:9092",
-				"topic": "demo-topic",
-				"group_id": "oversync-demo"
-			}),
+			origin: OriginDef {
+				connector: "kafka".into(),
+				dsn: "localhost:9092".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({
+					"brokers": "localhost:9092",
+					"topic": "demo-topic",
+					"group_id": "oversync-demo"
+				}),
+			},
+			targets: vec![],
 			queries: vec![QueryDef {
 				id: "events".into(),
 				sql: "unused-for-kafka".into(),
@@ -80,6 +81,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				sinks: None,
 				transform: None,
 			}],
+			schedule: ScheduleDef {
+				interval_secs: 5,
+				missed_tick_policy: Default::default(),
+				max_requests_per_minute: None,
+			},
+			delta: DeltaDef {
+				diff_mode: DiffMode::Memory,
+				fail_safe_threshold: 50.0,
+			},
+			retry: RetryDef {
+				max_retries: 0,
+				retry_base_delay_secs: 1,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
 		})
 		.add_sink("stdout", Arc::new(StdoutSink::new(true)))
 		.build()

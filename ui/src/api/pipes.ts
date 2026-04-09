@@ -34,7 +34,10 @@ export function useCreatePipe() {
   return useMutation({
     mutationFn: (data: CreatePipeRequest) =>
       api.post<MutationResponse>("/pipes", data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pipes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipes"] });
+      qc.invalidateQueries({ queryKey: ["history"] });
+    },
   });
 }
 
@@ -43,7 +46,11 @@ export function useUpdatePipe(name: string) {
   return useMutation({
     mutationFn: (data: UpdatePipeRequest) =>
       api.put<MutationResponse>(`/pipes/${encodeURIComponent(name)}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pipes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipes"] });
+      qc.invalidateQueries({ queryKey: ["pipe-resolve", name] });
+      qc.invalidateQueries({ queryKey: ["history"] });
+    },
   });
 }
 
@@ -52,7 +59,11 @@ export function useDeletePipe() {
   return useMutation({
     mutationFn: (name: string) =>
       api.del<MutationResponse>(`/pipes/${encodeURIComponent(name)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pipes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipes"] });
+      qc.invalidateQueries({ queryKey: ["history"] });
+      qc.invalidateQueries({ queryKey: ["pipe-resolve"] });
+    },
   });
 }
 

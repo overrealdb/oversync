@@ -1,9 +1,9 @@
 import { createRoute } from "@tanstack/react-router";
 import { Route as rootRoute } from "./__root";
-import { SourceDetailPage } from "@/pages/SourceDetailPage";
+import { PipeDetailPage } from "@/pages/PipeDetailPage";
 
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/sources/$name",
-  component: SourceDetailPage,
+  path: "/pipes/$name",
+  component: PipeDetailPage,
 });

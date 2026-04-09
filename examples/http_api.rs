@@ -1,13 +1,22 @@
 //! Engine with HTTP API: shows how to embed oversync with the full REST API.
 //!
-//! Run: `cargo run --example http_api --features api`
+//! Run:
+//!   export OVERSYNC_CREDENTIAL_KEY='replace-with-a-strong-passphrase'
+//!   cargo run --example http_api --features api
 //!
 //! Endpoints available at http://localhost:4200:
 //!   GET  /health
-//!   GET  /sources
-//!   POST /sources       (create)
+//!   GET  /pipes
+//!   POST /pipes
+//!   GET  /pipe-presets
+//!   POST /pipe-presets
+//!   GET  /pipes/{name}/resolve
+//!   POST /pipes/dry-run
 //!   GET  /sinks
-//!   POST /sinks         (create)
+//!   POST /sinks
+//!   GET  /credentials
+//!   POST /credentials
+//!   GET  /config/versions
 //!   POST /sync/pause
 //!   POST /sync/resume
 //!   GET  /sync/status
@@ -21,10 +30,7 @@ use oversync::config::{SinkDef, SurrealDbDef, SyncConfig};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tracing_subscriber::fmt::init();
 
-	let engine = OversyncEngine::builder("mem://")
-		.skip_schema(true)
-		.build()
-		.await?;
+	let engine = OversyncEngine::builder("mem://").build().await?;
 
 	let config = SyncConfig {
 		surrealdb: SurrealDbDef {
@@ -35,7 +41,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![],
 		sinks: vec![SinkDef {
 			name: "console".into(),
 			sink_type: "stdout".into(),
@@ -51,6 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let listener = tokio::net::TcpListener::bind("0.0.0.0:4200").await?;
 	println!("API server at http://localhost:4200");
 	println!("Try: curl http://localhost:4200/health");
+	println!("OpenAPI: http://localhost:4200/openapi.json");
 
 	let engine_shutdown = engine.clone();
 	tokio::spawn(async move {

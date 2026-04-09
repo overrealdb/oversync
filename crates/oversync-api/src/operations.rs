@@ -1,50 +1,13 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use tracing::warn;
 
 use crate::state::ApiState;
 use crate::types::*;
-
-#[utoipa::path(
-	post,
-	path = "/sources/{name}/trigger",
-	params(("name" = String, Path, description = "Source name to trigger")),
-	responses(
-		(status = 200, description = "Trigger initiated", body = TriggerResponse),
-		(status = 400, description = "Bad request", body = ErrorResponse)
-	)
-)]
-pub async fn trigger_source(
-	State(state): State<Arc<ApiState>>,
-	Path(name): Path<String>,
-) -> Result<Json<TriggerResponse>, Json<ErrorResponse>> {
-	let found = state.sources.read().await.iter().any(|s| s.name == name);
-	if !found {
-		return Err(Json(ErrorResponse {
-			error: format!("source not found: {name}"),
-		}));
-	}
-
-	// Trigger by restarting the lifecycle with current config
-	if let Some(ref lifecycle) = state.lifecycle
-		&& let Some(ref db) = state.db_client
-	{
-		lifecycle.restart_with_config_json(db).await.map_err(|e| {
-			Json(ErrorResponse {
-				error: format!("trigger: {e}"),
-			})
-		})?;
-	}
-
-	Ok(Json(TriggerResponse {
-		source: name,
-		message: "trigger initiated".into(),
-	}))
-}
 
 #[utoipa::path(
 	post,
@@ -114,17 +77,9 @@ pub async fn get_history(
 		.iter()
 		.map(|p| p.name.clone())
 		.collect();
-	let source_names: Vec<String> = state
-		.sources
-		.read()
-		.await
-		.iter()
-		.map(|s| s.name.clone())
-		.collect();
 
 	let mut all_tables: Vec<oversync_core::TableNames> = pipe_names
 		.iter()
-		.chain(source_names.iter())
 		.map(|name| oversync_core::TableNames::for_source(name))
 		.collect();
 	all_tables.push(oversync_core::TableNames::default_shared());

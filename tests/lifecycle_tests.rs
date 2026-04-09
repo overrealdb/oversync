@@ -16,7 +16,6 @@ fn test_registry() -> PluginRegistry {
 fn make_config(surreal_def: &SurrealDbDef) -> SyncConfig {
 	SyncConfig {
 		surrealdb: surreal_def.clone(),
-		sources: vec![],
 		sinks: vec![SinkDef {
 			name: "debug".into(),
 			sink_type: "stdout".into(),

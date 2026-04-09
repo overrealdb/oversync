@@ -11,6 +11,7 @@ const SQL_LIST_VERSIONS: &str = oversync_queries::config_version::LIST_VERSIONS;
 const SQL_GET_VERSION: &str = oversync_queries::config_version::GET_VERSION;
 
 /// A saved config snapshot with version number.
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize)]
 pub struct ConfigVersion {
 	pub version: u64,

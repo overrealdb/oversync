@@ -2,23 +2,23 @@ import { Database, HardDrive, Search, RefreshCw } from "lucide-react";
 import { formatNumber } from "@/utils/format";
 
 interface OverviewCardsProps {
-  sourcesCount: number;
+  pipesCount: number;
   sinksCount: number;
   queriesCount: number;
   cyclesToday: number;
 }
 
 export function OverviewCards({
-  sourcesCount,
+  pipesCount,
   sinksCount,
   queriesCount,
   cyclesToday,
 }: OverviewCardsProps) {
   const cards = [
     {
-      label: "Sources",
-      hint: "Origin systems currently registered",
-      value: sourcesCount,
+      label: "Pipes",
+      hint: "Runnable sync units currently registered",
+      value: pipesCount,
       icon: Database,
       accent: "text-blue-300",
       ring: "border-blue-300/15 bg-blue-400/10",
@@ -33,7 +33,7 @@ export function OverviewCards({
     },
     {
       label: "Queries",
-      hint: "Polling lanes tracking source state",
+      hint: "Polling lanes tracking origin state",
       value: queriesCount,
       icon: Search,
       accent: "text-emerald-300",

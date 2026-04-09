@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
+  BookMarked,
   Menu,
   X,
   LayoutDashboard,
-  Database,
   GitBranch,
   HardDrive,
   History,
@@ -15,7 +15,7 @@ import {
 const navItems = [
   { to: "/" as const, icon: LayoutDashboard, label: "Dashboard" },
   { to: "/pipes" as const, icon: GitBranch, label: "Pipes" },
-  { to: "/sources" as const, icon: Database, label: "Legacy Sources" },
+  { to: "/recipes" as const, icon: BookMarked, label: "Saved Recipes" },
   { to: "/sinks" as const, icon: HardDrive, label: "Sinks" },
   { to: "/history" as const, icon: History, label: "History" },
   { to: "/settings" as const, icon: Settings, label: "Settings" },

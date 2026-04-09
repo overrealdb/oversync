@@ -1,7 +1,7 @@
 import { Link, useMatchRoute } from "@tanstack/react-router";
 import {
+  BookMarked,
   LayoutDashboard,
-  Database,
   GitBranch,
   HardDrive,
   History,
@@ -12,7 +12,7 @@ import {
 const navItems = [
   { to: "/" as const, icon: LayoutDashboard, label: "Dashboard" },
   { to: "/pipes" as const, icon: GitBranch, label: "Pipes" },
-  { to: "/sources" as const, icon: Database, label: "Legacy Sources" },
+  { to: "/recipes" as const, icon: BookMarked, label: "Saved Recipes" },
   { to: "/sinks" as const, icon: HardDrive, label: "Sinks" },
   { to: "/history" as const, icon: History, label: "History" },
   { to: "/settings" as const, icon: Settings, label: "Settings" },
@@ -38,7 +38,7 @@ export function Sidebar() {
           </div>
         </div>
         <p className="mt-4 max-w-[16rem] text-sm leading-6 text-slate-400">
-          Build new runnable syncs through Pipes and keep older source-based configs observable from the same control plane.
+          Build runnable syncs through Pipes, reuse saved recipes, and export the resulting control-plane config for runtime deployment.
         </p>
       </div>
       <nav aria-label="Main navigation" className="flex-1 px-3 py-5">

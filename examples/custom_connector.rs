@@ -7,7 +7,10 @@
 
 use async_trait::async_trait;
 use oversync::OversyncEngine;
-use oversync::config::{QueryDef, SinkDef, SourceDef, SurrealDbDef, SyncConfig};
+use oversync::config::{
+	DeltaDef, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef, SinkDef, SurrealDbDef,
+	SyncConfig,
+};
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
 use oversync_core::traits::{OriginConnector, OriginFactory};
@@ -80,17 +83,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			database: "sync".into(),
 			snapshot: None,
 		},
-		sources: vec![SourceDef {
+		sinks: vec![SinkDef {
+			name: "console".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({"pretty": true}),
+		}],
+		pipes: vec![PipeConfig {
 			name: "employees".into(),
-			connector: "csv".into(),
-			dsn: "unused".into(),
-			interval_secs: 10,
-			fail_safe_threshold: 30.0,
-			max_retries: 0,
-			retry_base_delay_secs: 1,
-			diff_mode: Default::default(),
-			missed_tick_policy: Default::default(),
-			config: serde_json::json!({}),
+			origin: OriginDef {
+				connector: "csv".into(),
+				dsn: "unused".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec!["console".into()],
 			queries: vec![QueryDef {
 				id: "all-employees".into(),
 				sql: "ignored-for-csv".into(),
@@ -98,13 +105,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 				sinks: None,
 				transform: None,
 			}],
+			schedule: ScheduleDef {
+				interval_secs: 10,
+				..ScheduleDef::default()
+			},
+			delta: DeltaDef {
+				fail_safe_threshold: 30.0,
+				..DeltaDef::default()
+			},
+			retry: RetryDef {
+				max_retries: 0,
+				retry_base_delay_secs: 1,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
 		}],
-		sinks: vec![SinkDef {
-			name: "console".into(),
-			sink_type: "stdout".into(),
-			config: serde_json::json!({"pretty": true}),
-		}],
-		pipes: vec![],
 		pipe_presets: vec![],
 	};
 
