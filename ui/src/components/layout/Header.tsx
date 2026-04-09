@@ -24,22 +24,31 @@ export function Header() {
   const matchRoute = useMatchRoute();
 
   return (
-    <header className="md:hidden bg-gray-900 border-b border-gray-800 px-4 py-3">
+    <header className="border-b border-white/8 bg-slate-950/70 px-4 py-3 backdrop-blur-xl md:hidden">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-emerald-400" />
-          <span className="font-bold text-white">OverSync</span>
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-400/10">
+            <Zap className="h-4 w-4 text-emerald-300" />
+          </div>
+          <div>
+            <span className="block text-sm font-semibold tracking-[-0.03em] text-white">
+              OverSync
+            </span>
+            <span className="block text-[10px] uppercase tracking-[0.2em] text-slate-500">
+              Control plane
+            </span>
+          </div>
         </div>
         <button
           onClick={() => setOpen(!open)}
-          className="text-gray-400 hover:text-white"
+          className="rounded-full border border-white/10 bg-white/[0.04] p-2 text-slate-400 hover:text-white"
           aria-label="Toggle menu"
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
       {open && (
-        <nav className="mt-3 space-y-1">
+        <nav className="mt-4 space-y-1.5">
           {navItems.map(({ to, icon: Icon, label }) => {
             const isActive = to === "/" ? matchRoute({ to, fuzzy: false }) : matchRoute({ to, fuzzy: true });
             return (
@@ -47,13 +56,15 @@ export function Header() {
                 key={to}
                 to={to}
                 onClick={() => setOpen(false)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm ${
+                className={`flex items-center gap-3 rounded-2xl px-3 py-3 text-sm ${
                   isActive
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-400 hover:bg-gray-800/50"
+                    ? "bg-white/[0.08] text-white"
+                    : "text-slate-400 hover:bg-white/[0.04]"
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-white/[0.03]">
+                  <Icon className="h-4 w-4" />
+                </span>
                 {label}
               </Link>
             );

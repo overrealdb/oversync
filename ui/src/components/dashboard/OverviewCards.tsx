@@ -15,26 +15,61 @@ export function OverviewCards({
   cyclesToday,
 }: OverviewCardsProps) {
   const cards = [
-    { label: "Total Sources", value: sourcesCount, icon: Database, color: "text-blue-400" },
-    { label: "Total Sinks", value: sinksCount, icon: HardDrive, color: "text-purple-400" },
-    { label: "Active Queries", value: queriesCount, icon: Search, color: "text-emerald-400" },
-    { label: "Cycles Today", value: cyclesToday, icon: RefreshCw, color: "text-amber-400" },
+    {
+      label: "Sources",
+      hint: "Origin systems currently registered",
+      value: sourcesCount,
+      icon: Database,
+      accent: "text-blue-300",
+      ring: "border-blue-300/15 bg-blue-400/10",
+    },
+    {
+      label: "Sinks",
+      hint: "Delivery endpoints ready for events",
+      value: sinksCount,
+      icon: HardDrive,
+      accent: "text-amber-300",
+      ring: "border-amber-300/15 bg-amber-400/10",
+    },
+    {
+      label: "Queries",
+      hint: "Polling lanes tracking source state",
+      value: queriesCount,
+      icon: Search,
+      accent: "text-emerald-300",
+      ring: "border-emerald-300/15 bg-emerald-400/10",
+    },
+    {
+      label: "Cycles Today",
+      hint: "Completed run windows in the last day",
+      value: cyclesToday,
+      icon: RefreshCw,
+      accent: "text-slate-100",
+      ring: "border-white/10 bg-white/[0.06]",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {cards.map(({ label, value, icon: Icon, color }) => (
+    <div className="data-grid">
+      {cards.map(({ label, hint, value, icon: Icon, accent, ring }) => (
         <div
           key={label}
-          className="bg-gray-900 border border-gray-800 rounded-xl p-6"
+          className="panel-surface p-5 sm:p-6"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-400">{label}</span>
-            <Icon className={`h-5 w-5 ${color}`} />
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                {label}
+              </div>
+              <p className="mt-3 text-4xl font-semibold tracking-[-0.06em] text-white">
+                {formatNumber(value)}
+              </p>
+            </div>
+            <span className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${ring}`}>
+              <Icon className={`h-5 w-5 ${accent}`} />
+            </span>
           </div>
-          <p className="mt-3 text-3xl font-bold font-mono text-white">
-            {formatNumber(value)}
-          </p>
+          <p className="mt-4 text-sm leading-6 text-slate-400">{hint}</p>
         </div>
       ))}
     </div>

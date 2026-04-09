@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { useToast } from "@/components/shared/Toast";
+import { useToast } from "@/components/shared/useToast";
 import { formatDuration, cycleDurationMs } from "@/utils/format";
 import type { SourceInfo } from "@/types/api";
 
@@ -67,11 +67,11 @@ export function SourcesTable({ onEdit, onCreate }: SourcesTableProps) {
     return (
       <EmptyState
         title="No sources configured"
-        description="Create a source to start syncing data"
+        description="Create a source to start syncing data. Once connected, queries, execution history, and runtime metrics will show up here."
         action={
           <button
             onClick={onCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+            className="action-button"
           >
             <Plus className="h-4 w-4" /> Add Source
           </button>
@@ -82,51 +82,66 @@ export function SourcesTable({ onEdit, onCreate }: SourcesTableProps) {
 
   return (
     <>
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="panel-surface overflow-hidden">
+        <div className="flex flex-col gap-3 border-b border-white/8 px-6 py-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Registered sources
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Scan connector type, runtime history, and quick actions without leaving the workspace.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
+            {sources.length} total
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-gray-800">
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Name</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Connector</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Queries</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Last Cycle</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Total Cycles</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider">Avg Duration</th>
-                <th className="px-6 py-3 text-xs font-medium text-gray-400 uppercase tracking-wider text-right">Actions</th>
+              <tr className="border-b border-white/8">
+                <th className="px-6 py-3 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Name</th>
+                <th className="px-6 py-3 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Connector</th>
+                <th className="px-6 py-3 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Queries</th>
+                <th className="px-6 py-3 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Last Cycle</th>
+                <th className="px-6 py-3 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Total Cycles</th>
+                <th className="px-6 py-3 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Avg Duration</th>
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-[0.22em] text-slate-500">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-800/50">
+            <tbody className="divide-y divide-white/6">
               {sources.map((source) => (
-                <tr key={source.name} className="hover:bg-gray-800 transition-colors">
+                <tr key={source.name} className="transition-colors hover:bg-white/[0.03]">
                   <td className="px-6 py-4">
                     <Link
                       to="/sources/$name"
                       params={{ name: source.name }}
-                      className="font-medium text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      className="flex items-center gap-1 font-medium text-slate-100 hover:text-emerald-300"
                     >
                       {source.name}
                       <ExternalLink className="h-3 w-3" />
                     </Link>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="font-mono text-gray-300">{source.connector}</span>
+                    <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 font-mono text-xs text-slate-300">
+                      {source.connector}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="font-mono text-gray-300">{source.queries.length}</span>
+                    <span className="font-mono text-slate-300">{source.queries.length}</span>
                   </td>
                   <td className="px-6 py-4">
                     {source.status.last_cycle ? (
                       <StatusBadge status={source.status.last_cycle.status} />
                     ) : (
-                      <span className="text-gray-500">--</span>
+                      <span className="text-slate-500">--</span>
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <span className="font-mono text-gray-300">{source.status.total_cycles}</span>
+                    <span className="font-mono text-slate-300">{source.status.total_cycles}</span>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="font-mono text-gray-300">
+                    <span className="font-mono text-slate-300">
                       {avgDurations.has(source.name)
                         ? formatDuration(avgDurations.get(source.name)!)
                         : "--"}
@@ -136,21 +151,21 @@ export function SourcesTable({ onEdit, onCreate }: SourcesTableProps) {
                     <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => handleTrigger(source)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-emerald-400 hover:bg-gray-700 transition-colors"
+                        className="rounded-xl border border-white/8 bg-white/[0.03] p-2 text-slate-400 transition-colors hover:border-emerald-300/25 hover:text-emerald-300"
                         title="Trigger sync"
                       >
                         <Play className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => onEdit(source.name)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-blue-400 hover:bg-gray-700 transition-colors"
+                        className="rounded-xl border border-white/8 bg-white/[0.03] p-2 text-slate-400 transition-colors hover:border-blue-300/25 hover:text-blue-300"
                         title="Edit"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(source.name)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-rose-400 hover:bg-gray-700 transition-colors"
+                        className="rounded-xl border border-white/8 bg-white/[0.03] p-2 text-slate-400 transition-colors hover:border-rose-300/25 hover:text-rose-300"
                         title="Delete"
                       >
                         <Trash2 className="h-4 w-4" />

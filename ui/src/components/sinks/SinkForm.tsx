@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { useCreateSink, useUpdateSink } from "@/api/sinks";
 import { JsonEditor } from "@/components/shared/JsonEditor";
-import { useToast } from "@/components/shared/Toast";
+import { useToast } from "@/components/shared/useToast";
 import type { SinkInfo, SinkType } from "@/types/api";
 
 const SINK_TYPES: SinkType[] = ["stdout", "kafka", "surrealdb", "http"];

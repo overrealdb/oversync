@@ -20,12 +20,30 @@ export function Sidebar() {
   const matchRoute = useMatchRoute();
 
   return (
-    <aside className="hidden md:flex md:w-56 flex-col bg-gray-900 border-r border-gray-800 h-screen sticky top-0">
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-800">
-        <Zap className="h-6 w-6 text-emerald-400" />
-        <span className="text-lg font-bold text-white">OverSync</span>
+    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/8 bg-slate-950/70 backdrop-blur-xl md:flex md:flex-col">
+      <div className="border-b border-white/8 px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-400/10">
+            <Zap className="h-5 w-5 text-emerald-300" />
+          </div>
+          <div>
+            <span className="block text-lg font-semibold tracking-[-0.03em] text-white">
+              OverSync
+            </span>
+            <span className="block text-xs uppercase tracking-[0.24em] text-slate-500">
+              Control plane
+            </span>
+          </div>
+        </div>
+        <p className="mt-4 max-w-[16rem] text-sm leading-6 text-slate-400">
+          Observe sources, adjust flows, and ship changes without losing the operational picture.
+        </p>
       </div>
-      <nav aria-label="Main navigation" className="flex-1 px-2 py-4 space-y-1">
+      <nav aria-label="Main navigation" className="flex-1 px-3 py-5">
+        <div className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+          Workspace
+        </div>
+        <div className="space-y-1.5">
         {navItems.map(({ to, icon: Icon, label }) => {
           const isActive = to === "/"
             ? matchRoute({ to, fuzzy: false })
@@ -35,18 +53,37 @@ export function Sidebar() {
               key={to}
               to={to}
               aria-current={isActive ? "page" : undefined}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all ${
                 isActive
-                  ? "bg-gray-800 text-white"
-                  : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
+                  ? "bg-white/[0.08] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-100"
               }`}
             >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${
+                  isActive
+                    ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-300"
+                    : "border-white/5 bg-white/[0.02] text-slate-500 group-hover:border-white/10 group-hover:text-slate-200"
+                }`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <span className="tracking-[-0.02em]">{label}</span>
             </Link>
           );
         })}
+        </div>
       </nav>
+      <div className="px-5 pb-5">
+        <div className="panel-subtle p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Live surface
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Designed for active pipelines, not just config editing.
+          </p>
+        </div>
+      </div>
     </aside>
   );
 }

@@ -38,14 +38,19 @@ export function CyclesChart({ cycles }: CyclesChartProps) {
   }));
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-      <h3 className="text-sm font-medium text-gray-300 mb-4">
-        Rows Synced (Last 24h)
-      </h3>
+    <div className="panel-surface p-6">
+      <div className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <div className="eyebrow">Throughput</div>
+          <h3 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-white">
+            Rows synced in the last 24 hours
+          </h3>
+        </div>
+      </div>
       {data.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">
-          No cycle data yet
-        </p>
+        <div className="panel-subtle flex h-56 items-center justify-center px-6 text-center text-sm leading-6 text-slate-500">
+          No cycle data yet. Once sources start running, this panel turns into a rolling throughput view.
+        </div>
       ) : (
         <AreaChart
           className="h-56"

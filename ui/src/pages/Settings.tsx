@@ -13,36 +13,57 @@ export function Settings() {
     useSettingsStore();
 
   return (
-    <div className="space-y-6 max-w-xl">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-sm text-gray-400 mt-1">Configure dashboard preferences</p>
-      </div>
+    <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <section className="panel-surface h-fit px-6 py-7 sm:px-8">
+        <div className="eyebrow">Local preferences</div>
+        <h1 className="page-title mt-3">Settings</h1>
+        <p className="page-copy mt-4">
+          Tune how the dashboard reaches the API, how often it refreshes, and which visual mode it stores on this machine.
+        </p>
+        <div className="mt-8 space-y-4">
+          <div className="panel-subtle p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              API mode
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Use <span className="font-mono text-slate-200">/api</span> behind Vite, or point directly at a remote OverSync server.
+            </p>
+          </div>
+          <div className="panel-subtle p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Refresh cadence
+            </div>
+            <p className="mt-2 text-sm leading-6 text-slate-400">
+              Short intervals are great for active debugging. Longer intervals reduce dashboard chatter.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div className="space-y-6">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+        <div className="panel-surface p-6">
+          <label className="mb-2 block text-sm font-medium text-slate-200">
             API Endpoint
           </label>
           <input
             type="text"
             value={apiBaseUrl}
             onChange={(e) => setApiBaseUrl(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm font-mono text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-slate-100 outline-none transition-colors focus:border-emerald-300/35"
           />
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-3 text-sm leading-6 text-slate-400">
             The OverSync API endpoint. Use "/api" for proxied dev server.
           </p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <label className="block text-sm font-medium text-gray-300 mb-2">
+        <div className="panel-surface p-6">
+          <label className="mb-2 block text-sm font-medium text-slate-200">
             Auto-Refresh Interval
           </label>
           <select
             value={refreshInterval}
             onChange={(e) => setRefreshInterval(Number(e.target.value))}
-            className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-slate-100 outline-none transition-colors focus:border-emerald-300/35"
           >
             {INTERVAL_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -50,16 +71,19 @@ export function Settings() {
               </option>
             ))}
           </select>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            This controls polling for the UI itself, not the schedule used by sync pipelines.
+          </p>
         </div>
 
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-          <label className="block text-sm font-medium text-gray-300 mb-3">Theme</label>
-          <div className="flex gap-3">
+        <div className="panel-surface p-6">
+          <label className="mb-4 block text-sm font-medium text-slate-200">Theme</label>
+          <div className="flex flex-wrap gap-3">
             <label
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+              className={`cursor-pointer rounded-2xl border px-5 py-3 text-sm font-medium transition-colors ${
                 theme === "dark"
-                  ? "bg-gray-700 text-white ring-2 ring-blue-500"
-                  : "bg-gray-800 text-gray-400 hover:text-white"
+                  ? "border-emerald-300/25 bg-emerald-400/10 text-white"
+                  : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-white"
               }`}
             >
               <input
@@ -73,10 +97,10 @@ export function Settings() {
               Dark
             </label>
             <label
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+              className={`cursor-pointer rounded-2xl border px-5 py-3 text-sm font-medium transition-colors ${
                 theme === "light"
-                  ? "bg-gray-700 text-white ring-2 ring-blue-500"
-                  : "bg-gray-800 text-gray-400 hover:text-white"
+                  ? "border-emerald-300/25 bg-emerald-400/10 text-white"
+                  : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-white"
               }`}
             >
               <input
@@ -90,6 +114,9 @@ export function Settings() {
               Light
             </label>
           </div>
+          <p className="mt-3 text-sm leading-6 text-slate-400">
+            Preference is stored locally in the browser and applied on the next render.
+          </p>
         </div>
       </div>
     </div>

@@ -27,14 +27,17 @@ export function DurationChart({ cycles }: DurationChartProps) {
     .slice(0, 10);
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-      <h3 className="text-sm font-medium text-gray-300 mb-4">
-        Avg Cycle Duration per Source
-      </h3>
+    <div className="panel-surface p-6">
+      <div className="mb-5">
+        <div className="eyebrow">Latency</div>
+        <h3 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-white">
+          Average cycle duration by source
+        </h3>
+      </div>
       {data.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">
-          No cycle data yet
-        </p>
+        <div className="panel-subtle flex h-56 items-center justify-center px-6 text-center text-sm leading-6 text-slate-500">
+          Duration history appears here after the first completed cycles.
+        </div>
       ) : (
         <BarChart
           className="h-56"

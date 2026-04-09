@@ -6,7 +6,7 @@ import { useSource, useTriggerSource } from "@/api/sources";
 import { useHistory } from "@/api/history";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { LoadingSkeleton } from "@/components/shared/LoadingSkeleton";
-import { useToast } from "@/components/shared/Toast";
+import { useToast } from "@/components/shared/useToast";
 import { formatDate, formatNumber, formatDuration, cycleDurationMs } from "@/utils/format";
 import { Route } from "@/routes/source-detail";
 

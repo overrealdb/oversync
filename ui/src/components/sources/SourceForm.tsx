@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
 import { useCreateSource, useUpdateSource } from "@/api/sources";
 import { JsonEditor } from "@/components/shared/JsonEditor";
-import { useToast } from "@/components/shared/Toast";
+import { useToast } from "@/components/shared/useToast";
 import type { SourceInfo, ConnectorType } from "@/types/api";
 
 const CONNECTOR_TYPES: ConnectorType[] = [

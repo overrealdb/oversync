@@ -27,19 +27,29 @@ export function Sources() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Sources</h1>
-          <p className="text-sm text-gray-400 mt-1">Manage data source connections</p>
+    <div className="section-stack">
+      <section className="panel-surface px-6 py-7 sm:px-8 sm:py-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="eyebrow">Origins</div>
+            <h1 className="page-title mt-3">Sources</h1>
+            <p className="page-copy mt-4">
+              Register upstream systems, shape polling cadence, and keep query lanes readable as the source catalog grows.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
+              {data?.sources.length ?? 0} configured
+            </div>
+            <button
+              onClick={handleCreate}
+              className="action-button"
+            >
+              <Plus className="h-4 w-4" /> Add Source
+            </button>
+          </div>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add Source
-        </button>
-      </div>
+      </section>
 
       <SourcesTable onEdit={handleEdit} onCreate={handleCreate} />
       <SourceForm open={formOpen} onClose={handleClose} source={editSource} />

@@ -1,16 +1,94 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
+  @apply font-sans antialiased text-slate-100;
+  background:
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.14), transparent 28%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 24%),
+    linear-gradient(180deg, #0d1728 0%, #050b16 38%, #040814 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.04) 1px, transparent 1px);
+  background-size: 96px 96px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 82%);
+}
+
+::selection {
+  background: rgba(52, 211, 153, 0.28);
+  color: #f8fafc;
 }
 
 .font-mono {
   font-family: var(--font-mono);
+}
+
+.panel-surface {
+  @apply rounded-[28px] border border-white/10 bg-slate-950/72 backdrop-blur-xl shadow-[0_24px_80px_-48px_rgba(15,23,42,0.95)];
+}
+
+.panel-subtle {
+  @apply rounded-[24px] border border-white/10 bg-white/[0.05] backdrop-blur-sm;
+}
+
+.eyebrow {
+  @apply text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-300/75;
+}
+
+.page-title {
+  @apply text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl;
+}
+
+.page-copy {
+  @apply max-w-2xl text-sm leading-6 text-slate-400 sm:text-[15px];
+}
+
+.action-button {
+  @apply inline-flex items-center gap-2 rounded-full bg-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition-transform transition-colors hover:bg-emerald-300 hover:-translate-y-0.5;
+}
+
+.action-button-secondary {
+  @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-slate-100 transition-colors hover:border-emerald-300/35 hover:bg-white/[0.08];
+}
+
+.data-grid {
+  @apply grid gap-4 md:grid-cols-2 2xl:grid-cols-4;
+}
+
+.section-stack {
+  @apply space-y-8;
 }
 
 /* ── Tremor dark theme ────────────────────────────────────── */

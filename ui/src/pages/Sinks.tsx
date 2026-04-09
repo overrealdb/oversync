@@ -24,19 +24,24 @@ export function Sinks() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Sinks</h1>
-          <p className="text-sm text-gray-400 mt-1">Manage event delivery destinations</p>
+    <div className="section-stack">
+      <section className="panel-surface px-6 py-7 sm:px-8 sm:py-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="eyebrow">Destinations</div>
+            <h1 className="page-title mt-3">Sinks</h1>
+            <p className="page-copy mt-4">
+              Control where state changes land, from Kafka topics to local diagnostics and internal transport surfaces.
+            </p>
+          </div>
+          <button
+            onClick={handleCreate}
+            className="action-button"
+          >
+            <Plus className="h-4 w-4" /> Add Sink
+          </button>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add Sink
-        </button>
-      </div>
+      </section>
 
       <SinksTable onEdit={handleEdit} onCreate={handleCreate} />
       <SinkForm open={formOpen} onClose={handleClose} sink={editSink} />

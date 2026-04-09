@@ -44,22 +44,25 @@ export function ErrorSparklines({ sources, cycles }: ErrorSparklinesProps) {
   });
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-      <h3 className="text-sm font-medium text-gray-300 mb-4">
-        Error Rate by Source
-      </h3>
+    <div className="panel-surface p-6">
+      <div className="mb-5">
+        <div className="eyebrow">Reliability</div>
+        <h3 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-white">
+          Error rate by source
+        </h3>
+      </div>
       {rows.every((r) => r.total === 0) ? (
-        <p className="text-sm text-gray-500 py-4 text-center">
-          No cycle data yet
-        </p>
+        <div className="panel-subtle flex items-center justify-center px-6 py-10 text-center text-sm leading-6 text-slate-500">
+          No cycle data yet. Error profiles will show up once sources begin producing execution history.
+        </div>
       ) : (
         <div className="space-y-3">
           {rows.map((r) => (
             <div
               key={r.name}
-              className="flex items-center gap-4 py-1.5 border-b border-gray-800 last:border-0"
+              className="panel-subtle flex items-center gap-4 px-4 py-3"
             >
-              <span className="text-sm text-gray-300 w-32 truncate font-mono">
+              <span className="w-40 truncate text-sm text-slate-200">
                 {r.name}
               </span>
               <div className="flex-1 min-w-0">
@@ -74,12 +77,12 @@ export function ErrorSparklines({ sources, cycles }: ErrorSparklinesProps) {
                   />
                 ) : (
                   <div className="h-8 flex items-center">
-                    <div className="h-px w-full bg-gray-800" />
+                    <div className="h-px w-full bg-white/10" />
                   </div>
                 )}
               </div>
               <span
-                className={`text-sm font-mono w-12 text-right ${
+                className={`w-12 text-right font-mono text-sm ${
                   r.rate > 20
                     ? "text-rose-400"
                     : r.rate > 5
