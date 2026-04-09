@@ -158,11 +158,47 @@ pub struct StatusResponse {
 	pub paused: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportConfigFormat {
+	Toml,
+	Json,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ExportConfigQuery {
+	pub format: Option<ExportConfigFormat>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ExportConfigResponse {
+	pub format: ExportConfigFormat,
+	pub content: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ImportConfigRequest {
+	pub format: ExportConfigFormat,
+	pub content: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ImportConfigResponse {
+	pub ok: bool,
+	pub message: String,
+	pub warnings: Vec<String>,
+}
+
 // ── Pipe types ──────────────────────────────────────────────
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PipeListResponse {
 	pub pipes: Vec<PipeInfo>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PipePresetListResponse {
+	pub presets: Vec<PipePresetInfo>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -172,7 +208,58 @@ pub struct PipeInfo {
 	pub origin_dsn: String,
 	pub targets: Vec<String>,
 	pub interval_secs: u64,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub recipe: Option<serde_json::Value>,
 	pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct PipePresetSpecInput {
+	pub origin_connector: String,
+	pub origin_dsn: String,
+	#[serde(default)]
+	pub origin_credential: Option<String>,
+	#[serde(default)]
+	pub trino_url: Option<String>,
+	#[serde(default)]
+	pub origin_config: serde_json::Value,
+	#[serde(default)]
+	pub targets: Vec<String>,
+	#[serde(default)]
+	pub queries: Vec<PipeQueryInput>,
+	#[serde(default)]
+	pub schedule: serde_json::Value,
+	#[serde(default)]
+	pub delta: serde_json::Value,
+	#[serde(default)]
+	pub retry: serde_json::Value,
+	#[serde(default)]
+	pub recipe: Option<serde_json::Value>,
+	#[serde(default)]
+	pub filters: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub transforms: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub links: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct PipePresetInfo {
+	pub name: String,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub description: Option<String>,
+	pub spec: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct PipeQueryInput {
+	pub id: String,
+	pub sql: String,
+	pub key_column: String,
+	#[serde(default)]
+	pub sinks: Option<Vec<String>>,
+	#[serde(default)]
+	pub transform: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -195,11 +282,15 @@ pub struct CreatePipeRequest {
 	#[serde(default)]
 	pub retry: serde_json::Value,
 	#[serde(default)]
+	pub recipe: Option<serde_json::Value>,
+	#[serde(default)]
 	pub filters: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub transforms: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub links: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub queries: Vec<PipeQueryInput>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -213,10 +304,27 @@ pub struct UpdatePipeRequest {
 	pub schedule: Option<serde_json::Value>,
 	pub delta: Option<serde_json::Value>,
 	pub retry: Option<serde_json::Value>,
+	pub recipe: Option<serde_json::Value>,
 	pub filters: Option<Vec<serde_json::Value>>,
 	pub transforms: Option<Vec<serde_json::Value>>,
 	pub links: Option<Vec<serde_json::Value>>,
+	pub queries: Option<Vec<PipeQueryInput>>,
 	pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreatePipePresetRequest {
+	pub name: String,
+	#[serde(default)]
+	pub description: Option<String>,
+	pub spec: PipePresetSpecInput,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct UpdatePipePresetRequest {
+	#[serde(default)]
+	pub description: Option<String>,
+	pub spec: Option<PipePresetSpecInput>,
 }
 
 // ── Credential types ────────────────────────────────────────

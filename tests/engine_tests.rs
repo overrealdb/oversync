@@ -1,8 +1,15 @@
 mod common;
 
+use std::sync::Arc;
+
+use async_trait::async_trait;
 use common::surreal::TestSurrealContainer;
 use oversync::OversyncEngine;
-use oversync::config::{SinkDef, SyncConfig};
+use oversync::config::{QueryDef, SinkDef, SourceDef, SyncConfig};
+use oversync_core::error::OversyncError;
+use oversync_core::model::{EventEnvelope, RawRow};
+use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TargetFactory};
+use tokio::sync::Mutex;
 
 fn make_config(container: &TestSurrealContainer) -> SyncConfig {
 	SyncConfig {
@@ -21,7 +28,104 @@ fn make_config(container: &TestSurrealContainer) -> SyncConfig {
 			config: serde_json::json!({}),
 		}],
 		pipes: vec![],
+		pipe_presets: vec![],
 	}
+}
+
+struct StaticConnector {
+	rows: Vec<RawRow>,
+}
+
+#[async_trait]
+impl OriginConnector for StaticConnector {
+	fn name(&self) -> &str {
+		"static"
+	}
+
+	async fn fetch_all(&self, _sql: &str, _key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
+		Ok(self.rows.clone())
+	}
+
+	async fn test_connection(&self) -> Result<(), OversyncError> {
+		Ok(())
+	}
+}
+
+struct StaticOriginFactory {
+	rows: Vec<RawRow>,
+}
+
+#[async_trait]
+impl OriginFactory for StaticOriginFactory {
+	fn connector_type(&self) -> &str {
+		"static"
+	}
+
+	async fn create(
+		&self,
+		_name: &str,
+		_config: &serde_json::Value,
+	) -> Result<Box<dyn OriginConnector>, OversyncError> {
+		Ok(Box::new(StaticConnector {
+			rows: self.rows.clone(),
+		}))
+	}
+}
+
+struct RecordingSink {
+	name: String,
+	events: Arc<Mutex<Vec<EventEnvelope>>>,
+}
+
+#[async_trait]
+impl Sink for RecordingSink {
+	fn name(&self) -> &str {
+		&self.name
+	}
+
+	async fn send_event(&self, envelope: &EventEnvelope) -> Result<(), OversyncError> {
+		self.events.lock().await.push(envelope.clone());
+		Ok(())
+	}
+
+	async fn test_connection(&self) -> Result<(), OversyncError> {
+		Ok(())
+	}
+}
+
+struct RecordingSinkFactory {
+	events: Arc<Mutex<Vec<EventEnvelope>>>,
+}
+
+#[async_trait]
+impl TargetFactory for RecordingSinkFactory {
+	fn sink_type(&self) -> &str {
+		"recorder"
+	}
+
+	async fn create(
+		&self,
+		name: &str,
+		_config: &serde_json::Value,
+	) -> Result<Box<dyn Sink>, OversyncError> {
+		Ok(Box::new(RecordingSink {
+			name: name.to_string(),
+			events: Arc::clone(&self.events),
+		}))
+	}
+}
+
+fn static_rows() -> Vec<RawRow> {
+	vec![
+		RawRow {
+			row_key: "1".into(),
+			row_data: serde_json::json!({"id": "1", "name": "alpha"}),
+		},
+		RawRow {
+			row_key: "2".into(),
+			row_data: serde_json::json!({"id": "2", "name": "beta"}),
+		},
+	]
 }
 
 // ── Build ───────────────────────────────────────────────────
@@ -88,6 +192,96 @@ async fn engine_builder_custom_namespace() {
 	let def = engine.surreal_def();
 	assert_eq!(def.namespace, "custom_ns");
 	assert_eq!(def.database, "custom_db");
+}
+
+#[tokio::test]
+async fn engine_builder_without_snapshot_url_reuses_shared_state_snapshot() {
+	let container = TestSurrealContainer::new().await;
+	let state_url = TestSurrealContainer::url().await;
+
+	let base_config = SyncConfig {
+		surrealdb: oversync::config::SurrealDbDef {
+			url: state_url.clone(),
+			username: "root".into(),
+			password: "root".into(),
+			namespace: container.ns.clone(),
+			database: container.db.clone(),
+			snapshot: None,
+		},
+		sources: vec![SourceDef {
+			name: "static-source".into(),
+			connector: "static".into(),
+			dsn: "memory://".into(),
+			interval_secs: 3600,
+			fail_safe_threshold: 30.0,
+			max_retries: 1,
+			retry_base_delay_secs: 1,
+			diff_mode: oversync::config::DiffMode::Db,
+			missed_tick_policy: Default::default(),
+			config: serde_json::json!({}),
+			queries: vec![QueryDef {
+				id: "items".into(),
+				sql: "SELECT * FROM static_source".into(),
+				key_column: "id".into(),
+				sinks: None,
+				transform: None,
+			}],
+		}],
+		sinks: vec![SinkDef {
+			name: "recorder".into(),
+			sink_type: "recorder".into(),
+			config: serde_json::json!({}),
+		}],
+		pipes: vec![],
+		pipe_presets: vec![],
+	};
+
+	let first_events = Arc::new(Mutex::new(Vec::new()));
+	let first_engine = OversyncEngine::builder(&state_url)
+		.namespace(&container.ns)
+		.database(&container.db)
+		.credentials("root", "root")
+		.skip_defaults(true)
+		.register_source(Box::new(StaticOriginFactory {
+			rows: static_rows(),
+		}))
+		.register_sink(Box::new(RecordingSinkFactory {
+			events: Arc::clone(&first_events),
+		}))
+		.build()
+		.await
+		.unwrap();
+
+	first_engine.start(base_config.clone()).await.unwrap();
+	tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+	first_engine.shutdown().await;
+
+	assert_eq!(first_events.lock().await.len(), 2);
+
+	let second_events = Arc::new(Mutex::new(Vec::new()));
+	let second_engine = OversyncEngine::builder(&state_url)
+		.namespace(&container.ns)
+		.database(&container.db)
+		.credentials("root", "root")
+		.skip_defaults(true)
+		.register_source(Box::new(StaticOriginFactory {
+			rows: static_rows(),
+		}))
+		.register_sink(Box::new(RecordingSinkFactory {
+			events: Arc::clone(&second_events),
+		}))
+		.build()
+		.await
+		.unwrap();
+
+	second_engine.start(base_config).await.unwrap();
+	tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+	second_engine.shutdown().await;
+
+	assert!(
+		second_events.lock().await.is_empty(),
+		"restart against shared state DB should reuse snapshot baseline and emit no duplicate create wave"
+	);
 }
 
 // ── Start / Shutdown ────────────────────────────────────────
@@ -177,6 +371,117 @@ async fn engine_start_from_db() {
 	engine.start(config).await.unwrap();
 	assert!(engine.is_running().await);
 	engine.shutdown().await;
+}
+
+#[cfg(feature = "api")]
+#[tokio::test]
+async fn engine_api_resolve_pipe_returns_effective_queries() {
+	use axum::body::{self, Body};
+	use axum::http::{Request, StatusCode};
+	use oversync::config::{
+		DeltaDef, DiffMode, MissedTickPolicy, OriginDef, PipeConfig, PipeRecipeDef, PipeRecipeType,
+		QueryDef, RetryDef, ScheduleDef, SourceDef,
+	};
+	use tower::ServiceExt;
+
+	unsafe {
+		std::env::set_var(
+			"OVERSYNC_CREDENTIAL_KEY",
+			"engine-api-resolve-test-key-32-bytes",
+		)
+	};
+
+	let engine = OversyncEngine::builder("mem://")
+		.skip_schema(true)
+		.build()
+		.await
+		.unwrap();
+
+	let config = SyncConfig {
+		surrealdb: engine.surreal_def().clone(),
+		sources: vec![SourceDef {
+			name: "seed-source".into(),
+			connector: "http".into(),
+			dsn: "https://example.invalid".into(),
+			interval_secs: 300,
+			fail_safe_threshold: 30.0,
+			max_retries: 3,
+			retry_base_delay_secs: 5,
+			diff_mode: DiffMode::Db,
+			missed_tick_policy: MissedTickPolicy::Skip,
+			config: serde_json::json!({}),
+			queries: vec![QueryDef {
+				id: "seed-query".into(),
+				sql: "SELECT 1 AS id".into(),
+				key_column: "id".into(),
+				sinks: None,
+				transform: None,
+			}],
+		}],
+		sinks: vec![SinkDef {
+			name: "stdout".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({}),
+		}],
+		pipes: vec![PipeConfig {
+			name: "catalog-pg".into(),
+			origin: OriginDef {
+				connector: "postgres".into(),
+				dsn: "postgres://postgres:postgres@127.0.0.1:55432/postgres".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec!["stdout".into()],
+			queries: vec![],
+			schedule: ScheduleDef::default(),
+			delta: DeltaDef::default(),
+			retry: RetryDef::default(),
+			recipe: Some(PipeRecipeDef {
+				recipe_type: PipeRecipeType::PostgresMetadata,
+				prefix: "postgresdl".into(),
+				entity_type_id: Some("postgres".into()),
+				schema_id: "table".into(),
+				schemas: vec!["public".into()],
+			}),
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
+		}],
+		pipe_presets: vec![],
+	};
+
+	oversync::config_db::replace_config_in_db(engine.state_client().as_ref(), &config)
+		.await
+		.unwrap();
+
+	let app = engine.api_router().await.unwrap();
+	let response = app
+		.oneshot(
+			Request::builder()
+				.uri("/pipes/catalog-pg/resolve")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+
+	assert_eq!(response.status(), StatusCode::OK);
+	let body = body::to_bytes(response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+	let queries = json
+		.get("effective_queries")
+		.and_then(|value| value.as_array())
+		.unwrap_or_else(|| panic!("expected effective_queries array, got: {json}"));
+	assert_eq!(queries.len(), 2);
+	assert_eq!(queries[0]["id"], "entity");
+	assert_eq!(queries[1]["id"], "aspect-table");
+
+	unsafe { std::env::remove_var("OVERSYNC_CREDENTIAL_KEY") };
 }
 
 // ── Pause / Resume ──────────────────────────────────────────
@@ -286,6 +591,7 @@ async fn engine_is_cloneable() {
 		sources: vec![],
 		sinks: vec![],
 		pipes: vec![],
+		pipe_presets: vec![],
 	};
 
 	engine.start(config).await.unwrap();

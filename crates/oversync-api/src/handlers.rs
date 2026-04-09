@@ -91,6 +91,19 @@ pub async fn list_pipes(State(state): State<Arc<ApiState>>) -> Json<PipeListResp
 
 #[utoipa::path(
 	get,
+	path = "/pipe-presets",
+	responses(
+		(status = 200, description = "List reusable pipe presets", body = PipePresetListResponse)
+	)
+)]
+pub async fn list_pipe_presets(State(state): State<Arc<ApiState>>) -> Json<PipePresetListResponse> {
+	Json(PipePresetListResponse {
+		presets: state.pipe_presets_info(),
+	})
+}
+
+#[utoipa::path(
+	get,
 	path = "/pipes/{name}",
 	params(("name" = String, Path, description = "Pipe name")),
 	responses(
@@ -112,6 +125,34 @@ pub async fn get_pipe(
 				StatusCode::NOT_FOUND,
 				Json(ErrorResponse {
 					error: format!("pipe not found: {name}"),
+				}),
+			)
+		})
+}
+
+#[utoipa::path(
+	get,
+	path = "/pipe-presets/{name}",
+	params(("name" = String, Path, description = "Pipe preset name")),
+	responses(
+		(status = 200, description = "Pipe preset details", body = PipePresetInfo),
+		(status = 404, description = "Pipe preset not found", body = ErrorResponse)
+	)
+)]
+pub async fn get_pipe_preset(
+	State(state): State<Arc<ApiState>>,
+	Path(name): Path<String>,
+) -> Result<Json<PipePresetInfo>, impl IntoResponse> {
+	state
+		.pipe_presets_info()
+		.into_iter()
+		.find(|preset| preset.name == name)
+		.map(Json)
+		.ok_or_else(|| {
+			(
+				StatusCode::NOT_FOUND,
+				Json(ErrorResponse {
+					error: format!("pipe preset not found: {name}"),
 				}),
 			)
 		})

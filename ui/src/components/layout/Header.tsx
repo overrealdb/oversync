@@ -5,6 +5,7 @@ import {
   X,
   LayoutDashboard,
   Database,
+  GitBranch,
   HardDrive,
   History,
   Settings,
@@ -13,7 +14,8 @@ import {
 
 const navItems = [
   { to: "/" as const, icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/sources" as const, icon: Database, label: "Sources" },
+  { to: "/pipes" as const, icon: GitBranch, label: "Pipes" },
+  { to: "/sources" as const, icon: Database, label: "Legacy Sources" },
   { to: "/sinks" as const, icon: HardDrive, label: "Sinks" },
   { to: "/history" as const, icon: History, label: "History" },
   { to: "/settings" as const, icon: Settings, label: "Settings" },

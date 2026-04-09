@@ -126,6 +126,14 @@ export function SourceDetailPage() {
         </button>
       </div>
 
+      <div className="rounded-3xl border border-amber-300/15 bg-amber-400/[0.08] px-5 py-4 text-sm leading-6 text-amber-100/85">
+        This is a legacy source detail view. For new PostgreSQL onboarding, recipes, presets, and dry-run driven creation, use{" "}
+        <Link to="/pipes" className="font-semibold text-white underline decoration-white/30 underline-offset-4 hover:text-emerald-200">
+          Pipes
+        </Link>
+        .
+      </div>
+
       {/* Config summary */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
         <h3 className="text-sm font-medium text-gray-300 mb-3">Configuration</h3>

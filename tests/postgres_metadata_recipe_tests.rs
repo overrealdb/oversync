@@ -80,6 +80,7 @@ fn make_recipe_pipe(dsn: &str, schema: &str) -> PipeConfig {
 			alert_webhook: None,
 			enabled: true,
 		}],
+		pipe_presets: vec![],
 	};
 
 	config

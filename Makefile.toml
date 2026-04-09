@@ -95,6 +95,16 @@ description = "Run stress tests (ignored by default, used in release CI)"
 command = "cargo"
 args = ["test", "--workspace", "--features", "validate-docker", "--", "--ignored"]
 
+[tasks.throughput]
+description = "Run query-level throughput harness (shared test stack must already be running)"
+command = "cargo"
+args = ["test", "--test", "throughput_benchmark_tests", "throughput_parallel_queries_three_wave_harness", "--", "--ignored", "--exact", "--nocapture"]
+
+[tasks.cluster-soak]
+description = "Run rolling-restart cluster soak harness (shared test stack must already be running)"
+command = "cargo"
+args = ["test", "--test", "scheduler_tests", "scheduler_rolling_restart_soak_campaign", "--", "--ignored", "--exact", "--nocapture"]
+
 [tasks.test-stack-up]
 description = "Start the shared Docker test stack"
 command = "docker"

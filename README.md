@@ -19,6 +19,7 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 - **WASM plugins** — extend with custom transform steps via WebAssembly (wasmtime)
 - **Dry-run** — preview pipeline results without writing to targets or state (mock and live modes)
 - **Encrypted credentials** — AES-256-GCM at rest, transient credentials for dry-run (never persisted)
+- **Shared snapshot state by default** — when no separate snapshot DB is configured, delta baseline stays in the primary state DB instead of local memory
 - **Trino bridge** — non-native databases (MSSQL, Oracle, Hive, Iceberg, Snowflake) auto-route through Trino with per-query credential passthrough
 - **Pre-delta filters** — regex allow/deny patterns applied before delta detection (skip unwanted data at source)
 - **Env var interpolation** — `${VAR}` and `${VAR:-default}` in TOML configs
@@ -161,13 +162,13 @@ For metadata-catalog style pipelines you can let `oversync` generate the standar
 
 ```toml
 [[pipes]]
-name = "zoe-catalog"
+name = "some-postgresql-source-catalog"
 targets = ["datacat-kafka"]
 
 [pipes.origin]
 connector = "postgres"
 dsn = "postgres://placeholder"
-credential = "zoe-postgres"
+credential = "some-postgresql-source-postgres"
 
 [pipes.schedule]
 interval_secs = 900
@@ -177,7 +178,7 @@ diff_mode = "db"
 
 [pipes.recipe]
 type = "postgres_metadata"
-prefix = "zoe"
+prefix = "some-postgresql-source"
 schemas = ["showcase_stream"]
 ```
 
@@ -226,6 +227,13 @@ trino_url = "http://trino:8080"  # optional: use custom Trino instance
 ```
 
 Oversync automatically creates a Trino catalog and routes queries through it. Supported via Trino: MSSQL, Oracle, Hive, Iceberg, Snowflake, Teradata, DB2, Greenplum, Redshift.
+
+### Cluster notes
+
+- By default, snapshot state is stored in the same SurrealDB as cycle logs and pending events. This makes restarts and failover reuse the existing diff baseline instead of re-emitting a full create wave.
+- If you want a separate snapshot store, configure `[surrealdb.snapshot]` or `OversyncEngine::builder(...).snapshot_url(...)`.
+- `OVERSYNC_INSTANCE_ID` is optional. If unset, each scheduler instance generates a unique process-scoped identity automatically. Set it only when you need an explicit stable identifier in logs or orchestration.
+- Horizontal scale is currently per query, not within one query. Adding replicas helps many independent queries; it does not split one large table scan across workers.
 
 ### Legacy format (backward compatible)
 
@@ -373,6 +381,35 @@ cargo make bench-parallel       # with parallel feature
 cargo make bench-baseline       # save baseline
 cargo make bench-compare        # compare against baseline
 ```
+
+Run the system-level throughput harness against the shared Docker test stack:
+
+```bash
+THROUGHPUT_QUERIES=10 \
+THROUGHPUT_ROWS=10000 \
+THROUGHPUT_TIMEOUT_SECS=120 \
+cargo make throughput
+```
+
+What it proves:
+- first sync throughput across many independent queries
+- steady-state no-change scan cost
+- partial-update wave behavior where only half the queries change
+
+This is intentionally query-level proof. It does not claim that one heavy query can be split across replicas.
+
+Run the rolling-restart cluster soak harness against the shared Docker test stack:
+
+```bash
+SOAK_WAVES=25 \
+SOAK_TIMEOUT_SECS=180 \
+cargo make cluster-soak
+```
+
+What it proves:
+- repeated scheduler restarts keep `cycle_id` moving forward against shared state
+- no duplicate `created` wave is emitted during leader handoff
+- sink state remains reconciled with the source after many restart/mutation rounds
 
 ## Development
 

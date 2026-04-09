@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use tracing::warn;
 
@@ -215,4 +216,109 @@ pub async fn sync_status(State(state): State<Arc<ApiState>>) -> Json<StatusRespo
 		None => (false, false),
 	};
 	Json(StatusResponse { running, paused })
+}
+
+#[utoipa::path(
+	get,
+	path = "/config/export",
+	params(
+		("format" = Option<ExportConfigFormat>, Query, description = "Export format: toml or json")
+	),
+	responses(
+		(status = 200, description = "Current persisted config export", body = ExportConfigResponse),
+		(status = 400, description = "Config export unavailable", body = ErrorResponse)
+	)
+)]
+pub async fn export_config(
+	State(state): State<Arc<ApiState>>,
+	Query(query): Query<ExportConfigQuery>,
+) -> Result<Json<ExportConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
+	let db = state.db_client.as_ref().ok_or_else(|| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: "database not configured".into(),
+			}),
+		)
+	})?;
+	let lifecycle = state.lifecycle.as_ref().ok_or_else(|| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: "config export unavailable".into(),
+			}),
+		)
+	})?;
+
+	let format = query.format.unwrap_or(ExportConfigFormat::Toml);
+	let content = lifecycle.export_config(db, format).await.map_err(|e| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: format!("config export: {e}"),
+			}),
+		)
+	})?;
+
+	Ok(Json(ExportConfigResponse { format, content }))
+}
+
+#[utoipa::path(
+	post,
+	path = "/config/import",
+	request_body = ImportConfigRequest,
+	responses(
+		(status = 200, description = "Config imported into the current control plane", body = ImportConfigResponse),
+		(status = 400, description = "Config import failed", body = ErrorResponse)
+	)
+)]
+pub async fn import_config(
+	State(state): State<Arc<ApiState>>,
+	Json(req): Json<ImportConfigRequest>,
+) -> Result<Json<ImportConfigResponse>, (StatusCode, Json<ErrorResponse>)> {
+	let db = state.db_client.as_ref().ok_or_else(|| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: "database not configured".into(),
+			}),
+		)
+	})?;
+	let lifecycle = state.lifecycle.as_ref().ok_or_else(|| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: "config import unavailable".into(),
+			}),
+		)
+	})?;
+
+	let warnings = lifecycle
+		.import_config(db, req.format, &req.content)
+		.await
+		.map_err(|e| {
+			(
+				StatusCode::BAD_REQUEST,
+				Json(ErrorResponse {
+					error: format!("config import: {e}"),
+				}),
+			)
+		})?;
+
+	crate::mutations::refresh_read_cache(&state)
+		.await
+		.map_err(|e| {
+			(
+				StatusCode::BAD_REQUEST,
+				Json(ErrorResponse {
+					error: format!("refresh cache: {e}"),
+				}),
+			)
+		})?;
+
+	Ok(Json(ImportConfigResponse {
+		ok: true,
+		message: "config imported".into(),
+		warnings,
+	}))
 }

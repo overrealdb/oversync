@@ -82,6 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			},
 		],
 		pipes: vec![],
+		pipe_presets: vec![],
 	};
 
 	engine.start(config).await?;

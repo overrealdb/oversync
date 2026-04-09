@@ -105,6 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			config: serde_json::json!({"pretty": true}),
 		}],
 		pipes: vec![],
+		pipe_presets: vec![],
 	};
 
 	engine.start(config).await?;

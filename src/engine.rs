@@ -1,6 +1,8 @@
 use std::path::Path;
 use std::sync::Arc;
 
+#[cfg(feature = "api")]
+use serde::Serialize;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use tracing::info;
@@ -226,6 +228,7 @@ impl OversyncEngine {
 			sources: Arc::new(RwLock::new(vec![])),
 			sinks: Arc::new(RwLock::new(vec![])),
 			pipes: Arc::new(RwLock::new(vec![])),
+			pipe_presets: Arc::new(RwLock::new(vec![])),
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: Some(self.state_client.clone()),
 			lifecycle: Some(Arc::new(lifecycle_adapter)),
@@ -243,7 +246,17 @@ impl OversyncEngine {
 		let base = oversync_api::router(api_state.clone());
 
 		let registry = crate::engine::default_registry();
-		let dry_run_state = Arc::new(DryRunState { registry });
+		let dry_run_credential_store = credential_store_from_passphrase(
+			std::env::var("OVERSYNC_CREDENTIAL_KEY").ok().as_deref(),
+			"dry-run API routes",
+		)?;
+		let dry_run_state = Arc::new(DryRunState {
+			registry,
+			delta_engine: Arc::new(DeltaEngine::single(self.state_client.as_ref().clone())),
+			state_db: self.state_client.clone(),
+			credential_store: dry_run_credential_store,
+			surreal_def: self.surreal_def.clone(),
+		});
 
 		let credential_store = credential_store_from_passphrase(
 			std::env::var("OVERSYNC_CREDENTIAL_KEY").ok().as_deref(),
@@ -258,7 +271,11 @@ impl OversyncEngine {
 		let engine_protected = axum::Router::new()
 			.route(
 				"/pipes/dry-run",
-				axum::routing::post(dry_run_handler).with_state(dry_run_state),
+				axum::routing::post(dry_run_handler).with_state(dry_run_state.clone()),
+			)
+			.route(
+				"/pipes/{name}/resolve",
+				axum::routing::get(resolve_pipe_handler).with_state(dry_run_state),
 			)
 			.route(
 				"/credentials",
@@ -315,14 +332,96 @@ fn credential_store_from_passphrase(
 #[cfg(feature = "api")]
 struct DryRunState {
 	registry: PluginRegistry,
+	delta_engine: Arc<DeltaEngine>,
+	state_db: Arc<Surreal<Any>>,
+	credential_store: crate::credential::AesGcmStore,
+	surreal_def: SurrealDbDef,
+}
+
+#[cfg(feature = "api")]
+#[derive(Debug, Serialize)]
+struct PipeResolveResponse {
+	pipe: crate::config::PipeConfig,
+	effective_queries: Vec<crate::config::QueryDef>,
+}
+
+#[cfg(feature = "api")]
+async fn resolve_stored_pipe_credentials(
+	pipe: &mut crate::config::PipeConfig,
+	state: &DryRunState,
+) -> Result<(), OversyncError> {
+	if pipe.origin.credential.is_none() {
+		return Ok(());
+	}
+
+	crate::credential::resolve_pipe_credentials(
+		std::slice::from_mut(pipe),
+		state.state_db.as_ref(),
+		&state.credential_store,
+	)
+	.await
+}
+
+#[cfg(feature = "api")]
+async fn resolve_pipe_handler(
+	axum::extract::State(state): axum::extract::State<Arc<DryRunState>>,
+	axum::extract::Path(name): axum::extract::Path<String>,
+) -> Result<axum::Json<PipeResolveResponse>, axum::Json<oversync_api::types::ErrorResponse>> {
+	let config = crate::config_db::load_config_from_db(&state.state_db, &state.surreal_def)
+		.await
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("load pipe config: {e}"),
+			})
+		})?;
+
+	let pipe = config
+		.pipes
+		.into_iter()
+		.find(|pipe| pipe.name == name)
+		.ok_or_else(|| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("pipe not found: {name}"),
+			})
+		})?;
+
+	let mut runtime_pipe = pipe.clone();
+	resolve_stored_pipe_credentials(&mut runtime_pipe, &state)
+		.await
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("resolve pipe credentials: {e}"),
+			})
+		})?;
+	let effective_queries = crate::recipes::expand_runtime_pipe(runtime_pipe)
+		.await
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("resolve runtime pipe: {e}"),
+			})
+		})?
+		.queries;
+
+	Ok(axum::Json(PipeResolveResponse {
+		pipe,
+		effective_queries,
+	}))
 }
 
 #[cfg(feature = "api")]
 async fn dry_run_handler(
 	axum::extract::State(state): axum::extract::State<Arc<DryRunState>>,
-	axum::Json(req): axum::Json<crate::dry_run::DryRunRequest>,
+	axum::Json(mut req): axum::Json<crate::dry_run::DryRunRequest>,
 ) -> Result<axum::Json<crate::dry_run::DryRunResult>, axum::Json<oversync_api::types::ErrorResponse>>
 {
+	resolve_stored_pipe_credentials(&mut req.pipe, &state)
+		.await
+		.map_err(|e| {
+			axum::Json(oversync_api::types::ErrorResponse {
+				error: format!("resolve pipe credentials: {e}"),
+			})
+		})?;
+
 	let transform_hook: Option<std::sync::Arc<dyn oversync_core::traits::TransformHook>> =
 		if req.transforms.is_empty() {
 			None
@@ -335,13 +434,18 @@ async fn dry_run_handler(
 			Some(std::sync::Arc::new(chain))
 		};
 
-	let result = crate::dry_run::execute_dry_run(&req, &state.registry, transform_hook, None)
-		.await
-		.map_err(|e| {
-			axum::Json(oversync_api::types::ErrorResponse {
-				error: e.to_string(),
-			})
-		})?;
+	let result = crate::dry_run::execute_dry_run(
+		&req,
+		&state.registry,
+		transform_hook,
+		Some(state.delta_engine.as_ref()),
+	)
+	.await
+	.map_err(|e| {
+		axum::Json(oversync_api::types::ErrorResponse {
+			error: e.to_string(),
+		})
+	})?;
 	Ok(axum::Json(result))
 }
 
@@ -500,7 +604,7 @@ impl OversyncEngineBuilder {
 		self
 	}
 
-	/// Separate SurrealDB for snapshot storage. If not set, uses embedded `mem://`.
+	/// Separate SurrealDB for snapshot storage. If not set, reuses the primary state DB.
 	pub fn snapshot_url(mut self, url: &str) -> Self {
 		self.snapshot_url = Some(url.to_string());
 		self
@@ -601,7 +705,7 @@ impl OversyncEngineBuilder {
 			rdb.client()
 		};
 
-		let snapshot_client = match &self.snapshot_url {
+		let delta_engine = match &self.snapshot_url {
 			Some(url) => {
 				let snapshot_credentials = if !url.starts_with("mem://") {
 					let snap_user = self
@@ -646,29 +750,13 @@ impl OversyncEngineBuilder {
 					.map_err(|e| OversyncError::SurrealDb(format!("snapshot use ns/db: {e}")))?;
 
 				info!(url = %url, "snapshot DB connected (separate)");
-				snap
+				DeltaEngine::new(Arc::clone(&state_client), snap)
 			}
 			None => {
-				let snap = surrealdb::engine::any::connect("mem://")
-					.await
-					.map_err(|e| OversyncError::SurrealDb(format!("snapshot mem: {e}")))?;
-
-				#[cfg(feature = "schema")]
-				if !self.skip_schema {
-					apply_schema(&snap, "oversync", "snapshot").await?;
-				}
-
-				snap.use_ns("oversync")
-					.use_db("snapshot")
-					.await
-					.map_err(|e| OversyncError::SurrealDb(format!("snapshot use ns/db: {e}")))?;
-
-				info!("snapshot DB: embedded kv-mem");
-				snap
+				info!("snapshot DB: shared state DB");
+				DeltaEngine::single(state_client.as_ref().clone())
 			}
 		};
-
-		let delta_engine = DeltaEngine::new(Arc::clone(&state_client), snapshot_client);
 
 		let mut registry = if self.skip_defaults {
 			PluginRegistry::new()
@@ -887,6 +975,55 @@ impl oversync_api::state::LifecycleControl for LifecycleAdapter {
 	async fn restart_with_config_json(&self, db: &Surreal<Any>) -> Result<(), OversyncError> {
 		let config = crate::config_db::load_config_from_db(db, &self.surreal_def).await?;
 		self.lifecycle.start(config).await
+	}
+
+	async fn export_config(
+		&self,
+		db: &Surreal<Any>,
+		format: oversync_api::types::ExportConfigFormat,
+	) -> Result<String, OversyncError> {
+		let config = crate::config_db::load_config_from_db(db, &self.surreal_def).await?;
+		match format {
+			oversync_api::types::ExportConfigFormat::Toml => toml::to_string_pretty(&config)
+				.map_err(|e| OversyncError::Config(format!("serialize toml export: {e}"))),
+			oversync_api::types::ExportConfigFormat::Json => serde_json::to_string_pretty(&config)
+				.map_err(|e| OversyncError::Config(format!("serialize json export: {e}"))),
+		}
+	}
+
+	async fn import_config(
+		&self,
+		db: &Surreal<Any>,
+		format: oversync_api::types::ExportConfigFormat,
+		content: &str,
+	) -> Result<Vec<String>, OversyncError> {
+		let mut config = match format {
+			oversync_api::types::ExportConfigFormat::Toml => SyncConfig::from_str(content)?,
+			oversync_api::types::ExportConfigFormat::Json => serde_json::from_str(content)
+				.map_err(|e| OversyncError::Config(format!("parse JSON config: {e}")))?,
+		};
+
+		let issues = crate::config::validate_config(&config);
+		let errors: Vec<String> = issues
+			.iter()
+			.filter(|issue| matches!(issue.severity, crate::config::Severity::Error))
+			.map(|issue| issue.message.clone())
+			.collect();
+		if !errors.is_empty() {
+			return Err(OversyncError::Config(errors.join("; ")));
+		}
+
+		let warnings: Vec<String> = issues
+			.into_iter()
+			.filter(|issue| matches!(issue.severity, crate::config::Severity::Warning))
+			.map(|issue| issue.message)
+			.collect();
+
+		// UI import targets the current control plane DB, not an arbitrary state DB from the file.
+		config.surrealdb = self.surreal_def.clone();
+		crate::config_db::replace_config_in_db(db, &config).await?;
+		self.lifecycle.start(config).await?;
+		Ok(warnings)
 	}
 
 	async fn pause(&self) {

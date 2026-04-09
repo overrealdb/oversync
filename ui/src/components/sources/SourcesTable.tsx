@@ -66,15 +66,23 @@ export function SourcesTable({ onEdit, onCreate }: SourcesTableProps) {
   if (sources.length === 0) {
     return (
       <EmptyState
-        title="No sources configured"
-        description="Create a source to start syncing data. Once connected, queries, execution history, and runtime metrics will show up here."
+        title="No legacy sources configured"
+        description="For new runnable PostgreSQL onboarding, go through Pipes. Keep this surface for older source-based configs that still need monitoring or manual triggers."
         action={
-          <button
-            onClick={onCreate}
-            className="action-button"
-          >
-            <Plus className="h-4 w-4" /> Add Source
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/pipes"
+              className="action-button"
+            >
+              Use Pipes
+            </Link>
+            <button
+              onClick={onCreate}
+              className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            >
+              <Plus className="mr-2 inline-block h-4 w-4" /> Add Legacy Source
+            </button>
+          </div>
         }
       />
     );
@@ -86,10 +94,10 @@ export function SourcesTable({ onEdit, onCreate }: SourcesTableProps) {
         <div className="flex flex-col gap-3 border-b border-white/8 px-6 py-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Registered sources
+              Registered legacy sources
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              Scan connector type, runtime history, and quick actions without leaving the workspace.
+              Inspect older source-based configs, their runtime history, and manual operations. New recipe-backed onboarding belongs in Pipes.
             </p>
           </div>
           <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">

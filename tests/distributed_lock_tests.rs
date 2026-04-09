@@ -87,3 +87,30 @@ async fn lock_different_pipes_independent() {
 	assert!(a);
 	assert!(b, "different pipes should have independent locks");
 }
+
+#[tokio::test]
+async fn lock_renew_extends_lease() {
+	let surreal = TestSurrealContainer::new().await;
+	let lock1 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-1".into());
+	let lock2 = PipeLock::new(Arc::new(surreal.client.clone()), "instance-2".into());
+
+	lock1.try_acquire("pipe-a:q1", 1).await.unwrap();
+	tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+
+	let renewed = lock1.renew("pipe-a:q1", 2).await.unwrap();
+	assert!(renewed, "same instance should renew its lock");
+
+	tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+	let acquired = lock2.try_acquire("pipe-a:q1", 1).await.unwrap();
+	assert!(
+		!acquired,
+		"renewed lock should still block another instance before new expiry"
+	);
+
+	tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+	let acquired_after_expiry = lock2.try_acquire("pipe-a:q1", 1).await.unwrap();
+	assert!(
+		acquired_after_expiry,
+		"once renewed lease expires, another instance should acquire"
+	);
+}

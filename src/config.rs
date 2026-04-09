@@ -13,6 +13,8 @@ pub struct SyncConfig {
 	pub sinks: Vec<SinkDef>,
 	#[serde(default)]
 	pub pipes: Vec<PipeConfig>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub pipe_presets: Vec<PipePresetDef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +168,39 @@ pub struct PipeConfig {
 	pub alert_webhook: Option<String>,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
+}
+
+/// Reusable control-plane preset for bootstrapping new pipes in UI/API.
+/// Presets are not runnable by themselves; they store defaults for future pipes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipePresetDef {
+	pub name: String,
+	#[serde(default)]
+	pub description: Option<String>,
+	pub spec: PipePresetSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipePresetSpec {
+	pub origin: OriginDef,
+	#[serde(default)]
+	pub targets: Vec<String>,
+	#[serde(default)]
+	pub queries: Vec<QueryDef>,
+	#[serde(default)]
+	pub schedule: ScheduleDef,
+	#[serde(default)]
+	pub delta: DeltaDef,
+	#[serde(default)]
+	pub retry: RetryDef,
+	#[serde(default)]
+	pub recipe: Option<PipeRecipeDef>,
+	#[serde(default)]
+	pub filters: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub transforms: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub links: Vec<LinkDef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1545,7 +1580,7 @@ dsn = "postgres://localhost/db"
 
 [pipes.recipe]
 type = "postgres_metadata"
-prefix = "zoe"
+prefix = "some-postgresql-source"
 schemas = ["showcase_stream"]
 "#;
 
@@ -1558,7 +1593,7 @@ schemas = ["showcase_stream"]
 		assert!(
 			pipes[0].queries[0]
 				.sql
-				.contains("'zoe.' || n.nspname || '.' || c.relname AS id")
+				.contains("'some-postgresql-source.' || n.nspname || '.' || c.relname AS id")
 		);
 		assert!(
 			pipes[0].queries[0]
@@ -1583,7 +1618,7 @@ dsn = "mysql://localhost/db"
 
 [pipes.recipe]
 type = "postgres_metadata"
-prefix = "zoe"
+prefix = "some-postgresql-source"
 "#;
 
 		let config = SyncConfig::from_str(toml).unwrap();

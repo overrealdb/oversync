@@ -7,11 +7,13 @@ use tracing::debug;
 
 const SQL_TRY_ACQUIRE: &str = oversync_queries::mutations::LOCK_TRY_ACQUIRE;
 const SQL_RELEASE: &str = oversync_queries::mutations::LOCK_RELEASE;
+const SQL_RENEW: &str = oversync_queries::mutations::LOCK_RENEW;
 
 /// Distributed lock per pipe, backed by SurrealDB.
 ///
 /// Ensures only one oversync instance processes a given pipe at a time.
 /// Uses a `pipe_lock` table with TTL-based expiry for crash recovery.
+#[derive(Clone)]
 pub struct PipeLock {
 	db: Arc<Surreal<Any>>,
 	instance_id: String,
@@ -70,5 +72,42 @@ impl PipeLock {
 
 		debug!(pipe = %pipe, instance = %self.instance_id, "lock released");
 		Ok(())
+	}
+
+	/// Renew the lock lease for a pipe held by the same instance.
+	/// Returns true when the lease was extended, false when the lock is no longer held.
+	pub async fn renew(&self, pipe: &str, ttl_secs: u64) -> Result<bool, OversyncError> {
+		let mut resp = self
+			.db
+			.query(SQL_RENEW)
+			.bind(("pipe", pipe.to_string()))
+			.bind(("instance", self.instance_id.clone()))
+			.bind(("ttl_secs", ttl_secs as i64))
+			.await
+			.map_err(|e| OversyncError::SurrealDb(format!("lock renew: {e}")))?;
+
+		let last_idx = resp.num_statements().checked_sub(1).ok_or_else(|| {
+			OversyncError::Internal("lock renew: query returned no statements".into())
+		})?;
+		let rows: Vec<serde_json::Value> = resp
+			.take(last_idx)
+			.map_err(|e| OversyncError::SurrealDb(format!("lock renew take[{last_idx}]: {e}")))?;
+		let renewed = rows
+			.first()
+			.and_then(|row| row.get("renewed"))
+			.and_then(|v| v.as_bool())
+			.ok_or_else(|| {
+				OversyncError::Internal(format!(
+					"lock renew: missing boolean 'renewed' result at statement {last_idx}"
+				))
+			})?;
+
+		if renewed {
+			debug!(pipe = %pipe, instance = %self.instance_id, "lock renewed");
+		} else {
+			debug!(pipe = %pipe, instance = %self.instance_id, "lock renewal skipped — lock no longer held");
+		}
+
+		Ok(renewed)
 	}
 }

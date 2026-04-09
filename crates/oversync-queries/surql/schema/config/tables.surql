@@ -35,6 +35,7 @@ DEFINE FIELD OVERWRITE targets            ON pipe_config TYPE array DEFAULT [];
 DEFINE FIELD OVERWRITE schedule           ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE delta              ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE retry              ON pipe_config TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE recipe             ON pipe_config TYPE option<object> FLEXIBLE;
 DEFINE FIELD OVERWRITE filters            ON pipe_config TYPE array DEFAULT [];
 DEFINE FIELD OVERWRITE filters.*          ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE transforms         ON pipe_config TYPE array DEFAULT [];
@@ -45,6 +46,15 @@ DEFINE FIELD OVERWRITE enabled            ON pipe_config TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE created_at         ON pipe_config TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at         ON pipe_config TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_pipe_name ON pipe_config FIELDS name UNIQUE;
+
+-- pipe_preset_config: reusable UI/API defaults for future pipes
+DEFINE TABLE OVERWRITE pipe_preset_config SCHEMAFULL;
+DEFINE FIELD OVERWRITE name               ON pipe_preset_config TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE description        ON pipe_preset_config TYPE option<string>;
+DEFINE FIELD OVERWRITE spec               ON pipe_preset_config TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE created_at         ON pipe_preset_config TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at         ON pipe_preset_config TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE idx_pipe_preset_name ON pipe_preset_config FIELDS name UNIQUE;
 
 -- credential: encrypted secrets referenced by origin/target
 DEFINE TABLE OVERWRITE credential SCHEMAFULL;

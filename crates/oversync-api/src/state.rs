@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use crate::types::{SinkInfo, SourceInfo, SourceStatus};
+use crate::types::{PipePresetInfo, SinkInfo, SourceInfo, SourceStatus};
 
 pub struct ApiState {
 	pub sources: Arc<RwLock<Vec<SourceConfig>>>,
 	pub sinks: Arc<RwLock<Vec<SinkConfig>>>,
 	pub pipes: Arc<RwLock<Vec<PipeConfigCache>>>,
+	pub pipe_presets: Arc<RwLock<Vec<PipePresetCache>>>,
 	pub cycle_status: Arc<RwLock<HashMap<String, SourceStatus>>>,
 	pub db_client: Option<Arc<surrealdb::Surreal<surrealdb::engine::any::Any>>>,
 	pub lifecycle: Option<Arc<dyn LifecycleControl>>,
@@ -22,6 +23,17 @@ pub trait LifecycleControl: Send + Sync {
 		&self,
 		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
 	) -> Result<(), oversync_core::error::OversyncError>;
+	async fn export_config(
+		&self,
+		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+		format: crate::types::ExportConfigFormat,
+	) -> Result<String, oversync_core::error::OversyncError>;
+	async fn import_config(
+		&self,
+		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+		format: crate::types::ExportConfigFormat,
+		content: &str,
+	) -> Result<Vec<String>, oversync_core::error::OversyncError>;
 	async fn pause(&self);
 	async fn resume(&self) -> Result<(), oversync_core::error::OversyncError>;
 	async fn is_running(&self) -> bool;
@@ -52,7 +64,14 @@ pub struct PipeConfigCache {
 	pub origin_dsn: String,
 	pub targets: Vec<String>,
 	pub interval_secs: u64,
+	pub recipe: Option<serde_json::Value>,
 	pub enabled: bool,
+}
+
+pub struct PipePresetCache {
+	pub name: String,
+	pub description: Option<String>,
+	pub spec: serde_json::Value,
 }
 
 impl ApiState {
@@ -120,7 +139,23 @@ impl ApiState {
 				origin_dsn: p.origin_dsn.clone(),
 				targets: p.targets.clone(),
 				interval_secs: p.interval_secs,
+				recipe: p.recipe.clone(),
 				enabled: p.enabled,
+			})
+			.collect()
+	}
+
+	pub fn pipe_presets_info(&self) -> Vec<PipePresetInfo> {
+		let presets = match self.pipe_presets.try_read() {
+			Ok(p) => p,
+			Err(_) => return vec![],
+		};
+		presets
+			.iter()
+			.map(|preset| PipePresetInfo {
+				name: preset.name.clone(),
+				description: preset.description.clone(),
+				spec: preset.spec.clone(),
 			})
 			.collect()
 	}

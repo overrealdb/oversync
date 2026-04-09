@@ -23,6 +23,7 @@ fn make_config(surreal_def: &SurrealDbDef) -> SyncConfig {
 			config: serde_json::json!({}),
 		}],
 		pipes: vec![],
+		pipe_presets: vec![],
 	}
 }
 

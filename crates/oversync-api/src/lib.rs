@@ -23,7 +23,9 @@ use crate::state::ApiState;
 		handlers::get_source,
 		handlers::list_sinks,
 		handlers::list_pipes,
+		handlers::list_pipe_presets,
 		handlers::get_pipe,
+		handlers::get_pipe_preset,
 		mutations::create_source,
 		mutations::update_source,
 		mutations::delete_source,
@@ -33,9 +35,14 @@ use crate::state::ApiState;
 		mutations::create_pipe,
 		mutations::update_pipe,
 		mutations::delete_pipe,
+		mutations::create_pipe_preset,
+		mutations::update_pipe_preset,
+		mutations::delete_pipe_preset,
 		operations::trigger_source,
 		operations::pause_sync,
 		operations::resume_sync,
+		operations::export_config,
+		operations::import_config,
 		operations::get_history,
 		operations::sync_status,
 		queries::list_queries,
@@ -54,6 +61,10 @@ use crate::state::ApiState;
 		types::SinkInfo,
 		types::PipeListResponse,
 		types::PipeInfo,
+		types::PipePresetListResponse,
+		types::PipePresetInfo,
+		types::PipePresetSpecInput,
+		types::PipeQueryInput,
 		types::TriggerResponse,
 		types::ErrorResponse,
 		types::CreateSourceRequest,
@@ -62,9 +73,16 @@ use crate::state::ApiState;
 		types::UpdateSinkRequest,
 		types::CreatePipeRequest,
 		types::UpdatePipeRequest,
+		types::CreatePipePresetRequest,
+		types::UpdatePipePresetRequest,
 		types::MutationResponse,
 		types::HistoryResponse,
 		types::StatusResponse,
+		types::ExportConfigFormat,
+		types::ExportConfigQuery,
+		types::ExportConfigResponse,
+		types::ImportConfigRequest,
+		types::ImportConfigResponse,
 		types::CreateQueryRequest,
 		types::UpdateQueryRequest,
 		types::QueryListResponse,
@@ -113,14 +131,26 @@ pub fn router(state: Arc<ApiState>) -> Router {
 			get(handlers::list_pipes).post(mutations::create_pipe),
 		)
 		.route(
+			"/pipe-presets",
+			get(handlers::list_pipe_presets).post(mutations::create_pipe_preset),
+		)
+		.route(
 			"/pipes/{name}",
 			get(handlers::get_pipe)
 				.put(mutations::update_pipe)
 				.delete(mutations::delete_pipe),
 		)
+		.route(
+			"/pipe-presets/{name}",
+			get(handlers::get_pipe_preset)
+				.put(mutations::update_pipe_preset)
+				.delete(mutations::delete_pipe_preset),
+		)
 		.route("/sync/pause", post(operations::pause_sync))
 		.route("/sync/resume", post(operations::resume_sync))
 		.route("/sync/status", get(operations::sync_status))
+		.route("/config/import", post(operations::import_config))
+		.route("/config/export", get(operations::export_config))
 		.route("/history", get(operations::get_history))
 		.route_layer(middleware::from_fn_with_state(
 			state.clone(),
@@ -171,8 +201,10 @@ mod tests {
 				origin_dsn: "postgres://ro@pg1:5432/meta".into(),
 				targets: vec!["kafka-main".into()],
 				interval_secs: 60,
+				recipe: None,
 				enabled: true,
 			}])),
+			pipe_presets: Arc::new(RwLock::new(vec![])),
 			cycle_status: Arc::new(RwLock::new(HashMap::new())),
 			db_client: None,
 			lifecycle: None,
@@ -248,6 +280,8 @@ mod tests {
 		assert!(json["paths"]["/sources"].is_object());
 		assert!(json["paths"]["/sinks"].is_object());
 		assert!(json["paths"]["/pipes"].is_object());
+		assert!(json["paths"]["/config/import"].is_object());
+		assert!(json["paths"]["/config/export"].is_object());
 		assert!(json["paths"]["/history"].is_object());
 		assert!(json["paths"]["/sync/pause"].is_object());
 		assert!(json["paths"]["/sync/resume"].is_object());
