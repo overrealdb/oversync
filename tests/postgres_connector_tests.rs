@@ -103,10 +103,10 @@ async fn fetch_all_bad_key_column_errors() {
 async fn fetch_all_with_int_key() {
 	let pg = TestPostgres::new().await;
 
-	pg.run_sql("CREATE TABLE nums (oid TEXT PRIMARY KEY, pages INT)")
+	pg.run_sql("CREATE TABLE nums (oid INT PRIMARY KEY, pages INT)")
 		.await;
-	pg.run_sql("INSERT INTO nums VALUES ('100', 5)").await;
-	pg.run_sql("INSERT INTO nums VALUES ('200', 10)").await;
+	pg.run_sql("INSERT INTO nums VALUES (100, 5)").await;
+	pg.run_sql("INSERT INTO nums VALUES (200, 10)").await;
 
 	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
 	let rows = conn
@@ -115,6 +115,35 @@ async fn fetch_all_with_int_key() {
 		.unwrap();
 
 	assert_eq!(rows.len(), 2);
+	assert!(rows.iter().any(|row| row.row_key == "100"));
+	assert!(rows.iter().any(|row| row.row_key == "200"));
+}
+
+#[tokio::test]
+async fn fetch_all_hides_synthetic_key_column_from_payload() {
+	let pg = TestPostgres::new().await;
+
+	pg.run_sql("CREATE TABLE items (id INT PRIMARY KEY, name TEXT)")
+		.await;
+	pg.run_sql("INSERT INTO items VALUES (1, 'alpha')").await;
+
+	let conn = PostgresConnector::from_pool("test", pg.pool.clone());
+	let rows = conn
+		.fetch_all(
+			&format!(
+				r#"SELECT id::text AS "__oversync_key", t.* FROM {}.items t"#,
+				pg.schema
+			),
+			"__oversync_key",
+		)
+		.await
+		.unwrap();
+
+	assert_eq!(rows.len(), 1);
+	assert_eq!(rows[0].row_key, "1");
+	assert_eq!(rows[0].row_data["id"], 1);
+	assert_eq!(rows[0].row_data["name"], "alpha");
+	assert!(rows[0].row_data.get("__oversync_key").is_none());
 }
 
 #[tokio::test]

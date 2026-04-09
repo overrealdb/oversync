@@ -378,6 +378,7 @@ async fn create_and_list_queries() {
 			"name": "users",
 			"query": "SELECT id, name FROM users",
 			"key_column": "id",
+			"transform": "smt::normalize_users"
 		}),
 	)
 	.await;
@@ -391,6 +392,7 @@ async fn create_and_list_queries() {
 	assert_eq!(queries.len(), 1);
 	assert_eq!(queries[0]["name"], "users");
 	assert_eq!(queries[0]["key_column"], "id");
+	assert_eq!(queries[0]["transform"], "smt::normalize_users");
 }
 
 #[tokio::test]
@@ -412,6 +414,7 @@ async fn update_query_changes_db() {
 			"name": "q1",
 			"query": "SELECT 1 AS id",
 			"key_column": "id",
+			"transform": "smt::before"
 		}),
 	)
 	.await;
@@ -419,7 +422,7 @@ async fn update_query_changes_db() {
 	let (status, json) = put_json(
 		&app,
 		"/sources/pg/queries/q1",
-		serde_json::json!({"query": "SELECT 2 AS id"}),
+		serde_json::json!({"query": "SELECT 2 AS id", "transform": "smt::after"}),
 	)
 	.await;
 	assert_eq!(status, StatusCode::OK);
@@ -433,6 +436,7 @@ async fn update_query_changes_db() {
 		.unwrap();
 	let rows: Vec<serde_json::Value> = resp.take(0).unwrap();
 	assert_eq!(rows[0]["query"], "SELECT 2 AS id");
+	assert_eq!(rows[0]["transform"], "smt::after");
 }
 
 #[tokio::test]
@@ -585,8 +589,20 @@ async fn create_pipe_stores_in_db() {
 			"name": "catalog-sync",
 			"origin_connector": "postgres",
 			"origin_dsn": "postgres://localhost/db",
+			"origin_credential": "catalog-cred",
+			"trino_url": "http://trino:8080",
 			"targets": ["kafka"],
-			"schedule": {"interval_secs": 120}
+			"schedule": {"interval_secs": 120},
+			"filters": [{"type": "keep", "field": "status", "equals": "active"}],
+			"transforms": [{"type": "rename", "field": "legacy", "to": "current"}],
+			"links": [{
+				"name": "user-contact-email",
+				"left_field": "email",
+				"right_field": "email",
+				"strategy": "exact",
+				"target_origin": "contacts",
+				"target_query": "emails"
+			}]
 		}),
 	)
 	.await;
@@ -594,6 +610,27 @@ async fn create_pipe_stores_in_db() {
 	assert_eq!(status, StatusCode::OK);
 	assert_eq!(json["ok"], true);
 	assert!(json["message"].as_str().unwrap().contains("catalog-sync"));
+
+	let mut res = container
+		.client
+		.query("SELECT * FROM pipe_config")
+		.await
+		.unwrap();
+	let rows: Vec<serde_json::Value> = res.take(0).unwrap();
+	assert!(
+		!rows.is_empty(),
+		"pipe_config should contain at least one row after create, got: {rows:?}"
+	);
+	let debug_rows = rows.clone();
+	let row = rows
+		.into_iter()
+		.find(|row| row["name"] == "catalog-sync")
+		.unwrap_or_else(|| panic!("catalog-sync row should exist, got: {debug_rows:?}"));
+	assert_eq!(row["origin_credential"], "catalog-cred");
+	assert_eq!(row["trino_url"], "http://trino:8080");
+	assert_eq!(row["filters"][0]["type"], "keep");
+	assert_eq!(row["transforms"][0]["type"], "rename");
+	assert_eq!(row["links"][0]["name"], "user-contact-email");
 }
 
 #[tokio::test]
@@ -652,6 +689,18 @@ async fn update_pipe_modifies_db() {
 		"/pipes/my-pipe",
 		serde_json::json!({
 			"origin_dsn": "postgres://new",
+			"origin_credential": "rotated-cred",
+			"trino_url": "http://new-trino:8080",
+			"filters": [{"type": "drop", "field": "status", "equals": "deleted"}],
+			"transforms": [{"type": "upper", "field": "name"}],
+			"links": [{
+				"name": "acct-owner",
+				"left_field": "owner_id",
+				"right_field": "id",
+				"strategy": "exact",
+				"target_origin": "owners",
+				"target_query": "by-id"
+			}],
 			"enabled": false
 		}),
 	)
@@ -659,6 +708,29 @@ async fn update_pipe_modifies_db() {
 
 	assert_eq!(status, StatusCode::OK);
 	assert_eq!(json["ok"], true);
+
+	let mut res = container
+		.client
+		.query("SELECT * FROM pipe_config")
+		.await
+		.unwrap();
+	let rows: Vec<serde_json::Value> = res.take(0).unwrap();
+	assert!(
+		!rows.is_empty(),
+		"pipe_config should contain at least one row after update, got: {rows:?}"
+	);
+	let debug_rows = rows.clone();
+	let row = rows
+		.into_iter()
+		.find(|row| row["name"] == "my-pipe")
+		.unwrap_or_else(|| panic!("my-pipe row should exist, got: {debug_rows:?}"));
+	assert_eq!(row["origin_dsn"], "postgres://new");
+	assert_eq!(row["origin_credential"], "rotated-cred");
+	assert_eq!(row["trino_url"], "http://new-trino:8080");
+	assert_eq!(row["filters"][0]["type"], "drop");
+	assert_eq!(row["transforms"][0]["type"], "upper");
+	assert_eq!(row["links"][0]["target_origin"], "owners");
+	assert_eq!(row["enabled"], false);
 }
 
 #[tokio::test]

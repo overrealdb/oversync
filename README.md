@@ -146,7 +146,72 @@ type = "kafka"
 [sinks.config]
 brokers = "kafka:9092"
 topic = "sync-events"
+# optional: emit {"entityId":"..."} as Kafka key and {meta:{dateTime,changeType},data:{...}} as value
+# key_format = "json_object"
+# key_field = "entityId"
+# value_format = "compact"
+# created_change_type = "updated"  # optional: map inserts to "updated" for snapshot-style consumers
 ```
+
+Use `diff_mode = "db"` when downstream consumers need full `data` on delete events. `diff_mode = "memory"` only compares keys and hashes and emits `row_data = null`.
+
+### PostgreSQL metadata recipe
+
+For metadata-catalog style pipelines you can let `oversync` generate the standard PostgreSQL entity + aspect-table queries:
+
+```toml
+[[pipes]]
+name = "zoe-catalog"
+targets = ["datacat-kafka"]
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://placeholder"
+credential = "zoe-postgres"
+
+[pipes.schedule]
+interval_secs = 900
+
+[pipes.delta]
+diff_mode = "db"
+
+[pipes.recipe]
+type = "postgres_metadata"
+prefix = "zoe"
+schemas = ["showcase_stream"]
+```
+
+### PostgreSQL snapshot recipe
+
+For generic `postgres -> kafka` onboarding you can let `oversync` introspect PostgreSQL at runtime and generate one query per table that has a primary key:
+
+```toml
+[[pipes]]
+name = "billing-snapshot"
+targets = ["kafka-main"]
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://placeholder"
+credential = "billing-postgres"
+
+[pipes.schedule]
+interval_secs = 300
+
+[pipes.delta]
+diff_mode = "db"
+
+[pipes.recipe]
+type = "postgres_snapshot"
+prefix = "billing"
+schemas = ["public"]
+```
+
+This recipe:
+- discovers ordinary tables with primary keys
+- generates stable query ids like `billing.public.accounts`
+- supports composite primary keys through an internal synthetic key column
+- omits the synthetic key from emitted row payloads
 
 ### Non-native databases via Trino
 
@@ -312,10 +377,25 @@ cargo make bench-compare        # compare against baseline
 ## Development
 
 ```bash
-cargo make check      # compilation check
-cargo make test       # unit + integration tests (requires Docker)
-cargo make ci         # full CI: check + test + clippy + fmt + coverage
+cargo make test-stack-up     # one shared Postgres/MySQL/SurrealDB/Kafka/Trino stack
+cargo make test-stack-wait   # wait for the stack to be ready
+cargo make check             # compilation check
+cargo make test              # unit + integration tests
+cargo make ci                # full CI: fmt + clippy + coverage
+cargo make test-stack-down   # tear the shared stack down
 ```
+
+Tests default to the shared local endpoints below and can be overridden with env vars:
+
+- `OVERSYNC_TEST_POSTGRES_DSN=postgres://postgres:postgres@127.0.0.1:55432/postgres`
+- `OVERSYNC_TEST_MYSQL_DSN=mysql://root:root@127.0.0.1:53306/test`
+- `OVERSYNC_TEST_SURREAL_URL=http://127.0.0.1:58000`
+- `OVERSYNC_TEST_SURREAL_USERNAME=root`
+- `OVERSYNC_TEST_SURREAL_PASSWORD=root`
+- `OVERSYNC_TEST_KAFKA_BROKER=127.0.0.1:59092`
+- `OVERSYNC_TEST_TRINO_URL=http://127.0.0.1:58080`
+- `OVERSYNC_TEST_TRINO_USER=test`
+- `OVERSYNC_TEST_TRINO_CATALOG=memory`
 
 ## License
 

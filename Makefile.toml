@@ -9,12 +9,12 @@ command = "cargo"
 args = ["check", "--workspace"]
 
 [tasks.test]
-description = "Run unit tests"
+description = "Run unit + integration tests (shared test stack must already be running)"
 command = "cargo"
 args = ["test", "--workspace"]
 
 [tasks.test-docker]
-description = "Run tests with Docker SurrealDB validation"
+description = "Run tests with Docker validation (shared test stack must already be running)"
 command = "cargo"
 args = ["test", "--workspace", "--features", "validate-docker"]
 
@@ -74,7 +74,7 @@ args = ["bench", "--features", "parallel"]
 
 [tasks.coverage]
 clear = true
-description = "Run tests with coverage (single compile, no double-run)"
+description = "Run tests with coverage (shared test stack must already be running)"
 command = "cargo"
 args = ["llvm-cov", "--workspace", "--features", "validate-docker", "--lcov", "--output-path", "lcov.info"]
 
@@ -94,6 +94,21 @@ env = { "RUSTFLAGS" = "-D warnings" }
 description = "Run stress tests (ignored by default, used in release CI)"
 command = "cargo"
 args = ["test", "--workspace", "--features", "validate-docker", "--", "--ignored"]
+
+[tasks.test-stack-up]
+description = "Start the shared Docker test stack"
+command = "docker"
+args = ["compose", "-f", "tests/stack/docker-compose.yml", "up", "-d"]
+
+[tasks.test-stack-wait]
+description = "Wait until the shared Docker test stack is ready"
+command = "bash"
+args = ["tests/stack/wait.sh"]
+
+[tasks.test-stack-down]
+description = "Stop the shared Docker test stack"
+command = "docker"
+args = ["compose", "-f", "tests/stack/docker-compose.yml", "down", "-v", "--remove-orphans"]
 
 # ─── CLI ───
 

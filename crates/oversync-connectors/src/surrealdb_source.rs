@@ -11,6 +11,22 @@ use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
 use oversync_core::traits::OriginConnector;
 
+fn lock_or_recover<'a, T>(
+	mutex: &'a Mutex<T>,
+	label: &'static str,
+) -> std::sync::MutexGuard<'a, T> {
+	match mutex.lock() {
+		Ok(guard) => guard,
+		Err(poisoned) => {
+			warn!(
+				mutex = label,
+				"surrealdb live connector mutex poisoned; recovering state"
+			);
+			poisoned.into_inner()
+		}
+	}
+}
+
 pub struct SurrealDbConnector {
 	client: Surreal<Any>,
 	source_name: String,
@@ -137,10 +153,10 @@ impl SurrealDbLiveConnector {
 						let key = extract_key(&data, &key_column);
 						match notification.action {
 							surrealdb::types::Action::Create | surrealdb::types::Action::Update => {
-								state.lock().unwrap().insert(key, data);
+								lock_or_recover(&state, "live_state").insert(key, data);
 							}
 							surrealdb::types::Action::Delete => {
-								state.lock().unwrap().remove(&key);
+								lock_or_recover(&state, "live_state").remove(&key);
 							}
 							_ => {}
 						}
@@ -153,7 +169,7 @@ impl SurrealDbLiveConnector {
 			debug!(table = %table, "live query stream ended");
 		});
 
-		*self.started.lock().unwrap() = true;
+		*lock_or_recover(&self.started, "live_started") = true;
 		Ok(())
 	}
 }
@@ -165,7 +181,7 @@ impl OriginConnector for SurrealDbLiveConnector {
 	}
 
 	async fn fetch_all(&self, sql: &str, key_column: &str) -> Result<Vec<RawRow>, OversyncError> {
-		let already_started = *self.started.lock().unwrap();
+		let already_started = *lock_or_recover(&self.started, "live_started");
 
 		if !already_started {
 			let mut response =
@@ -178,7 +194,7 @@ impl OriginConnector for SurrealDbLiveConnector {
 				.map_err(|e| OversyncError::Connector(format!("surrealdb take: {e}")))?;
 
 			{
-				let mut state = self.state.lock().unwrap();
+				let mut state = lock_or_recover(&self.state, "live_state");
 				for row in &rows {
 					let key = extract_key(row, key_column);
 					state.insert(key, row.clone());
@@ -189,7 +205,7 @@ impl OriginConnector for SurrealDbLiveConnector {
 			debug!(count = rows.len(), table = %self.table, "initial fetch + live stream started");
 		}
 
-		let state = self.state.lock().unwrap();
+		let state = lock_or_recover(&self.state, "live_state");
 		let result: Vec<RawRow> = state
 			.iter()
 			.map(|(key, data)| RawRow {
@@ -308,6 +324,19 @@ mod tests {
 	fn extract_key_boolean_value() {
 		let row = serde_json::json!({"active": true});
 		assert_eq!(extract_key(&row, "active"), "true");
+	}
+
+	#[test]
+	fn lock_or_recover_recovers_from_poisoned_mutex() {
+		let mutex = Mutex::new(HashMap::<String, serde_json::Value>::new());
+
+		let _ = std::panic::catch_unwind(|| {
+			let _guard = mutex.lock().unwrap();
+			panic!("poison live state mutex");
+		});
+
+		let guard = lock_or_recover(&mutex, "test_state");
+		assert!(guard.is_empty());
 	}
 
 	#[tokio::test]

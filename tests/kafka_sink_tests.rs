@@ -9,9 +9,16 @@ use tokio_stream::StreamExt;
 
 use oversync_core::model::{EventEnvelope, EventMeta, OpType};
 use oversync_core::traits::{Sink, TargetFactory};
-use oversync_sinks::{KafkaSink, KafkaTargetFactory};
+use oversync_sinks::{
+	KafkaKeyFormat, KafkaSink, KafkaSinkFormat, KafkaTargetFactory, KafkaValueFormat,
+};
 
 use common::kafka::TestKafka;
+
+fn unique_topic(prefix: &str) -> String {
+	let uid = uuid::Uuid::new_v4().to_string().replace('-', "");
+	format!("test_{}_{}", prefix, &uid[..8])
+}
 
 fn make_envelope(key: &str, op: OpType) -> EventEnvelope {
 	EventEnvelope {
@@ -28,10 +35,21 @@ fn make_envelope(key: &str, op: OpType) -> EventEnvelope {
 	}
 }
 
+fn make_envelope_at(
+	key: &str,
+	op: OpType,
+	timestamp: chrono::DateTime<chrono::Utc>,
+) -> EventEnvelope {
+	let mut envelope = make_envelope(key, op);
+	envelope.meta.timestamp = timestamp;
+	envelope
+}
+
 async fn make_consumer(broker: &str, topic: &str) -> StreamConsumer {
+	let group_id = unique_topic("consumer");
 	let consumer: StreamConsumer = ClientConfig::new()
 		.set("bootstrap.servers", broker)
-		.set("group.id", "test-consumer")
+		.set("group.id", &group_id)
 		.set("auto.offset.reset", "earliest")
 		.set("enable.auto.commit", "false")
 		.create()
@@ -44,14 +62,14 @@ async fn make_consumer(broker: &str, topic: &str) -> StreamConsumer {
 #[tokio::test]
 async fn kafka_sink_produces_single_event() {
 	let kf = TestKafka::new().await;
-	let topic = "test_single_event";
+	let topic = unique_topic("single_event");
 
-	let sink = KafkaSink::new(&kf.broker, topic).unwrap();
+	let sink = KafkaSink::new(&kf.broker, &topic).unwrap();
 	let envelope = make_envelope("row_1", OpType::Created);
 	sink.send_event(&envelope).await.unwrap();
 
 	// Consume and verify
-	let consumer = make_consumer(&kf.broker, topic).await;
+	let consumer = make_consumer(&kf.broker, &topic).await;
 	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
 		.await
 		.expect("timeout waiting for message")
@@ -73,9 +91,9 @@ async fn kafka_sink_produces_single_event() {
 #[tokio::test]
 async fn kafka_sink_produces_batch() {
 	let kf = TestKafka::new().await;
-	let topic = "test_batch";
+	let topic = unique_topic("batch");
 
-	let sink = KafkaSink::new(&kf.broker, topic).unwrap();
+	let sink = KafkaSink::new(&kf.broker, &topic).unwrap();
 	let envelopes = vec![
 		make_envelope("a", OpType::Created),
 		make_envelope("b", OpType::Updated),
@@ -83,7 +101,7 @@ async fn kafka_sink_produces_batch() {
 	];
 	sink.send_batch(&envelopes).await.unwrap();
 
-	let consumer = make_consumer(&kf.broker, topic).await;
+	let consumer = make_consumer(&kf.broker, &topic).await;
 	let mut received = Vec::new();
 
 	for _ in 0..3 {
@@ -112,14 +130,14 @@ async fn kafka_sink_produces_batch() {
 #[tokio::test]
 async fn kafka_sink_envelope_format() {
 	let kf = TestKafka::new().await;
-	let topic = "test_format";
+	let topic = unique_topic("format");
 
-	let sink = KafkaSink::new(&kf.broker, topic).unwrap();
+	let sink = KafkaSink::new(&kf.broker, &topic).unwrap();
 	sink.send_event(&make_envelope("x", OpType::Updated))
 		.await
 		.unwrap();
 
-	let consumer = make_consumer(&kf.broker, topic).await;
+	let consumer = make_consumer(&kf.broker, &topic).await;
 	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
 		.await
 		.unwrap()
@@ -138,10 +156,62 @@ async fn kafka_sink_envelope_format() {
 }
 
 #[tokio::test]
+async fn kafka_sink_compact_format_with_json_object_key() {
+	let kf = TestKafka::new().await;
+	let topic = unique_topic("compact_json_key");
+	let timestamp = chrono::DateTime::parse_from_rfc3339("2026-04-09T06:27:15.926912Z")
+		.unwrap()
+		.with_timezone(&chrono::Utc);
+
+	let sink = KafkaSink::with_auth_and_format(
+		&kf.broker,
+		&topic,
+		None,
+		KafkaSinkFormat {
+			key_format: KafkaKeyFormat::JsonObject,
+			key_field: "entityId".into(),
+			value_format: KafkaValueFormat::Compact,
+			created_change_type: "created".into(),
+		},
+	)
+	.unwrap();
+	sink.send_event(&make_envelope_at("row_1", OpType::Updated, timestamp))
+		.await
+		.unwrap();
+
+	let consumer = make_consumer(&kf.broker, &topic).await;
+	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
+		.await
+		.unwrap()
+		.unwrap()
+		.unwrap();
+
+	let key: serde_json::Value = serde_json::from_slice(msg.key().unwrap()).unwrap();
+	assert_eq!(key, serde_json::json!({"entityId": "row_1"}));
+
+	let value: serde_json::Value = serde_json::from_slice(msg.payload().unwrap()).unwrap();
+	assert_eq!(value["meta"]["dateTime"], "2026-04-09T06:27:15.926912Z");
+	assert_eq!(value["meta"]["changeType"], "updated");
+	assert_eq!(value["data"]["key"], "row_1");
+	assert_eq!(value["data"]["value"], "data_row_1");
+	assert!(value["meta"].get("op").is_none());
+	assert!(value["meta"].get("key").is_none());
+}
+
+#[tokio::test]
 async fn kafka_sink_test_connection() {
 	let kf = TestKafka::new().await;
-	let sink = KafkaSink::new(&kf.broker, "test_health").unwrap();
+	let uid = uuid::Uuid::new_v4().to_string().replace('-', "");
+	let topic = format!("test_health_{}", &uid[..8]);
+	let sink = KafkaSink::new(&kf.broker, &topic).unwrap();
 	sink.test_connection().await.unwrap();
+
+	let consumer = make_consumer(&kf.broker, &topic).await;
+	let result = tokio::time::timeout(Duration::from_secs(2), consumer.stream().next()).await;
+	assert!(
+		result.is_err(),
+		"test_connection should not publish a health-check message"
+	);
 }
 
 #[tokio::test]
@@ -188,12 +258,12 @@ async fn kafka_sink_many_events() {
 #[tokio::test]
 async fn kafka_factory_creates_working_sink() {
 	let kf = TestKafka::new().await;
-	let topic = "test_factory";
+	let topic = unique_topic("factory");
 
 	let factory = KafkaTargetFactory;
 	assert_eq!(factory.sink_type(), "kafka");
 
-	let config = serde_json::json!({"brokers": kf.broker, "topic": topic});
+	let config = serde_json::json!({"brokers": kf.broker, "topic": &topic});
 	let sink = factory.create("my-kafka", &config).await.unwrap();
 	assert!(sink.name().starts_with("kafka:"));
 
@@ -201,7 +271,7 @@ async fn kafka_factory_creates_working_sink() {
 		.await
 		.unwrap();
 
-	let consumer = make_consumer(&kf.broker, topic).await;
+	let consumer = make_consumer(&kf.broker, &topic).await;
 	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
 		.await
 		.expect("timeout")
@@ -210,6 +280,71 @@ async fn kafka_factory_creates_working_sink() {
 
 	let received: EventEnvelope = serde_json::from_slice(msg.payload().unwrap()).unwrap();
 	assert_eq!(received.meta.key, "fac_1");
+}
+
+#[tokio::test]
+async fn kafka_factory_supports_compact_wire_contract() {
+	let kf = TestKafka::new().await;
+	let topic = unique_topic("factory_compact");
+
+	let factory = KafkaTargetFactory;
+	let config = serde_json::json!({
+		"brokers": kf.broker,
+		"topic": &topic,
+		"key_format": "json_object",
+		"key_field": "entityId",
+		"value_format": "compact"
+	});
+	let sink = factory.create("my-kafka", &config).await.unwrap();
+	sink.send_event(&make_envelope("fac_2", OpType::Deleted))
+		.await
+		.unwrap();
+
+	let consumer = make_consumer(&kf.broker, &topic).await;
+	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
+		.await
+		.expect("timeout")
+		.expect("stream ended")
+		.expect("consume error");
+
+	let key: serde_json::Value = serde_json::from_slice(msg.key().unwrap()).unwrap();
+	assert_eq!(key["entityId"], "fac_2");
+
+	let value: serde_json::Value = serde_json::from_slice(msg.payload().unwrap()).unwrap();
+	assert_eq!(value["meta"]["changeType"], "deleted");
+	assert_eq!(value["data"]["key"], "fac_2");
+	assert!(value["meta"].get("origin_id").is_none());
+}
+
+#[tokio::test]
+async fn kafka_factory_can_map_created_events_to_updated() {
+	let kf = TestKafka::new().await;
+	let topic = unique_topic("factory_compact_created_as_updated");
+
+	let factory = KafkaTargetFactory;
+	let config = serde_json::json!({
+		"brokers": kf.broker,
+		"topic": &topic,
+		"key_format": "json_object",
+		"key_field": "entityId",
+		"value_format": "compact",
+		"created_change_type": "updated"
+	});
+	let sink = factory.create("my-kafka", &config).await.unwrap();
+	sink.send_event(&make_envelope("fac_3", OpType::Created))
+		.await
+		.unwrap();
+
+	let consumer = make_consumer(&kf.broker, &topic).await;
+	let msg = tokio::time::timeout(Duration::from_secs(10), consumer.stream().next())
+		.await
+		.expect("timeout")
+		.expect("stream ended")
+		.expect("consume error");
+
+	let value: serde_json::Value = serde_json::from_slice(msg.payload().unwrap()).unwrap();
+	assert_eq!(value["meta"]["changeType"], "updated");
+	assert_eq!(value["data"]["key"], "fac_3");
 }
 
 #[tokio::test]

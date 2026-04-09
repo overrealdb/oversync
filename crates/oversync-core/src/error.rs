@@ -18,8 +18,21 @@ pub enum OversyncError {
 	#[error("plugin: {0}")]
 	Plugin(String),
 
+	#[error("fail-safe: {deleted_count}/{previous_count} rows deleted (>{threshold_pct:.0}%)")]
+	FailSafe {
+		deleted_count: usize,
+		previous_count: usize,
+		threshold_pct: f64,
+	},
+
 	#[error("internal: {0}")]
 	Internal(String),
+}
+
+impl OversyncError {
+	pub fn is_fail_safe(&self) -> bool {
+		matches!(self, Self::FailSafe { .. })
+	}
 }
 
 impl From<serde_json::Error> for OversyncError {
@@ -44,6 +57,14 @@ mod tests {
 			(OversyncError::Config("bad".into()), "config: bad"),
 			(OversyncError::Migration("v1".into()), "migration: v1"),
 			(OversyncError::Plugin("missing".into()), "plugin: missing"),
+			(
+				OversyncError::FailSafe {
+					deleted_count: 8,
+					previous_count: 10,
+					threshold_pct: 30.0,
+				},
+				"fail-safe: 8/10 rows deleted (>30%)",
+			),
 			(OversyncError::Internal("oops".into()), "internal: oops"),
 		];
 		for (err, expected) in cases {
@@ -56,5 +77,16 @@ mod tests {
 		let bad_json = serde_json::from_str::<serde_json::Value>("not json");
 		let oversync_err: OversyncError = bad_json.unwrap_err().into();
 		assert!(matches!(oversync_err, OversyncError::Internal(_)));
+	}
+
+	#[test]
+	fn fail_safe_helper_detects_variant() {
+		let err = OversyncError::FailSafe {
+			deleted_count: 4,
+			previous_count: 5,
+			threshold_pct: 30.0,
+		};
+		assert!(err.is_fail_safe());
+		assert!(!OversyncError::Internal("oops".into()).is_fail_safe());
 	}
 }

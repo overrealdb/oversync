@@ -1,33 +1,40 @@
+use std::time::Duration;
+
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
-use testcontainers::ImageExt;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
 use tokio::sync::OnceCell;
 
-struct SharedPgContainer {
+use super::stack::{env_var, retry_async};
+
+struct SharedPgEndpoint {
 	url: String,
-	_container: testcontainers::ContainerAsync<Postgres>,
 }
 
-static SHARED_PG: OnceCell<SharedPgContainer> = OnceCell::const_new();
+static SHARED_PG: OnceCell<SharedPgEndpoint> = OnceCell::const_new();
 
-async fn shared_pg() -> &'static SharedPgContainer {
+async fn shared_pg() -> &'static SharedPgEndpoint {
 	SHARED_PG
 		.get_or_init(|| async {
-			let container = Postgres::default()
-				.with_tag("11-alpine")
-				.start()
-				.await
-				.expect("failed to start postgres container");
+			let url = env_var(
+				"OVERSYNC_TEST_POSTGRES_DSN",
+				"postgres://postgres:postgres@127.0.0.1:55432/postgres",
+			);
 
-			let host = container.get_host().await.expect("pg host");
-			let port = container.get_host_port_ipv4(5432).await.expect("pg port");
+			retry_async("postgres", 30, Duration::from_secs(1), || {
+				let url = url.clone();
+				async move {
+					let pool = PgPoolOptions::new()
+						.max_connections(1)
+						.connect(&url)
+						.await?;
+					sqlx::query("SELECT 1").execute(&pool).await?;
+					pool.close().await;
+					Ok::<_, sqlx::Error>(())
+				}
+			})
+			.await;
 
-			SharedPgContainer {
-				url: format!("postgres://postgres:postgres@{host}:{port}/postgres"),
-				_container: container,
-			}
+			SharedPgEndpoint { url }
 		})
 		.await
 }
@@ -44,7 +51,6 @@ impl TestPostgres {
 		let test_id = uuid::Uuid::new_v4().to_string().replace('-', "");
 		let schema = format!("test_{}", &test_id[..8]);
 
-		// Create schema using a one-off connection
 		let bootstrap = PgPool::connect(&shared.url)
 			.await
 			.expect("failed to connect for bootstrap");
@@ -54,7 +60,6 @@ impl TestPostgres {
 			.expect("failed to create schema");
 		bootstrap.close().await;
 
-		// Build pool with search_path set on every connection
 		let schema_clone = schema.clone();
 		let pool = PgPoolOptions::new()
 			.max_connections(2)

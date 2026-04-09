@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
 	match command {
 		Command::Serve => cmd_serve(&cli).await,
 		Command::Validate { file } => cmd_validate(&cli, file),
-		Command::Diff { file } => cmd_diff(&cli, file),
+		Command::Diff { file } => cmd_diff(&cli, file).await,
 		Command::Export => cmd_export(&cli),
 		Command::DryRun {
 			pipe,
@@ -123,7 +123,7 @@ async fn cmd_serve(cli: &Cli) -> anyhow::Result<()> {
 		engine_shutdown.shutdown().await;
 	});
 
-	let app = engine.api_router().await;
+	let app = engine.api_router().await?;
 	let listener = tokio::net::TcpListener::bind(&cli.bind).await?;
 	tracing::info!(bind = %cli.bind, "API server started");
 	axum::serve(listener, app).await?;
@@ -158,10 +158,10 @@ fn cmd_validate(cli: &Cli, file: Option<PathBuf>) -> anyhow::Result<()> {
 	Ok(())
 }
 
-fn cmd_diff(cli: &Cli, file: Option<PathBuf>) -> anyhow::Result<()> {
+async fn cmd_diff(cli: &Cli, file: Option<PathBuf>) -> anyhow::Result<()> {
 	let path = file.as_ref().unwrap_or(&cli.config);
 	let config = SyncConfig::from_file(path)?;
-	let pipes = config.effective_pipes();
+	let pipes = oversync::recipes::expand_runtime_pipes(config.effective_pipes()).await?;
 
 	println!("Config: {}", path.display());
 	println!("Pipes:  {}", pipes.len());

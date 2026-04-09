@@ -461,6 +461,7 @@ async fn db_delta_detects_delete() {
 	let diff = engine.compute_delta_from_db("src", "q", 2).await.unwrap();
 	assert_eq!(diff.deleted.len(), 1, "expected 1 deleted, got {:?}", diff);
 	assert_eq!(diff.deleted[0].row_key, "b");
+	assert_eq!(diff.deleted[0].row_data, serde_json::json!({"v": 2}));
 	assert!(diff.created.is_empty());
 }
 
@@ -541,6 +542,7 @@ async fn db_delta_mixed_operations() {
 		diff.deleted
 	);
 	assert_eq!(diff.deleted[0].row_key, "c");
+	assert_eq!(diff.deleted[0].row_data, serde_json::json!({"v": 3}));
 }
 
 #[tokio::test]

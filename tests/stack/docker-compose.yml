@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:11-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "55432:5432"
+
+  mysql:
+    image: mysql:8.0
+    command: ["mysqld", "--default-authentication-plugin=mysql_native_password"]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: test
+    ports:
+      - "53306:3306"
+
+  surrealdb:
+    image: surrealdb/surrealdb:v3
+    command: ["start", "--user", "root", "--pass", "root", "memory"]
+    ports:
+      - "58000:8000"
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.3.5
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp
+      - "1"
+      - --reserve-memory
+      - "0M"
+      - --node-id
+      - "0"
+      - --check=false
+      - --kafka-addr
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr
+      - internal://redpanda:9092,external://127.0.0.1:59092
+      - --pandaproxy-addr
+      - internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr
+      - internal://redpanda:8082,external://127.0.0.1:18082
+    ports:
+      - "59092:19092"
+      - "18082:18082"
+
+  trino:
+    image: trinodb/trino:latest
+    ports:
+      - "58080:8080"
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro

@@ -27,6 +27,7 @@ async fn start_mock(app: Router) -> String {
 async fn build_engine(state: &TestSurrealContainer, snap: &TestSurrealContainer) -> OversyncEngine {
 	let url = TestSurrealContainer::url().await;
 	OversyncEngine::builder(&url)
+		.credentials("root", "root")
 		.namespace(&state.ns)
 		.database(&state.db)
 		.snapshot_url(&url)

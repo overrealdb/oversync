@@ -1,6 +1,6 @@
 //! Arrow Flight SQL connector integration tests.
 //!
-//! All tests are #[ignore] — no Flight SQL-compatible testcontainers server available.
+//! All tests are #[ignore] — no Flight SQL-compatible test server is wired into the shared stack yet.
 //! Run manually with: cargo test --test flight_sql_connector_tests -- --ignored
 //! Requires a running Flight SQL server (DataFusion, Dremio, Doris).
 

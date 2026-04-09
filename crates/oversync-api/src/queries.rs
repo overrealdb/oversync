@@ -15,6 +15,7 @@ const SQL_CREATE_QUERY_WITH_SINKS: &str = mutations::CREATE_QUERY_WITH_SINKS;
 const SQL_UPDATE_QUERY_SQL: &str = query_config::UPDATE_QUERY;
 const SQL_UPDATE_QUERY_KEY: &str = query_config::UPDATE_KEY_COLUMN;
 const SQL_UPDATE_QUERY_SINKS: &str = query_config::UPDATE_SINKS;
+const SQL_UPDATE_QUERY_TRANSFORM: &str = query_config::UPDATE_TRANSFORM;
 const SQL_UPDATE_QUERY_ENABLED: &str = query_config::UPDATE_ENABLED;
 
 fn db_err(e: surrealdb::Error) -> Json<ErrorResponse> {
@@ -68,6 +69,10 @@ pub async fn list_queries(
 						.filter_map(|v| v.as_str().map(String::from))
 						.collect()
 				}),
+				transform: r
+					.get("transform")
+					.and_then(|v| v.as_str())
+					.map(String::from),
 				enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
 			})
 		})
@@ -110,6 +115,7 @@ pub async fn create_query(
 			.bind(("query", req.query))
 			.bind(("key_column", req.key_column))
 			.bind(("sinks", sv))
+			.bind(("transform", req.transform))
 			.await
 			.map_err(db_err)?;
 	} else {
@@ -118,6 +124,7 @@ pub async fn create_query(
 			.bind(("name", req.name.clone()))
 			.bind(("query", req.query))
 			.bind(("key_column", req.key_column))
+			.bind(("transform", req.transform))
 			.await
 			.map_err(db_err)?;
 	}
@@ -175,6 +182,15 @@ pub async fn update_query(
 			.bind(("source", source.clone()))
 			.bind(("name", name.clone()))
 			.bind(("sinks", sinks_val))
+			.await
+			.map_err(db_err)?;
+	}
+
+	if let Some(transform) = req.transform {
+		db.query(SQL_UPDATE_QUERY_TRANSFORM)
+			.bind(("source", source.clone()))
+			.bind(("name", name.clone()))
+			.bind(("transform", transform))
 			.await
 			.map_err(db_err)?;
 	}

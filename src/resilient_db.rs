@@ -134,7 +134,7 @@ impl ResilientDb {
 				tracing::warn!("ResilientDb: primary probe failed, recovering...");
 
 				// Strategy 1: fresh connection re-auth (avoids HTTP JWT deadlock)
-				match Self::reauth_fresh(
+				let recovered = match Self::reauth_fresh(
 					&primary, &url, &username, &password, &namespace, &database,
 				)
 				.await
@@ -146,38 +146,54 @@ impl ResilientDb {
 							tracing::info!(
 								"ResilientDb: primary recovered (fresh connection re-auth)"
 							);
-							continue;
+							true
+						} else {
+							false
 						}
 					}
 					Err(e) => {
 						tracing::warn!(error = %e, "ResilientDb: fresh connection re-auth failed");
+						false
 					}
+				};
+
+				if recovered {
+					if let Err(e) = Self::reauth_fresh(
+						&supervisor_clone,
+						&url,
+						&username,
+						&password,
+						&namespace,
+						&database,
+					)
+					.await
+					{
+						tracing::warn!(
+							error = %e,
+							"ResilientDb: failed to refresh supervisor after primary recovery"
+						);
+					}
+					continue;
 				}
 
-				// Strategy 2: try supervisor with fresh connection too
-				tracing::warn!("ResilientDb: trying supervisor with fresh connection");
-				match Self::reauth_fresh(
-					&primary, &url, &username, &password, &namespace, &database,
+				tracing::warn!("ResilientDb: refreshing supervisor session for future recoveries");
+				if let Err(e) = Self::reauth_fresh(
+					&supervisor_clone,
+					&url,
+					&username,
+					&password,
+					&namespace,
+					&database,
 				)
 				.await
 				{
-					Ok(()) => {
-						last_auth = std::time::Instant::now();
-						Self::ensure_probe(&primary).await;
-						if Self::probe_healthy(&primary).await {
-							tracing::info!(
-								"ResilientDb: primary recovered (supervisor fresh re-auth)"
-							);
-						} else {
-							tracing::error!(
-								"ResilientDb: primary still unhealthy after all recovery attempts"
-							);
-						}
-					}
-					Err(e) => {
-						tracing::error!(error = %e, "ResilientDb: all recovery attempts failed — SurrealDB may be down");
-					}
+					tracing::warn!(
+						error = %e,
+						"ResilientDb: failed to refresh supervisor session"
+					);
 				}
+
+				tracing::error!("ResilientDb: primary still unhealthy after recovery attempt");
 			}
 		})
 	}

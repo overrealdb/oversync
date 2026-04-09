@@ -31,6 +31,7 @@ pub mod lifecycle;
 pub mod metrics;
 pub mod pipe_status;
 pub mod rate_limit;
+pub mod recipes;
 pub mod registry;
 pub mod resilient_db;
 pub mod scheduler;

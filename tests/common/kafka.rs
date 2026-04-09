@@ -1,33 +1,41 @@
-use testcontainers::ContainerAsync;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::kafka::apache::{KAFKA_PORT, Kafka};
+use std::time::Duration;
+
+use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{BaseConsumer, Consumer};
 use tokio::sync::OnceCell;
 
-struct SharedKafkaContainer {
+use super::stack::{env_var, retry_async};
+
+struct SharedKafkaEndpoint {
 	broker: String,
-	_container: ContainerAsync<Kafka>,
 }
 
-static SHARED_KAFKA: OnceCell<SharedKafkaContainer> = OnceCell::const_new();
+static SHARED_KAFKA: OnceCell<SharedKafkaEndpoint> = OnceCell::const_new();
 
-async fn shared_kafka() -> &'static SharedKafkaContainer {
+async fn shared_kafka() -> &'static SharedKafkaEndpoint {
 	SHARED_KAFKA
 		.get_or_init(|| async {
-			let container = Kafka::default()
-				.start()
-				.await
-				.expect("failed to start Kafka container");
+			let broker = env_var("OVERSYNC_TEST_KAFKA_BROKER", "127.0.0.1:59092");
 
-			let host = container.get_host().await.expect("kafka host");
-			let port = container
-				.get_host_port_ipv4(KAFKA_PORT)
-				.await
-				.expect("kafka port");
+			retry_async("kafka", 30, Duration::from_secs(1), || {
+				let broker = broker.clone();
+				async move {
+					let consumer: BaseConsumer = ClientConfig::new()
+						.set("bootstrap.servers", &broker)
+						.set("group.id", "oversync-test-health")
+						.create()
+						.map_err(|e| e.to_string())?;
 
-			SharedKafkaContainer {
-				broker: format!("{host}:{port}"),
-				_container: container,
-			}
+					consumer
+						.fetch_metadata(None, Duration::from_secs(5))
+						.map_err(|e| e.to_string())?;
+
+					Ok::<_, String>(())
+				}
+			})
+			.await;
+
+			SharedKafkaEndpoint { broker }
 		})
 		.await
 }

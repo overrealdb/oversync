@@ -46,7 +46,34 @@ async fn engine_builder_applies_defaults() {
 	let def = engine.surreal_def();
 	assert_eq!(def.namespace, "oversync");
 	assert_eq!(def.database, "sync");
-	assert_eq!(def.username, "root");
+	assert!(def.username.is_empty());
+	assert!(def.password.is_empty());
+}
+
+#[tokio::test]
+async fn engine_builder_non_mem_requires_credentials() {
+	match OversyncEngine::builder("http://localhost:8000")
+		.build()
+		.await
+	{
+		Err(err) => assert!(err.to_string().contains("credentials are required")),
+		Ok(_) => panic!("missing non-mem credentials should fail"),
+	}
+}
+
+#[tokio::test]
+async fn engine_builder_non_mem_snapshot_requires_credentials() {
+	match OversyncEngine::builder("mem://")
+		.snapshot_url("http://localhost:8000")
+		.build()
+		.await
+	{
+		Err(err) => assert!(
+			err.to_string()
+				.contains("snapshot SurrealDB credentials are required")
+		),
+		Ok(_) => panic!("missing snapshot credentials should fail"),
+	}
 }
 
 #[tokio::test]

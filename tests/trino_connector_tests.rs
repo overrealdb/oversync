@@ -42,19 +42,22 @@ async fn fetch_all_system_table() {
 #[tokio::test]
 async fn fetch_all_memory_table() {
 	let trino = TestTrino::new().await;
+	let table = trino.table("items");
 
 	trino
-		.run_sql("CREATE TABLE memory.default.items (id VARCHAR, name VARCHAR, value INTEGER)")
+		.run_sql(&format!(
+			"CREATE TABLE {table} (id VARCHAR, name VARCHAR, value INTEGER)"
+		))
 		.await;
 	trino
-		.run_sql(
-			"INSERT INTO memory.default.items VALUES ('a', 'alpha', 1), ('b', 'beta', 2), ('c', 'gamma', 3)",
-		)
+		.run_sql(&format!(
+			"INSERT INTO {table} VALUES ('a', 'alpha', 1), ('b', 'beta', 2), ('c', 'gamma', 3)"
+		))
 		.await;
 
 	let conn = make_connector(&trino);
 	let rows = conn
-		.fetch_all("SELECT id, name, value FROM memory.default.items", "id")
+		.fetch_all(&format!("SELECT id, name, value FROM {table}"), "id")
 		.await
 		.unwrap();
 
@@ -67,14 +70,15 @@ async fn fetch_all_memory_table() {
 #[tokio::test]
 async fn fetch_all_empty_table() {
 	let trino = TestTrino::new().await;
+	let table = trino.table("empty_t");
 
 	trino
-		.run_sql("CREATE TABLE memory.default.empty_t (id VARCHAR)")
+		.run_sql(&format!("CREATE TABLE {table} (id VARCHAR)"))
 		.await;
 
 	let conn = make_connector(&trino);
 	let rows = conn
-		.fetch_all("SELECT id FROM memory.default.empty_t", "id")
+		.fetch_all(&format!("SELECT id FROM {table}"), "id")
 		.await
 		.unwrap();
 	assert!(rows.is_empty());

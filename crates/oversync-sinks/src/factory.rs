@@ -7,7 +7,9 @@ use oversync_core::traits::{Sink, TargetFactory};
 
 use crate::clickhouse_sink::ClickHouseSink;
 use crate::http_sink::HttpSink;
-use crate::kafka::KafkaSink;
+use crate::kafka::{
+	KafkaKeyFormat, KafkaSink, KafkaSinkFormat, KafkaValueFormat, default_key_field,
+};
 use crate::mcp_sink::{McpSink, McpSinkConfig};
 use crate::mysql_sink::MysqlSink;
 use crate::postgres_sink::PostgresSink;
@@ -64,10 +66,42 @@ impl TargetFactory for KafkaTargetFactory {
 					.map_err(|e| OversyncError::Config(format!("kafka auth: {e}")))
 			})
 			.transpose()?;
-		Ok(Box::new(KafkaSink::with_auth(
+		let key_format = config
+			.get("key_format")
+			.map(|v| {
+				serde_json::from_value::<KafkaKeyFormat>(v.clone())
+					.map_err(|e| OversyncError::Config(format!("kafka key_format: {e}")))
+			})
+			.transpose()?
+			.unwrap_or_default();
+		let key_field = config
+			.get("key_field")
+			.and_then(|v| v.as_str())
+			.map(str::to_owned)
+			.unwrap_or_else(default_key_field);
+		let value_format = config
+			.get("value_format")
+			.map(|v| {
+				serde_json::from_value::<KafkaValueFormat>(v.clone())
+					.map_err(|e| OversyncError::Config(format!("kafka value_format: {e}")))
+			})
+			.transpose()?
+			.unwrap_or_default();
+		let created_change_type = config
+			.get("created_change_type")
+			.and_then(|v| v.as_str())
+			.unwrap_or("created")
+			.to_string();
+		Ok(Box::new(KafkaSink::with_auth_and_format(
 			brokers,
 			topic,
 			auth.as_ref(),
+			KafkaSinkFormat {
+				key_format,
+				key_field,
+				value_format,
+				created_change_type,
+			},
 		)?))
 	}
 }

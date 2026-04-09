@@ -1,14 +1,16 @@
+use std::time::Duration;
+
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
-use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, ImageExt};
-use testcontainers_modules::surrealdb::SurrealDb;
 use tokio::sync::OnceCell;
+
+use super::stack::{env_var, retry_async};
 
 struct SharedContainer {
 	url: String,
-	_container: ContainerAsync<SurrealDb>,
+	username: String,
+	password: String,
 }
 
 static SHARED: OnceCell<SharedContainer> = OnceCell::const_new();
@@ -16,27 +18,31 @@ static SHARED: OnceCell<SharedContainer> = OnceCell::const_new();
 async fn shared_container() -> &'static SharedContainer {
 	SHARED
 		.get_or_init(|| async {
-			let surreal = SurrealDb::default();
+			let url = env_var("OVERSYNC_TEST_SURREAL_URL", "http://127.0.0.1:58000");
+			let username = env_var("OVERSYNC_TEST_SURREAL_USERNAME", "root");
+			let password = env_var("OVERSYNC_TEST_SURREAL_PASSWORD", "root");
 
-			let container = if let Ok(image) = std::env::var("TESTCONTAINERS_SURREAL_IMAGE") {
-				surreal.with_name(image).start().await
-			} else {
-				surreal.with_tag("v3").start().await
-			}
-			.expect("failed to start SurrealDB container");
-
-			let host = container
-				.get_host()
-				.await
-				.expect("failed to get container host");
-			let port = container
-				.get_host_port_ipv4(8000)
-				.await
-				.expect("failed to get container port");
+			retry_async("surrealdb", 30, Duration::from_secs(1), || {
+				let url = url.clone();
+				let username = username.clone();
+				let password = password.clone();
+				async move {
+					let client = surrealdb::engine::any::connect(&url)
+						.await
+						.map_err(|e| e.to_string())?;
+					client
+						.signin(Root { username, password })
+						.await
+						.map_err(|e| e.to_string())?;
+					Ok::<_, String>(())
+				}
+			})
+			.await;
 
 			SharedContainer {
-				url: format!("http://{host}:{port}"),
-				_container: container,
+				url,
+				username,
+				password,
 			}
 		})
 		.await
@@ -80,8 +86,8 @@ impl TestSurrealContainer {
 
 		client
 			.signin(Root {
-				username: "root".to_string(),
-				password: "root".to_string(),
+				username: shared.username.clone(),
+				password: shared.password.clone(),
 			})
 			.await
 			.expect("failed to signin");

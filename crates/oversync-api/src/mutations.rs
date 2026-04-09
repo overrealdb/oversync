@@ -26,11 +26,16 @@ const SQL_CREATE_PIPE: &str = mutations::CREATE_PIPE;
 const SQL_DELETE_PIPE_QUERIES: &str = mutations::DELETE_PIPE_QUERIES;
 const SQL_UPDATE_PIPE_ORIGIN_CONNECTOR: &str = mutations::UPDATE_PIPE_ORIGIN_CONNECTOR;
 const SQL_UPDATE_PIPE_ORIGIN_DSN: &str = mutations::UPDATE_PIPE_ORIGIN_DSN;
+const SQL_UPDATE_PIPE_ORIGIN_CREDENTIAL: &str = mutations::UPDATE_PIPE_ORIGIN_CREDENTIAL;
+const SQL_UPDATE_PIPE_TRINO_URL: &str = mutations::UPDATE_PIPE_TRINO_URL;
 const SQL_UPDATE_PIPE_ORIGIN_CONFIG: &str = mutations::UPDATE_PIPE_ORIGIN_CONFIG;
 const SQL_UPDATE_PIPE_TARGETS: &str = mutations::UPDATE_PIPE_TARGETS;
 const SQL_UPDATE_PIPE_SCHEDULE: &str = mutations::UPDATE_PIPE_SCHEDULE;
 const SQL_UPDATE_PIPE_DELTA: &str = mutations::UPDATE_PIPE_DELTA;
 const SQL_UPDATE_PIPE_RETRY: &str = mutations::UPDATE_PIPE_RETRY;
+const SQL_UPDATE_PIPE_FILTERS: &str = mutations::UPDATE_PIPE_FILTERS;
+const SQL_UPDATE_PIPE_TRANSFORMS: &str = mutations::UPDATE_PIPE_TRANSFORMS;
+const SQL_UPDATE_PIPE_LINKS: &str = mutations::UPDATE_PIPE_LINKS;
 const SQL_UPDATE_PIPE_ENABLED: &str = mutations::UPDATE_PIPE_ENABLED;
 
 #[utoipa::path(
@@ -321,11 +326,16 @@ pub async fn create_pipe(
 		.bind(("name", req.name.clone()))
 		.bind(("origin_connector", req.origin_connector))
 		.bind(("origin_dsn", req.origin_dsn))
+		.bind(("origin_credential", req.origin_credential))
+		.bind(("trino_url", req.trino_url))
 		.bind(("origin_config", origin_config))
 		.bind(("targets", req.targets))
 		.bind(("schedule", schedule))
 		.bind(("delta", delta))
 		.bind(("retry", retry))
+		.bind(("filters", req.filters))
+		.bind(("transforms", req.transforms))
+		.bind(("links", req.links))
 		.await
 		.map_err(db_err)?;
 
@@ -370,6 +380,22 @@ pub async fn update_pipe(
 			.map_err(db_err)?;
 	}
 
+	if let Some(credential) = req.origin_credential {
+		db.query(SQL_UPDATE_PIPE_ORIGIN_CREDENTIAL)
+			.bind(("name", name.clone()))
+			.bind(("v", credential))
+			.await
+			.map_err(db_err)?;
+	}
+
+	if let Some(trino_url) = req.trino_url {
+		db.query(SQL_UPDATE_PIPE_TRINO_URL)
+			.bind(("name", name.clone()))
+			.bind(("v", trino_url))
+			.await
+			.map_err(db_err)?;
+	}
+
 	if let Some(config) = req.origin_config {
 		db.query(SQL_UPDATE_PIPE_ORIGIN_CONFIG)
 			.bind(("name", name.clone()))
@@ -406,6 +432,30 @@ pub async fn update_pipe(
 		db.query(SQL_UPDATE_PIPE_RETRY)
 			.bind(("name", name.clone()))
 			.bind(("v", retry))
+			.await
+			.map_err(db_err)?;
+	}
+
+	if let Some(filters) = req.filters {
+		db.query(SQL_UPDATE_PIPE_FILTERS)
+			.bind(("name", name.clone()))
+			.bind(("v", filters))
+			.await
+			.map_err(db_err)?;
+	}
+
+	if let Some(transforms) = req.transforms {
+		db.query(SQL_UPDATE_PIPE_TRANSFORMS)
+			.bind(("name", name.clone()))
+			.bind(("v", transforms))
+			.await
+			.map_err(db_err)?;
+	}
+
+	if let Some(links) = req.links {
+		db.query(SQL_UPDATE_PIPE_LINKS)
+			.bind(("name", name.clone()))
+			.bind(("v", links))
 			.await
 			.map_err(db_err)?;
 	}
@@ -483,80 +533,96 @@ pub(crate) async fn reload_config(state: &ApiState) -> Result<(), Json<ErrorResp
 			})
 		})?;
 	}
-	refresh_read_cache(state).await;
+	refresh_read_cache(state).await.map_err(|e| {
+		Json(ErrorResponse {
+			error: format!("refresh cache: {e}"),
+		})
+	})?;
 	Ok(())
 }
 
-pub async fn refresh_read_cache(state: &ApiState) {
-	let Some(db) = &state.db_client else { return };
+pub async fn refresh_read_cache(
+	state: &ApiState,
+) -> Result<(), oversync_core::error::OversyncError> {
+	let Some(db) = &state.db_client else {
+		return Ok(());
+	};
 
 	const SQL_READ_SOURCES_CACHE: &str = oversync_queries::config::READ_SOURCES_CACHE;
 	const SQL_READ_SINKS_CACHE: &str = oversync_queries::config::READ_SINKS_CACHE;
 	const SQL_READ_PIPES_CACHE: &str = oversync_queries::config::READ_PIPES_CACHE;
 
-	if let Ok(mut resp) = db.query(SQL_READ_SOURCES_CACHE).await
-		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)
-	{
-		let configs: Vec<crate::state::SourceConfig> = rows
-			.iter()
-			.filter_map(|r| {
-				Some(crate::state::SourceConfig {
-					name: r.get("name")?.as_str()?.to_string(),
-					connector: r.get("connector")?.as_str()?.to_string(),
-					interval_secs: r
-						.get("interval_secs")
-						.and_then(|v| v.as_u64())
-						.unwrap_or(300),
-					queries: vec![],
-				})
+	let mut sources_resp = db.query(SQL_READ_SOURCES_CACHE).await.map_err(|e| {
+		oversync_core::error::OversyncError::SurrealDb(format!("refresh sources cache: {e}"))
+	})?;
+	let source_rows: Vec<serde_json::Value> = sources_resp.take(0).map_err(|e| {
+		oversync_core::error::OversyncError::SurrealDb(format!("refresh sources cache take: {e}"))
+	})?;
+	let source_configs: Vec<crate::state::SourceConfig> = source_rows
+		.iter()
+		.filter_map(|r| {
+			Some(crate::state::SourceConfig {
+				name: r.get("name")?.as_str()?.to_string(),
+				connector: r.get("connector")?.as_str()?.to_string(),
+				interval_secs: r
+					.get("interval_secs")
+					.and_then(|v| v.as_u64())
+					.unwrap_or(300),
+				queries: vec![],
 			})
-			.collect();
-		*state.sources.write().await = configs;
-	}
+		})
+		.collect();
+	*state.sources.write().await = source_configs;
 
-	if let Ok(mut resp) = db.query(SQL_READ_SINKS_CACHE).await
-		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)
-	{
-		let configs: Vec<crate::state::SinkConfig> = rows
-			.iter()
-			.filter_map(|r| {
-				Some(crate::state::SinkConfig {
-					name: r.get("name")?.as_str()?.to_string(),
-					sink_type: r.get("sink_type")?.as_str()?.to_string(),
-					config: r.get("config").cloned(),
-				})
+	let mut sinks_resp = db.query(SQL_READ_SINKS_CACHE).await.map_err(|e| {
+		oversync_core::error::OversyncError::SurrealDb(format!("refresh sinks cache: {e}"))
+	})?;
+	let sink_rows: Vec<serde_json::Value> = sinks_resp.take(0).map_err(|e| {
+		oversync_core::error::OversyncError::SurrealDb(format!("refresh sinks cache take: {e}"))
+	})?;
+	let sink_configs: Vec<crate::state::SinkConfig> = sink_rows
+		.iter()
+		.filter_map(|r| {
+			Some(crate::state::SinkConfig {
+				name: r.get("name")?.as_str()?.to_string(),
+				sink_type: r.get("sink_type")?.as_str()?.to_string(),
+				config: r.get("config").cloned(),
 			})
-			.collect();
-		*state.sinks.write().await = configs;
-	}
+		})
+		.collect();
+	*state.sinks.write().await = sink_configs;
 
-	if let Ok(mut resp) = db.query(SQL_READ_PIPES_CACHE).await
-		&& let Ok(rows) = resp.take::<Vec<serde_json::Value>>(0)
-	{
-		let configs: Vec<crate::state::PipeConfigCache> = rows
-			.iter()
-			.filter_map(|r| {
-				Some(crate::state::PipeConfigCache {
-					name: r.get("name")?.as_str()?.to_string(),
-					origin_connector: r.get("origin_connector")?.as_str()?.to_string(),
-					origin_dsn: r.get("origin_dsn")?.as_str()?.to_string(),
-					targets: r
-						.get("targets")
-						.and_then(|v| v.as_array())
-						.map(|arr| {
-							arr.iter()
-								.filter_map(|v| v.as_str().map(String::from))
-								.collect()
-						})
-						.unwrap_or_default(),
-					interval_secs: r
-						.get("interval_secs")
-						.and_then(|v| v.as_u64())
-						.unwrap_or(300),
-					enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
-				})
+	let mut pipes_resp = db.query(SQL_READ_PIPES_CACHE).await.map_err(|e| {
+		oversync_core::error::OversyncError::SurrealDb(format!("refresh pipes cache: {e}"))
+	})?;
+	let pipe_rows: Vec<serde_json::Value> = pipes_resp.take(0).map_err(|e| {
+		oversync_core::error::OversyncError::SurrealDb(format!("refresh pipes cache take: {e}"))
+	})?;
+	let pipe_configs: Vec<crate::state::PipeConfigCache> = pipe_rows
+		.iter()
+		.filter_map(|r| {
+			Some(crate::state::PipeConfigCache {
+				name: r.get("name")?.as_str()?.to_string(),
+				origin_connector: r.get("origin_connector")?.as_str()?.to_string(),
+				origin_dsn: r.get("origin_dsn")?.as_str()?.to_string(),
+				targets: r
+					.get("targets")
+					.and_then(|v| v.as_array())
+					.map(|arr| {
+						arr.iter()
+							.filter_map(|v| v.as_str().map(String::from))
+							.collect()
+					})
+					.unwrap_or_default(),
+				interval_secs: r
+					.get("interval_secs")
+					.and_then(|v| v.as_u64())
+					.unwrap_or(300),
+				enabled: r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
 			})
-			.collect();
-		*state.pipes.write().await = configs;
-	}
+		})
+		.collect();
+	*state.pipes.write().await = pipe_configs;
+
+	Ok(())
 }

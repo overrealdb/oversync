@@ -9,6 +9,8 @@ use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
 use oversync_core::traits::OriginConnector;
 
+const SYNTHETIC_KEY_COLUMN: &str = "__oversync_key";
+
 pub struct PostgresConnector {
 	pool: PgPool,
 	source_name: String,
@@ -51,15 +53,16 @@ impl OriginConnector for PostgresConnector {
 		let mut result = Vec::with_capacity(rows.len());
 
 		for row in &rows {
-			let key: String = row
-				.try_get(key_column)
-				.map_err(|e| OversyncError::Connector(format!("key column '{key_column}': {e}")))?;
+			let key = decode_pg_key(row, key_column)?;
 
 			let columns = row.columns();
 			let mut data = serde_json::Map::with_capacity(columns.len());
 
 			for col in columns {
 				let name = col.name();
+				if name == SYNTHETIC_KEY_COLUMN {
+					continue;
+				}
 				let raw = row.try_get_raw(name).ok();
 				let val = match raw {
 					Some(ref r) if !r.is_null() => {
@@ -96,14 +99,15 @@ impl OriginConnector for PostgresConnector {
 			.await
 			.map_err(|e| OversyncError::Connector(format!("fetch_into stream: {e}")))?
 		{
-			let key: String = row
-				.try_get(key_column)
-				.map_err(|e| OversyncError::Connector(format!("key column '{key_column}': {e}")))?;
+			let key = decode_pg_key(&row, key_column)?;
 
 			let columns = row.columns();
 			let mut data = serde_json::Map::with_capacity(columns.len());
 			for col in columns {
 				let name = col.name();
+				if name == SYNTHETIC_KEY_COLUMN {
+					continue;
+				}
 				let raw = row.try_get_raw(name).ok();
 				let val = match raw {
 					Some(ref r) if !r.is_null() => {
@@ -146,6 +150,30 @@ impl OriginConnector for PostgresConnector {
 			.await
 			.map_err(|e| OversyncError::Connector(format!("test_connection: {e}")))?;
 		Ok(())
+	}
+}
+
+fn decode_pg_key(row: &sqlx::postgres::PgRow, key_column: &str) -> Result<String, OversyncError> {
+	let key_col = row
+		.columns()
+		.iter()
+		.find(|col| col.name() == key_column)
+		.ok_or_else(|| OversyncError::Connector(format!("key column '{key_column}' not found")))?;
+	let raw = row
+		.try_get_raw(key_column)
+		.map_err(|e| OversyncError::Connector(format!("key column '{key_column}': {e}")))?;
+	if raw.is_null() {
+		return Err(OversyncError::Connector(format!(
+			"key column '{key_column}' is NULL"
+		)));
+	}
+	let value = decode_pg_value(row, key_column, key_col.type_info().name());
+	match value {
+		serde_json::Value::String(s) => Ok(s),
+		serde_json::Value::Null => Err(OversyncError::Connector(format!(
+			"key column '{key_column}' is NULL"
+		))),
+		other => Ok(other.to_string()),
 	}
 }
 

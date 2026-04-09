@@ -3,6 +3,7 @@ mod common;
 use oversync::config::{LinkDef, LinkStrategy};
 use oversync::cycle::{CycleConfig, CycleRunner};
 use oversync_connectors::PostgresConnector;
+use oversync_core::error::OversyncError;
 use oversync_core::model::OpType;
 use oversync_core::traits::Sink;
 use oversync_delta::DeltaEngine;
@@ -158,9 +159,15 @@ async fn e2e_fail_safe_aborts_on_mass_deletion() {
 	}
 
 	// Cycle 2: should fail with fail-safe
-	let result = runner.run(&config).await;
-	assert!(result.is_err());
-	assert!(result.unwrap_err().to_string().contains("fail-safe"));
+	let err = runner.run(&config).await.unwrap_err();
+	assert!(matches!(
+		err,
+		OversyncError::FailSafe {
+			deleted_count: 8,
+			previous_count: 10,
+			threshold_pct: 30.0
+		}
+	));
 
 	// Snapshot should still have all 10 rows (untouched)
 	let keys = engine.read_snapshot_keys("pg-test", "items").await.unwrap();

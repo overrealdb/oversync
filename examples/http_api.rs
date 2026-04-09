@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	engine.start(config).await?;
 
-	let app = engine.api_router().await;
+	let app = engine.api_router().await?;
 	let listener = tokio::net::TcpListener::bind("0.0.0.0:4200").await?;
 	println!("API server at http://localhost:4200");
 	println!("Try: curl http://localhost:4200/health");

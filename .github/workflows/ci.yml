@@ -24,6 +24,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: davidB/rust-cargo-make@v1
       - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Start shared test stack
+        run: docker compose -f tests/stack/docker-compose.yml up -d
+      - name: Wait for shared test stack
+        run: bash tests/stack/wait.sh
       - run: cargo make ci
       - name: CLI smoke test
         run: cargo run --features cli -- --help
@@ -33,6 +37,9 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: false
+      - name: Stop shared test stack
+        if: always()
+        run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
 
   ui:
     runs-on: ubuntu-latest
@@ -61,4 +68,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: davidB/rust-cargo-make@v1
+      - name: Start shared test stack
+        run: docker compose -f tests/stack/docker-compose.yml up -d
+      - name: Wait for shared test stack
+        run: bash tests/stack/wait.sh
       - run: cargo make stress
+      - name: Stop shared test stack
+        if: always()
+        run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans

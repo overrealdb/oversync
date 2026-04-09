@@ -86,8 +86,8 @@ impl OversyncEngine {
 			url: surrealdb_url.to_string(),
 			namespace: "oversync".into(),
 			database: "sync".into(),
-			username: "root".into(),
-			password: "root".into(),
+			username: String::new(),
+			password: String::new(),
 			snapshot_url: None,
 			snapshot_ns: None,
 			snapshot_db: None,
@@ -213,7 +213,7 @@ impl OversyncEngine {
 	/// Build an axum `Router` with the full oversync REST API.
 	/// Requires the `api` feature. Mount into your own axum app or serve standalone.
 	#[cfg(feature = "api")]
-	pub async fn api_router(&self) -> axum::Router {
+	pub async fn api_router(&self) -> Result<axum::Router, OversyncError> {
 		use std::collections::HashMap;
 		use tokio::sync::RwLock;
 
@@ -233,7 +233,7 @@ impl OversyncEngine {
 		});
 
 		// Load initial cache from DB so history/sources/sinks are populated
-		oversync_api::mutations::refresh_read_cache(&api_state).await;
+		oversync_api::mutations::refresh_read_cache(&api_state).await?;
 
 		// Install prometheus metrics exporter
 		let prom_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
@@ -245,16 +245,10 @@ impl OversyncEngine {
 		let registry = crate::engine::default_registry();
 		let dry_run_state = Arc::new(DryRunState { registry });
 
-		let cred_key = match std::env::var("OVERSYNC_CREDENTIAL_KEY") {
-			Ok(key) => key,
-			Err(_) => {
-				tracing::warn!(
-					"OVERSYNC_CREDENTIAL_KEY not set, using insecure dev key — do NOT use in production"
-				);
-				"oversync-dev-key".into()
-			}
-		};
-		let credential_store = crate::credential::AesGcmStore::from_passphrase(&cred_key);
+		let credential_store = credential_store_from_passphrase(
+			std::env::var("OVERSYNC_CREDENTIAL_KEY").ok().as_deref(),
+			"credential API routes",
+		)?;
 		let cred_state = Arc::new(CredentialState {
 			store: credential_store,
 			db: self.state_client.clone(),
@@ -286,7 +280,7 @@ impl OversyncEngine {
 			));
 
 		// Public route — no auth
-		base.merge(engine_protected).route(
+		Ok(base.merge(engine_protected).route(
 			"/metrics",
 			axum::routing::get(move || async move {
 				match prom_handle {
@@ -300,8 +294,22 @@ impl OversyncEngine {
 						.unwrap_or_default(),
 				}
 			}),
-		)
+		))
 	}
+}
+
+#[cfg(any(feature = "api", test))]
+fn credential_store_from_passphrase(
+	passphrase: Option<&str>,
+	context: &str,
+) -> Result<crate::credential::AesGcmStore, OversyncError> {
+	let passphrase = passphrase.ok_or_else(|| {
+		OversyncError::Config(format!(
+			"OVERSYNC_CREDENTIAL_KEY env var is required for {context}. \
+			 Set it to a strong passphrase (32+ chars)."
+		))
+	})?;
+	Ok(crate::credential::AesGcmStore::from_passphrase(passphrase))
 }
 
 #[cfg(feature = "api")]
@@ -485,7 +493,7 @@ impl OversyncEngineBuilder {
 		self
 	}
 
-	/// SurrealDB credentials (default: `"root"` / `"root"`).
+	/// SurrealDB credentials. Required for non-`mem://` URLs.
 	pub fn credentials(mut self, username: &str, password: &str) -> Self {
 		self.username = username.to_string();
 		self.password = password.to_string();
@@ -551,6 +559,10 @@ impl OversyncEngineBuilder {
 		let health_cancel = tokio_util::sync::CancellationToken::new();
 		let is_mem = self.url.starts_with("mem://");
 
+		if !is_mem {
+			require_surreal_credentials(&self.url, &self.username, &self.password, "state")?;
+		}
+
 		let state_client: Arc<Surreal<Any>> = if is_mem {
 			let db = surrealdb::engine::any::connect(&self.url)
 				.await
@@ -591,15 +603,29 @@ impl OversyncEngineBuilder {
 
 		let snapshot_client = match &self.snapshot_url {
 			Some(url) => {
+				let snapshot_credentials = if !url.starts_with("mem://") {
+					let snap_user = self
+						.snapshot_username
+						.clone()
+						.unwrap_or_else(|| self.username.clone());
+					let snap_pass = self
+						.snapshot_password
+						.clone()
+						.unwrap_or_else(|| self.password.clone());
+					require_surreal_credentials(url, &snap_user, &snap_pass, "snapshot")?;
+					Some((snap_user, snap_pass))
+				} else {
+					None
+				};
+
 				let snap = surrealdb::engine::any::connect(url)
 					.await
 					.map_err(|e| OversyncError::SurrealDb(format!("snapshot connect: {e}")))?;
-				if !url.starts_with("mem://") {
-					let snap_user = self.snapshot_username.as_deref().unwrap_or(&self.username);
-					let snap_pass = self.snapshot_password.as_deref().unwrap_or(&self.password);
+
+				if let Some((snap_user, snap_pass)) = snapshot_credentials {
 					snap.signin(surrealdb::opt::auth::Root {
-						username: snap_user.to_string(),
-						password: snap_pass.to_string(),
+						username: snap_user,
+						password: snap_pass,
 					})
 					.await
 					.map_err(|e| OversyncError::SurrealDb(format!("snapshot signin: {e}")))?;
@@ -658,19 +684,25 @@ impl OversyncEngineBuilder {
 
 		let lifecycle = Arc::new(LifecycleManager::new(delta_engine, registry));
 
+		let snapshot = self.snapshot_url.map(|url| crate::config::SnapshotDbDef {
+			url,
+			username: self
+				.snapshot_username
+				.unwrap_or_else(|| self.username.clone()),
+			password: self
+				.snapshot_password
+				.unwrap_or_else(|| self.password.clone()),
+			namespace: self.snapshot_ns.unwrap_or_else(|| self.namespace.clone()),
+			database: self.snapshot_db.unwrap_or_else(|| self.database.clone()),
+		});
+
 		let surreal_def = SurrealDbDef {
 			url: self.url,
 			username: self.username,
 			password: self.password,
 			namespace: self.namespace,
 			database: self.database,
-			snapshot: self.snapshot_url.map(|url| crate::config::SnapshotDbDef {
-				url,
-				username: self.snapshot_username.unwrap_or_else(|| "root".into()),
-				password: self.snapshot_password.unwrap_or_else(|| "root".into()),
-				namespace: self.snapshot_ns.unwrap_or_else(|| "oversync".into()),
-				database: self.snapshot_db.unwrap_or_else(|| "sync".into()),
-			}),
+			snapshot,
 		};
 
 		Ok(OversyncEngine {
@@ -681,6 +713,21 @@ impl OversyncEngineBuilder {
 			api_key: self.api_key,
 		})
 	}
+}
+
+fn require_surreal_credentials(
+	url: &str,
+	username: &str,
+	password: &str,
+	label: &str,
+) -> Result<(), OversyncError> {
+	if !url.starts_with("mem://") && (username.is_empty() || password.is_empty()) {
+		return Err(OversyncError::Config(format!(
+			"{label} SurrealDB credentials are required for non-mem URLs; set both username and password explicitly"
+		)));
+	}
+
+	Ok(())
 }
 
 pub(crate) fn default_registry() -> PluginRegistry {
@@ -713,7 +760,7 @@ pub(crate) async fn apply_schema(
 	db_name: &str,
 ) -> Result<(), OversyncError> {
 	let surql_dir = resolve_surql_dir()?;
-	let mut manifest = overshift::Manifest::load(&surql_dir)
+	let mut manifest = overshift::Manifest::load(surql_dir.path())
 		.map_err(|e| OversyncError::Migration(format!("load manifest: {e}")))?;
 	manifest.meta.ns = ns.to_string();
 	manifest.meta.db = db_name.to_string();
@@ -733,17 +780,23 @@ pub(crate) async fn apply_schema(
 }
 
 #[cfg(feature = "schema")]
-fn resolve_surql_dir() -> Result<String, OversyncError> {
+fn resolve_surql_dir() -> Result<ResolvedSurqlDir, OversyncError> {
 	if let Ok(dir) = std::env::var("OVERSYNC_SURQL_DIR") {
-		return Ok(dir);
+		return Ok(ResolvedSurqlDir::persistent(dir.into()));
 	}
 
-	materialize_embedded_surql().map(|path| path.to_string_lossy().into_owned())
+	materialize_embedded_surql()
 }
 
 #[cfg(feature = "schema")]
-fn materialize_embedded_surql() -> Result<std::path::PathBuf, OversyncError> {
-	let root = std::env::temp_dir().join(format!("oversync-surql-{}", env!("CARGO_PKG_VERSION")));
+fn materialize_embedded_surql() -> Result<ResolvedSurqlDir, OversyncError> {
+	let root = create_embedded_surql_root()?;
+	std::fs::create_dir_all(&root).map_err(|e| {
+		OversyncError::Migration(format!(
+			"prepare embedded surql dir {}: {e}",
+			root.display()
+		))
+	})?;
 
 	for (rel_path, contents) in crate::embedded_surql::FILES {
 		let path = root.join(rel_path);
@@ -760,7 +813,66 @@ fn materialize_embedded_surql() -> Result<std::path::PathBuf, OversyncError> {
 		})?;
 	}
 
-	Ok(root)
+	Ok(ResolvedSurqlDir::temporary(root))
+}
+
+#[cfg(feature = "schema")]
+fn create_embedded_surql_root() -> Result<std::path::PathBuf, OversyncError> {
+	let base = std::env::temp_dir();
+	for attempt in 0..8 {
+		let nonce = std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.map_err(|e| OversyncError::Migration(format!("clock error: {e}")))?
+			.as_nanos();
+		let candidate = base.join(format!(
+			"oversync-surql-{}-{}-{nonce}-{attempt}",
+			env!("CARGO_PKG_VERSION"),
+			std::process::id()
+		));
+		if !candidate.exists() {
+			return Ok(candidate);
+		}
+	}
+
+	Err(OversyncError::Migration(
+		"failed to allocate embedded surql temp dir".into(),
+	))
+}
+
+#[cfg(feature = "schema")]
+struct ResolvedSurqlDir {
+	path: std::path::PathBuf,
+	cleanup_root: Option<std::path::PathBuf>,
+}
+
+#[cfg(feature = "schema")]
+impl ResolvedSurqlDir {
+	fn persistent(path: std::path::PathBuf) -> Self {
+		Self {
+			path,
+			cleanup_root: None,
+		}
+	}
+
+	fn temporary(path: std::path::PathBuf) -> Self {
+		Self {
+			cleanup_root: Some(path.clone()),
+			path,
+		}
+	}
+
+	fn path(&self) -> &Path {
+		&self.path
+	}
+}
+
+#[cfg(feature = "schema")]
+impl Drop for ResolvedSurqlDir {
+	fn drop(&mut self) {
+		if let Some(path) = self.cleanup_root.take() {
+			let _ = std::fs::remove_dir_all(path);
+		}
+	}
 }
 
 #[cfg(feature = "api")]
@@ -791,5 +903,57 @@ impl oversync_api::state::LifecycleControl for LifecycleAdapter {
 
 	async fn is_paused(&self) -> bool {
 		self.lifecycle.is_paused().await
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::credential_store_from_passphrase;
+
+	#[test]
+	fn credential_store_requires_passphrase() {
+		match credential_store_from_passphrase(None, "credential API routes") {
+			Err(err) => assert!(err.to_string().contains("OVERSYNC_CREDENTIAL_KEY")),
+			Ok(_) => panic!("missing passphrase should fail"),
+		}
+	}
+
+	#[test]
+	fn credential_store_accepts_passphrase() {
+		assert!(
+			credential_store_from_passphrase(Some("test-passphrase"), "credential API routes")
+				.is_ok()
+		);
+	}
+
+	#[cfg(feature = "schema")]
+	#[test]
+	fn materialized_embedded_surql_dir_is_cleaned_on_drop() {
+		let dir = super::materialize_embedded_surql().expect("materialize embedded surql");
+		let root = dir.path().to_path_buf();
+		assert!(root.exists(), "embedded surql dir should exist");
+		assert!(
+			root.join("manifest.toml").exists(),
+			"embedded surql manifest should be present"
+		);
+		drop(dir);
+		assert!(
+			!root.exists(),
+			"embedded surql temp dir should be removed after use"
+		);
+	}
+
+	#[cfg(feature = "schema")]
+	#[test]
+	fn persistent_surql_dir_is_not_cleaned_on_drop() {
+		let root = std::env::temp_dir().join(format!(
+			"oversync-persistent-surql-test-{}",
+			std::process::id()
+		));
+		std::fs::create_dir_all(&root).expect("create persistent surql test dir");
+		let dir = super::ResolvedSurqlDir::persistent(root.clone());
+		drop(dir);
+		assert!(root.exists(), "explicit surql dir should not be removed");
+		std::fs::remove_dir_all(&root).expect("cleanup persistent surql test dir");
 	}
 }

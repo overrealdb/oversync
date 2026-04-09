@@ -17,6 +17,18 @@ use crate::config::{MissedTickPolicy, PipeConfig, SourceDef};
 use crate::cycle::{CycleConfig, CycleRunner};
 use crate::registry::PluginRegistry;
 
+fn lock_shutdown_tx(
+	shutdown_tx: &std::sync::Mutex<Option<watch::Sender<bool>>>,
+) -> std::sync::MutexGuard<'_, Option<watch::Sender<bool>>> {
+	match shutdown_tx.lock() {
+		Ok(guard) => guard,
+		Err(poisoned) => {
+			warn!("embedded shutdown mutex poisoned; recovering state");
+			poisoned.into_inner()
+		}
+	}
+}
+
 fn build_connector_config(pipe: &PipeConfig) -> serde_json::Value {
 	let mut map = match &pipe.origin.config {
 		serde_json::Value::Object(m) => m.clone(),
@@ -96,27 +108,27 @@ impl EmbeddedSync {
 		query_id: &str,
 		dsn_override: Option<&str>,
 	) -> Result<DeltaResult, OversyncError> {
-		let (mut pipe, query) = {
+		let mut pipe = {
 			let pipes = self.pipes.read().await;
-			let pipe = pipes
+			pipes
 				.iter()
 				.find(|p| p.name == pipe_name)
 				.ok_or_else(|| OversyncError::Config(format!("unknown pipe '{pipe_name}'")))?
-				.clone();
-			let query = pipe
-				.queries
-				.iter()
-				.find(|q| q.id == query_id)
-				.ok_or_else(|| {
-					OversyncError::Config(format!("pipe '{pipe_name}': unknown query '{query_id}'"))
-				})?
-				.clone();
-			(pipe, query)
+				.clone()
 		};
 
 		if let Some(dsn) = dsn_override {
 			pipe.origin.dsn = dsn.to_string();
 		}
+		pipe = crate::recipes::expand_runtime_pipe(pipe).await?;
+		let query = pipe
+			.queries
+			.iter()
+			.find(|q| q.id == query_id)
+			.ok_or_else(|| {
+				OversyncError::Config(format!("pipe '{pipe_name}': unknown query '{query_id}'"))
+			})?
+			.clone();
 
 		let (eff_connector, eff_config) = if !pipe.origin.needs_trino_bridge() {
 			(pipe.origin.connector.clone(), build_connector_config(&pipe))
@@ -174,7 +186,7 @@ impl EmbeddedSync {
 	/// Start scheduled polling for all pipes. Non-blocking — spawns background tasks.
 	pub async fn start(&self) -> Result<(), OversyncError> {
 		{
-			let guard = self.shutdown_tx.lock().unwrap();
+			let guard = lock_shutdown_tx(&self.shutdown_tx);
 			if guard.is_some() {
 				return Err(OversyncError::Internal("already running".into()));
 			}
@@ -182,7 +194,7 @@ impl EmbeddedSync {
 
 		let (shutdown_tx, shutdown_rx) = watch::channel(false);
 		let engine = Arc::clone(&self.delta_engine);
-		let pipes = self.pipes.read().await.clone();
+		let pipes = crate::recipes::expand_runtime_pipes(self.pipes.read().await.clone()).await?;
 		let sinks = self.sinks.clone();
 		let transform_hooks = self.transform_hooks.clone();
 		let registry = self.registry.clone();
@@ -191,13 +203,13 @@ impl EmbeddedSync {
 			run_all_pipes(engine, registry, pipes, sinks, transform_hooks, shutdown_rx).await;
 		});
 
-		*self.shutdown_tx.lock().unwrap() = Some(shutdown_tx);
+		*lock_shutdown_tx(&self.shutdown_tx) = Some(shutdown_tx);
 		*self.handle.lock().await = Some(handle);
 		Ok(())
 	}
 
 	pub fn shutdown(&self) {
-		if let Some(tx) = self.shutdown_tx.lock().unwrap().take() {
+		if let Some(tx) = lock_shutdown_tx(&self.shutdown_tx).take() {
 			let _ = tx.send(true);
 		}
 	}
@@ -672,5 +684,25 @@ async fn run_embedded_cycle(
 				}
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::lock_shutdown_tx;
+	use tokio::sync::watch;
+
+	#[test]
+	fn lock_shutdown_tx_recovers_from_poisoned_mutex() {
+		let (tx, _rx) = watch::channel(false);
+		let mutex = std::sync::Mutex::new(Some(tx));
+
+		let _ = std::panic::catch_unwind(|| {
+			let _guard = mutex.lock().unwrap();
+			panic!("poison shutdown mutex");
+		});
+
+		let guard = lock_shutdown_tx(&mutex);
+		assert!(guard.is_some());
 	}
 }

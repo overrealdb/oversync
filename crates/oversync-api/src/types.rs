@@ -112,6 +112,8 @@ pub struct CreateQueryRequest {
 	pub key_column: String,
 	#[serde(default)]
 	pub sinks: Option<Vec<String>>,
+	#[serde(default)]
+	pub transform: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -119,6 +121,7 @@ pub struct UpdateQueryRequest {
 	pub query: Option<String>,
 	pub key_column: Option<String>,
 	pub sinks: Option<Vec<String>>,
+	pub transform: Option<String>,
 	pub enabled: Option<bool>,
 }
 
@@ -133,6 +136,8 @@ pub struct QueryDetail {
 	pub query: String,
 	pub key_column: String,
 	pub sinks: Option<Vec<String>>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub transform: Option<String>,
 	pub enabled: bool,
 }
 
@@ -176,6 +181,10 @@ pub struct CreatePipeRequest {
 	pub origin_connector: String,
 	pub origin_dsn: String,
 	#[serde(default)]
+	pub origin_credential: Option<String>,
+	#[serde(default)]
+	pub trino_url: Option<String>,
+	#[serde(default)]
 	pub origin_config: serde_json::Value,
 	#[serde(default)]
 	pub targets: Vec<String>,
@@ -185,17 +194,28 @@ pub struct CreatePipeRequest {
 	pub delta: serde_json::Value,
 	#[serde(default)]
 	pub retry: serde_json::Value,
+	#[serde(default)]
+	pub filters: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub transforms: Vec<serde_json::Value>,
+	#[serde(default)]
+	pub links: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdatePipeRequest {
 	pub origin_connector: Option<String>,
 	pub origin_dsn: Option<String>,
+	pub origin_credential: Option<String>,
+	pub trino_url: Option<String>,
 	pub origin_config: Option<serde_json::Value>,
 	pub targets: Option<Vec<String>>,
 	pub schedule: Option<serde_json::Value>,
 	pub delta: Option<serde_json::Value>,
 	pub retry: Option<serde_json::Value>,
+	pub filters: Option<Vec<serde_json::Value>>,
+	pub transforms: Option<Vec<serde_json::Value>>,
+	pub links: Option<Vec<serde_json::Value>>,
 	pub enabled: Option<bool>,
 }
 

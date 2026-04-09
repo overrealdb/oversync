@@ -1,6 +1,6 @@
 mod common;
 
-use oversync::config::{QueryDef, SourceDef, SurrealDbDef, SyncConfig};
+use oversync::config::{QueryDef, SinkDef, SourceDef, SurrealDbDef, SyncConfig};
 use oversync::registry::PluginRegistry;
 use oversync::scheduler::Scheduler;
 use oversync_connectors::PostgresOriginFactory;
@@ -15,6 +15,14 @@ fn test_registry() -> PluginRegistry {
 	r.register_source(Box::new(PostgresOriginFactory));
 	r.register_sink(Box::new(StdoutTargetFactory));
 	r
+}
+
+fn stdout_sink() -> SinkDef {
+	SinkDef {
+		name: "stdout".into(),
+		sink_type: "stdout".into(),
+		config: serde_json::json!({}),
+	}
 }
 
 fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
@@ -46,7 +54,7 @@ fn make_config(pg: &TestPostgres, interval_secs: u64) -> SyncConfig {
 				transform: None,
 			}],
 		}],
-		sinks: vec![],
+		sinks: vec![stdout_sink()],
 		pipes: vec![],
 	}
 }
@@ -160,7 +168,7 @@ async fn scheduler_handles_connector_error() {
 				transform: None,
 			}],
 		}],
-		sinks: vec![],
+		sinks: vec![stdout_sink()],
 		pipes: vec![],
 	};
 
@@ -199,6 +207,51 @@ async fn scheduler_no_sources_exits_immediately() {
 	let scheduler = Scheduler::new(engine, config, test_registry());
 	// Should return immediately with no sources
 	scheduler.run().await.unwrap();
+}
+
+#[tokio::test]
+async fn scheduler_requires_explicit_sink_config() {
+	let surreal = TestSurrealContainer::new().await;
+	let engine = DeltaEngine::single(surreal.client.clone());
+
+	let config = SyncConfig {
+		surrealdb: SurrealDbDef {
+			url: "unused".into(),
+			username: "root".into(),
+			password: "root".into(),
+			namespace: "test".into(),
+			database: "test".into(),
+			snapshot: None,
+		},
+		sources: vec![SourceDef {
+			name: "pg-test".into(),
+			connector: "postgres".into(),
+			dsn: "postgres://localhost/db".into(),
+			interval_secs: 3600,
+			fail_safe_threshold: 30.0,
+			max_retries: 1,
+			retry_base_delay_secs: 1,
+			diff_mode: oversync::config::DiffMode::default(),
+			missed_tick_policy: Default::default(),
+			config: serde_json::Value::Null,
+			queries: vec![QueryDef {
+				id: "items".into(),
+				sql: "SELECT 1 AS id".into(),
+				key_column: "id".into(),
+				sinks: None,
+				transform: None,
+			}],
+		}],
+		sinks: vec![],
+		pipes: vec![],
+	};
+
+	let scheduler = Scheduler::new(engine, config, test_registry());
+	let err = scheduler.run().await.unwrap_err();
+	assert!(
+		err.to_string().contains("no sinks configured"),
+		"expected explicit sink config error, got: {err}"
+	);
 }
 
 #[tokio::test]
@@ -243,7 +296,7 @@ async fn scheduler_detects_data_changes() {
 				transform: None,
 			}],
 		}],
-		sinks: vec![],
+		sinks: vec![stdout_sink()],
 		pipes: vec![],
 	};
 
@@ -346,7 +399,7 @@ async fn scheduler_multiple_queries() {
 				},
 			],
 		}],
-		sinks: vec![],
+		sinks: vec![stdout_sink()],
 		pipes: vec![],
 	};
 
@@ -453,7 +506,7 @@ async fn scheduler_multiple_sources() {
 				}],
 			},
 		],
-		sinks: vec![],
+		sinks: vec![stdout_sink()],
 		pipes: vec![],
 	};
 

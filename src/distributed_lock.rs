@@ -34,20 +34,21 @@ impl PipeLock {
 			.await
 			.map_err(|e| OversyncError::SurrealDb(format!("lock acquire: {e}")))?;
 
-		// Multi-statement query: LET, LET, LET, IF{..RETURN..}
-		// The RETURN result is at the last statement index.
-		// Try indices until we find the result.
-		let mut acquired_val = None;
-		for idx in 0..10 {
-			if let Ok(rows) = resp.take::<Vec<serde_json::Value>>(idx)
-				&& let Some(first) = rows.first()
-				&& first.get("acquired").is_some()
-			{
-				acquired_val = first.get("acquired").and_then(|v| v.as_bool());
-				break;
-			}
-		}
-		let acquired = acquired_val.unwrap_or(false);
+		let last_idx = resp.num_statements().checked_sub(1).ok_or_else(|| {
+			OversyncError::Internal("lock acquire: query returned no statements".into())
+		})?;
+		let rows: Vec<serde_json::Value> = resp
+			.take(last_idx)
+			.map_err(|e| OversyncError::SurrealDb(format!("lock acquire take[{last_idx}]: {e}")))?;
+		let acquired = rows
+			.first()
+			.and_then(|row| row.get("acquired"))
+			.and_then(|v| v.as_bool())
+			.ok_or_else(|| {
+				OversyncError::Internal(format!(
+					"lock acquire: missing boolean 'acquired' result at statement {last_idx}"
+				))
+			})?;
 
 		if acquired {
 			debug!(pipe = %pipe, instance = %self.instance_id, "lock acquired");

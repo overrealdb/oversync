@@ -8,6 +8,28 @@ use tracing::{Instrument, error, info, warn};
 
 use crate::config::{DiffMode, LinkDef, LinkStrategy};
 
+const PENDING_PAGE_ID_BITS: u32 = 20;
+const MAX_PENDING_PAGES: usize = 1 << PENDING_PAGE_ID_BITS;
+
+fn pending_page_id(cycle_id: i64, page_index: usize) -> Result<i64, OversyncError> {
+	if page_index >= MAX_PENDING_PAGES {
+		return Err(OversyncError::Internal(format!(
+			"too many pending event pages in one cycle: {page_index} (max {})",
+			MAX_PENDING_PAGES - 1
+		)));
+	}
+
+	let shifted = cycle_id.checked_shl(PENDING_PAGE_ID_BITS).ok_or_else(|| {
+		OversyncError::Internal(format!("pending page id overflow for cycle_id {cycle_id}"))
+	})?;
+
+	shifted.checked_add(page_index as i64).ok_or_else(|| {
+		OversyncError::Internal(format!(
+			"pending page index overflow for cycle_id {cycle_id}"
+		))
+	})
+}
+
 pub struct CycleConfig {
 	pub origin_id: String,
 	pub query_id: String,
@@ -113,7 +135,7 @@ impl<'a> CycleRunner<'a> {
 					&config.query_id,
 					metrics_start,
 				);
-				let status = if e.to_string().contains("fail-safe") {
+				let status = if e.is_fail_safe() {
 					CycleStatus::Aborted
 				} else {
 					CycleStatus::Failed
@@ -160,10 +182,11 @@ impl<'a> CycleRunner<'a> {
 				threshold = config.fail_safe_threshold,
 				"fail-safe triggered"
 			);
-			return Err(OversyncError::Internal(format!(
-				"fail-safe: {deleted_count}/{previous_count} rows deleted (>{:.0}%)",
-				config.fail_safe_threshold,
-			)));
+			return Err(OversyncError::FailSafe {
+				deleted_count,
+				previous_count,
+				threshold_pct: config.fail_safe_threshold,
+			});
 		}
 
 		// Anomaly warnings — emit before delivery so OTel/log alerting can fire.
@@ -413,7 +436,7 @@ impl<'a> CycleRunner<'a> {
 		for (i, chunk) in envelopes.chunks(PAGE).enumerate() {
 			let envelopes = chunk;
 
-			let page_id = cycle_id * 10000 + i as i64;
+			let page_id = pending_page_id(cycle_id, i)?;
 
 			// Save to outbox before delivery (crash-safe)
 			self.engine
@@ -537,22 +560,41 @@ impl<'a> CycleRunner<'a> {
 			"retrying pending event delivery"
 		);
 
-		let mut max_delivered = 0i64;
 		for (page_id, envelopes) in &pending {
-			if self.deliver_to_sinks(envelopes).await {
-				max_delivered = *page_id;
-			} else {
+			if !self.deliver_to_sinks(envelopes).await {
+				break;
+			}
+
+			if let Err(e) = self
+				.engine
+				.delete_pending_events(&config.origin_id, &config.query_id, *page_id)
+				.await
+			{
+				warn!(
+					error = %e,
+					page_id,
+					"failed to delete delivered pending events — may cause duplicate delivery"
+				);
 				break;
 			}
 		}
+	}
+}
 
-		if max_delivered > 0
-			&& let Err(e) = self
-				.engine
-				.delete_pending_events(&config.origin_id, &config.query_id, max_delivered)
-				.await
-		{
-			warn!(error = %e, "failed to delete delivered pending events — may cause duplicate delivery");
-		}
+#[cfg(test)]
+mod tests {
+	use super::{MAX_PENDING_PAGES, pending_page_id};
+
+	#[test]
+	fn pending_page_id_stays_unique_beyond_10000_pages() {
+		let page_10000 = pending_page_id(1, 10_000).unwrap();
+		let next_cycle_first_page = pending_page_id(2, 0).unwrap();
+		assert_ne!(page_10000, next_cycle_first_page);
+	}
+
+	#[test]
+	fn pending_page_id_rejects_excessive_page_count() {
+		let err = pending_page_id(1, MAX_PENDING_PAGES).unwrap_err();
+		assert!(err.to_string().contains("too many pending event pages"));
 	}
 }

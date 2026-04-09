@@ -105,15 +105,15 @@ pub async fn execute_dry_run(
 	transform_hook: Option<Arc<dyn TransformHook>>,
 	state_db: Option<&oversync_delta::DeltaEngine>,
 ) -> Result<DryRunResult, OversyncError> {
-	let query = req
-		.pipe
+	let pipe = crate::recipes::expand_runtime_pipe(req.pipe.clone()).await?;
+	let query = pipe
 		.queries
 		.iter()
 		.find(|q| q.id == req.query_id)
 		.ok_or_else(|| {
 			OversyncError::Config(format!(
 				"pipe '{}': unknown query '{}'",
-				req.pipe.name, req.query_id
+				pipe.name, req.query_id
 			))
 		})?;
 
@@ -129,7 +129,7 @@ pub async fn execute_dry_run(
 			req.mock_data[..limit].to_vec()
 		}
 		DryRunMode::Live => {
-			let connector = create_connector(&req.pipe, registry, req.credentials.as_ref()).await?;
+			let connector = create_connector(&pipe, registry, req.credentials.as_ref()).await?;
 			let limited_sql = format!(
 				"{} LIMIT {}",
 				query.sql.trim().trim_end_matches(';'),
@@ -148,6 +148,7 @@ pub async fn execute_dry_run(
 
 	info!(
 		pipe = %req.pipe.name,
+		expanded_queries = pipe.queries.len(),
 		query = %req.query_id,
 		rows = input_rows,
 		mode = ?req.mode,
@@ -157,9 +158,9 @@ pub async fn execute_dry_run(
 	// 2. Compute diff
 	let previous: HashMap<String, String> = if req.use_existing_state {
 		if let Some(engine) = state_db {
-			let pipe_engine = engine.for_source(&req.pipe.name);
+			let pipe_engine = engine.for_source(&pipe.name);
 			pipe_engine
-				.read_snapshot_keys_paged(&req.pipe.name, &req.query_id)
+				.read_snapshot_keys_paged(&pipe.name, &req.query_id)
 				.await?
 		} else {
 			return Err(OversyncError::Config(
@@ -169,7 +170,7 @@ pub async fn execute_dry_run(
 	} else {
 		HashMap::new()
 	};
-	let diff = compute_diff(&previous, &rows, &req.pipe.name, &req.query_id, 0);
+	let diff = compute_diff(&previous, &rows, &pipe.name, &req.query_id, 0);
 
 	let changes = DryRunChanges {
 		created: diff.created.len(),
@@ -196,7 +197,7 @@ pub async fn execute_dry_run(
 	let events_after = envelopes.len();
 
 	info!(
-		pipe = %req.pipe.name,
+		pipe = %pipe.name,
 		before = events_before,
 		after = events_after,
 		"dry-run: transforms applied"
@@ -368,6 +369,7 @@ mod tests {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			recipe: None,
 			filters: vec![],
 			transforms: vec![],
 			links: vec![],

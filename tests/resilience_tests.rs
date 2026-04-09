@@ -262,6 +262,68 @@ async fn sink_recovers_pending_events_delivered() {
 }
 
 #[tokio::test]
+async fn sink_recovery_clears_all_pending_pages() {
+	let t = TestSurrealContainer::new().await;
+	let engine = DeltaEngine::single(t.client.clone());
+
+	let pending_a = vec![EventEnvelope {
+		meta: oversync_core::model::EventMeta {
+			op: oversync_core::model::OpType::Created,
+			origin_id: "test".into(),
+			query_id: "q".into(),
+			key: "a".into(),
+			hash: "h1".into(),
+			cycle_id: 1,
+			timestamp: chrono::Utc::now(),
+		},
+		data: serde_json::json!({"v": 1}),
+	}];
+	let pending_b = vec![EventEnvelope {
+		meta: oversync_core::model::EventMeta {
+			op: oversync_core::model::OpType::Updated,
+			origin_id: "test".into(),
+			query_id: "q".into(),
+			key: "b".into(),
+			hash: "h2".into(),
+			cycle_id: 2,
+			timestamp: chrono::Utc::now(),
+		},
+		data: serde_json::json!({"v": 2}),
+	}];
+
+	engine
+		.save_pending_events("test", "q", 10001, &pending_a)
+		.await
+		.unwrap();
+	engine
+		.save_pending_events("test", "q", 10002, &pending_b)
+		.await
+		.unwrap();
+
+	let connector = FailingConnector::new(0, vec![]);
+	let counting = Arc::new(CountingSink::new());
+	let sinks: Vec<Arc<dyn Sink>> = vec![counting.clone()];
+	let runner = CycleRunner::new(&engine, &connector, &sinks);
+
+	let diff = runner.run(&cycle_config()).await.unwrap();
+	assert!(
+		diff.is_empty(),
+		"recovery-only cycle should not create new events"
+	);
+	assert_eq!(
+		counting.count(),
+		2,
+		"both pending pages should be delivered"
+	);
+
+	let pending = engine.read_pending_events("test", "q").await.unwrap();
+	assert!(
+		pending.is_empty(),
+		"all delivered pending pages should be removed"
+	);
+}
+
+#[tokio::test]
 async fn sink_failure_does_not_delete_stale_rows() {
 	let t = TestSurrealContainer::new().await;
 	let engine = DeltaEngine::single(t.client.clone());

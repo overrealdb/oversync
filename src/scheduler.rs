@@ -51,11 +51,20 @@ impl Scheduler {
 	}
 
 	pub async fn run(&self) -> Result<(), OversyncError> {
+		let pipes = crate::recipes::expand_runtime_pipes(self.config.effective_pipes()).await?;
+		let task_count: usize = pipes
+			.iter()
+			.filter(|pipe| pipe.enabled)
+			.map(|pipe| pipe.queries.len())
+			.sum();
+		if task_count == 0 {
+			info!("no enabled pipe queries configured, scheduler exiting");
+			return Ok(());
+		}
+
 		let named_sinks = self.create_sinks().await?;
 		let named_sinks = Arc::new(named_sinks);
 		let mut handles = Vec::new();
-
-		let pipes = self.config.effective_pipes();
 
 		// Pre-create tables sequentially to avoid TiKV DDL lock contention.
 		// On TiKV backend, concurrent DEFINE TABLE operations can deadlock.
@@ -113,11 +122,9 @@ impl Scheduler {
 			sinks.insert(sink_def.name.clone(), Arc::from(sink));
 		}
 		if sinks.is_empty() {
-			let sink = self
-				.registry
-				.create_sink("stdout", "default", &serde_json::json!({}))
-				.await?;
-			sinks.insert("default".into(), Arc::from(sink));
+			return Err(OversyncError::Config(
+				"no sinks configured; define at least one [[sinks]] entry instead of relying on an implicit stdout fallback".into(),
+			));
 		}
 		Ok(sinks)
 	}

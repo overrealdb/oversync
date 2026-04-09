@@ -80,18 +80,28 @@ pub mod mutations {
 		include_str!("../surql/queries/mutations/update_pipe_delta.surql");
 	pub const UPDATE_PIPE_ENABLED: &str =
 		include_str!("../surql/queries/mutations/update_pipe_enabled.surql");
+	pub const UPDATE_PIPE_FILTERS: &str =
+		include_str!("../surql/queries/mutations/update_pipe_filters.surql");
+	pub const UPDATE_PIPE_LINKS: &str =
+		include_str!("../surql/queries/mutations/update_pipe_links.surql");
+	pub const UPDATE_PIPE_ORIGIN_CREDENTIAL: &str =
+		include_str!("../surql/queries/mutations/update_pipe_origin_credential.surql");
 	pub const UPDATE_PIPE_ORIGIN_CONFIG: &str =
 		include_str!("../surql/queries/mutations/update_pipe_origin_config.surql");
 	pub const UPDATE_PIPE_ORIGIN_CONNECTOR: &str =
 		include_str!("../surql/queries/mutations/update_pipe_origin_connector.surql");
 	pub const UPDATE_PIPE_ORIGIN_DSN: &str =
 		include_str!("../surql/queries/mutations/update_pipe_origin_dsn.surql");
+	pub const UPDATE_PIPE_TRINO_URL: &str =
+		include_str!("../surql/queries/mutations/update_pipe_trino_url.surql");
 	pub const UPDATE_PIPE_RETRY: &str =
 		include_str!("../surql/queries/mutations/update_pipe_retry.surql");
 	pub const UPDATE_PIPE_SCHEDULE: &str =
 		include_str!("../surql/queries/mutations/update_pipe_schedule.surql");
 	pub const UPDATE_PIPE_TARGETS: &str =
 		include_str!("../surql/queries/mutations/update_pipe_targets.surql");
+	pub const UPDATE_PIPE_TRANSFORMS: &str =
+		include_str!("../surql/queries/mutations/update_pipe_transforms.surql");
 	pub const UPDATE_SINK_CONFIG: &str =
 		include_str!("../surql/queries/mutations/update_sink_config.surql");
 	pub const UPDATE_SINK_ENABLED: &str =
@@ -116,6 +126,8 @@ pub mod query_config {
 		include_str!("../surql/queries/query_config/update_key_column.surql");
 	pub const UPDATE_QUERY: &str = include_str!("../surql/queries/query_config/update_query.surql");
 	pub const UPDATE_SINKS: &str = include_str!("../surql/queries/query_config/update_sinks.surql");
+	pub const UPDATE_TRANSFORM: &str =
+		include_str!("../surql/queries/query_config/update_transform.surql");
 }
 
 pub mod links {

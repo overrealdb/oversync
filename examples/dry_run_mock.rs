@@ -30,6 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 		schedule: ScheduleDef::default(),
 		delta: DeltaDef::default(),
 		retry: RetryDef::default(),
+		recipe: None,
 		filters: vec![],
 		transforms: vec![],
 		links: vec![],

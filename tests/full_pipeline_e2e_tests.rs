@@ -128,6 +128,7 @@ async fn full_pipeline_origin_to_sink() {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			recipe: None,
 			filters: vec![],
 			transforms: vec![],
 			links: vec![],
@@ -188,6 +189,7 @@ async fn full_pipeline_with_transforms() {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			recipe: None,
 			filters: vec![],
 			transforms: vec![
 				serde_json::json!({"type": "upper", "field": "name"}),
@@ -244,6 +246,7 @@ async fn full_pipeline_with_pre_delta_filters() {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			recipe: None,
 			filters: vec![serde_json::json!({
 				"type": "filter",
 				"field": "schema",
@@ -308,6 +311,7 @@ async fn full_pipeline_second_run_no_changes() {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			recipe: None,
 			filters: vec![],
 			transforms: vec![],
 			links: vec![],
@@ -367,6 +371,7 @@ async fn full_pipeline_filters_plus_transforms() {
 			schedule: ScheduleDef::default(),
 			delta: DeltaDef::default(),
 			retry: RetryDef::default(),
+			recipe: None,
 			filters: vec![
 				serde_json::json!({"type": "filter", "field": "schema", "op": "eq", "value": "public"}),
 			],

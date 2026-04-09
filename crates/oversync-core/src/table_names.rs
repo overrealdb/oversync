@@ -3,6 +3,9 @@
 //! Each sync pipeline gets its own set of tables for isolation,
 //! named by a deterministic pattern: `sync_{source}_{type}`.
 
+const MAX_SOURCE_IDENTIFIER_LEN: usize = 48;
+const TRUNCATED_HASH_LEN: usize = 12;
+
 /// Table names for a sync pipeline's internal state.
 #[derive(Debug, Clone)]
 pub struct TableNames {
@@ -83,15 +86,47 @@ impl TableNames {
 }
 
 fn sanitize_name(name: &str) -> String {
-	name.chars()
-		.map(|c| {
-			if c.is_ascii_alphanumeric() || c == '_' {
-				c.to_ascii_lowercase()
-			} else {
-				'_'
+	let mut sanitized = String::with_capacity(name.len());
+	let mut prev_was_underscore = false;
+
+	for c in name.chars() {
+		let mapped = if c.is_ascii_alphanumeric() || c == '_' {
+			c.to_ascii_lowercase()
+		} else {
+			'_'
+		};
+
+		if mapped == '_' {
+			if !prev_was_underscore {
+				sanitized.push('_');
 			}
-		})
-		.collect()
+			prev_was_underscore = true;
+		} else {
+			sanitized.push(mapped);
+			prev_was_underscore = false;
+		}
+	}
+
+	let sanitized = sanitized.trim_matches('_');
+	if sanitized.is_empty() {
+		return "unnamed".to_string();
+	}
+
+	if sanitized.len() <= MAX_SOURCE_IDENTIFIER_LEN {
+		return sanitized.to_string();
+	}
+
+	let hash = short_hash(sanitized);
+	let prefix_len = MAX_SOURCE_IDENTIFIER_LEN - TRUNCATED_HASH_LEN - 1;
+	let prefix = &sanitized[..prefix_len];
+	format!("{prefix}_{hash}")
+}
+
+fn short_hash(name: &str) -> String {
+	use sha2::{Digest, Sha256};
+
+	let digest = Sha256::digest(name.as_bytes());
+	const_hex::encode(&digest[..TRUNCATED_HASH_LEN / 2])
 }
 
 #[cfg(test)]
@@ -113,9 +148,42 @@ mod tests {
 	}
 
 	#[test]
+	fn for_source_collapses_repeated_underscores() {
+		let t = TableNames::for_source("my...trino///analytics");
+		assert_eq!(t.snapshot, "sync_my_trino_analytics_snapshot");
+	}
+
+	#[test]
 	fn for_source_lowercases() {
 		let t = TableNames::for_source("PG_Prod");
 		assert_eq!(t.snapshot, "sync_pg_prod_snapshot");
+	}
+
+	#[test]
+	fn for_source_uses_fallback_for_empty_name() {
+		let t = TableNames::for_source("!!!");
+		assert_eq!(t.snapshot, "sync_unnamed_snapshot");
+	}
+
+	#[test]
+	fn for_source_truncates_with_hash_suffix() {
+		let long = "a".repeat(200);
+		let t = TableNames::for_source(&long);
+		assert!(
+			t.snapshot
+				.starts_with("sync_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_")
+		);
+		assert!(t.snapshot.ends_with("_snapshot"));
+		assert!(t.snapshot.len() < 80);
+	}
+
+	#[test]
+	fn for_source_long_names_remain_distinct() {
+		let a = format!("{}-one", "x".repeat(120));
+		let b = format!("{}-two", "x".repeat(120));
+		let a_names = TableNames::for_source(&a);
+		let b_names = TableNames::for_source(&b);
+		assert_ne!(a_names.snapshot, b_names.snapshot);
 	}
 
 	#[test]

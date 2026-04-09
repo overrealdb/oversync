@@ -44,10 +44,10 @@ pub struct SnapshotDbDef {
 }
 
 fn default_user() -> String {
-	"root".into()
+	String::new()
 }
 fn default_pass() -> String {
-	"root".into()
+	String::new()
 }
 fn default_ns() -> String {
 	"oversync".into()
@@ -155,6 +155,8 @@ pub struct PipeConfig {
 	#[serde(default)]
 	pub retry: RetryDef,
 	#[serde(default)]
+	pub recipe: Option<PipeRecipeDef>,
+	#[serde(default)]
 	pub filters: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub transforms: Vec<serde_json::Value>,
@@ -164,6 +166,30 @@ pub struct PipeConfig {
 	pub alert_webhook: Option<String>,
 	#[serde(default = "default_true")]
 	pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipeRecipeDef {
+	#[serde(rename = "type")]
+	pub recipe_type: PipeRecipeType,
+	pub prefix: String,
+	#[serde(default)]
+	pub entity_type_id: Option<String>,
+	#[serde(default = "default_recipe_schema_id")]
+	pub schema_id: String,
+	#[serde(default)]
+	pub schemas: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PipeRecipeType {
+	PostgresMetadata,
+	PostgresSnapshot,
+}
+
+fn default_recipe_schema_id() -> String {
+	"table".into()
 }
 
 /// Matching strategy for entity linking rules.
@@ -309,6 +335,7 @@ impl From<&SourceDef> for PipeConfig {
 				max_retries: src.max_retries,
 				retry_base_delay_secs: src.retry_base_delay_secs,
 			},
+			recipe: None,
 			filters: vec![],
 			transforms: vec![],
 			links: vec![],
@@ -337,6 +364,102 @@ pub struct ConfigIssue {
 /// Returns a list of warnings and errors. An empty list means the config is valid.
 pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
 	let mut issues = Vec::new();
+	let mut explicit_pipe_counts: std::collections::HashMap<&str, usize> =
+		std::collections::HashMap::new();
+	let mut source_counts: std::collections::HashMap<&str, usize> =
+		std::collections::HashMap::new();
+
+	for pipe in &config.pipes {
+		*explicit_pipe_counts.entry(pipe.name.as_str()).or_default() += 1;
+	}
+	for source in &config.sources {
+		*source_counts.entry(source.name.as_str()).or_default() += 1;
+	}
+
+	for (name, count) in explicit_pipe_counts.iter().filter(|(_, count)| **count > 1) {
+		issues.push(ConfigIssue {
+			severity: Severity::Warning,
+			message: format!(
+				"pipe name '{name}' is defined {count} times in [[pipes]]; last definition wins"
+			),
+		});
+	}
+
+	for (name, count) in source_counts.iter().filter(|(_, count)| **count > 1) {
+		issues.push(ConfigIssue {
+			severity: Severity::Warning,
+			message: format!(
+				"source name '{name}' is defined {count} times in [[sources]]; first definition wins when auto-converted to pipes"
+			),
+		});
+	}
+
+	for name in explicit_pipe_counts.keys() {
+		if source_counts.contains_key(name) {
+			issues.push(ConfigIssue {
+				severity: Severity::Warning,
+				message: format!(
+					"name '{name}' is defined in both [[pipes]] and [[sources]]; explicit [[pipes]] entry wins"
+				),
+			});
+		}
+	}
+
+	for pipe in &config.pipes {
+		if let Some(recipe) = &pipe.recipe {
+			if !pipe.queries.is_empty() {
+				issues.push(ConfigIssue {
+					severity: Severity::Warning,
+					message: format!(
+						"pipe '{}': recipe is ignored because explicit queries are already defined",
+						pipe.name
+					),
+				});
+			}
+			match recipe.recipe_type {
+				PipeRecipeType::PostgresMetadata => {
+					if pipe.origin.connector != "postgres" {
+						issues.push(ConfigIssue {
+							severity: Severity::Error,
+							message: format!(
+								"pipe '{}': recipe 'postgres_metadata' requires origin.connector = 'postgres'",
+								pipe.name
+							),
+						});
+					}
+					if recipe.prefix.trim().is_empty() {
+						issues.push(ConfigIssue {
+							severity: Severity::Error,
+							message: format!(
+								"pipe '{}': recipe 'postgres_metadata' requires non-empty prefix",
+								pipe.name
+							),
+						});
+					}
+				}
+				PipeRecipeType::PostgresSnapshot => {
+					if pipe.origin.connector != "postgres" {
+						issues.push(ConfigIssue {
+							severity: Severity::Error,
+							message: format!(
+								"pipe '{}': recipe 'postgres_snapshot' requires origin.connector = 'postgres'",
+								pipe.name
+							),
+						});
+					}
+					if recipe.prefix.trim().is_empty() {
+						issues.push(ConfigIssue {
+							severity: Severity::Error,
+							message: format!(
+								"pipe '{}': recipe 'postgres_snapshot' requires non-empty prefix",
+								pipe.name
+							),
+						});
+					}
+				}
+			}
+		}
+	}
 
 	let pipes = config.effective_pipes();
 
@@ -344,7 +467,7 @@ pub fn validate_config(config: &SyncConfig) -> Vec<ConfigIssue> {
 		config.sinks.iter().map(|s| s.name.as_str()).collect();
 
 	for pipe in &pipes {
-		if pipe.queries.is_empty() {
+		if pipe.queries.is_empty() && pipe.recipe.is_none() {
 			issues.push(ConfigIssue {
 				severity: Severity::Warning,
 				message: format!("pipe '{}': no queries defined", pipe.name),
@@ -518,7 +641,7 @@ impl SyncConfig {
 		// Process in reverse so last definition wins, then reverse back.
 		for pipe in self.pipes.iter().rev() {
 			if seen.insert(pipe.name.clone()) {
-				pipes.push(pipe.clone());
+				pipes.push(expand_pipe_recipes(pipe.clone()));
 			}
 		}
 		pipes.reverse();
@@ -532,6 +655,141 @@ impl SyncConfig {
 	}
 }
 
+pub(crate) fn expand_pipe_recipes(mut pipe: PipeConfig) -> PipeConfig {
+	if pipe.queries.is_empty()
+		&& let Some(recipe) = &pipe.recipe
+		&& matches!(recipe.recipe_type, PipeRecipeType::PostgresMetadata)
+	{
+		pipe.queries = postgres_metadata_recipe_queries(recipe);
+		pipe.recipe = None;
+	}
+	pipe
+}
+
+fn postgres_metadata_recipe_queries(recipe: &PipeRecipeDef) -> Vec<QueryDef> {
+	let prefix = sql_string_literal(&recipe.prefix);
+	let entity_type_id = sql_string_literal(
+		recipe
+			.entity_type_id
+			.as_deref()
+			.unwrap_or(recipe.prefix.as_str()),
+	);
+	let schema_id = sql_string_literal(&recipe.schema_id);
+	let schema_filter = if recipe.schemas.is_empty() {
+		"n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_%'"
+			.to_string()
+	} else {
+		format!("n.nspname IN ({})", sql_string_list(&recipe.schemas))
+	};
+
+	let entity_sql = format!(
+		r#"SELECT
+    '{prefix}.' || n.nspname || '.' || c.relname AS id,
+    '{entity_type_id}' AS "entityTypeId",
+    'entity' AS "type",
+    n.nspname || '.' || c.relname AS name,
+    COALESCE(d.description, '') AS description,
+    0 AS version
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n
+    ON c.relnamespace = n.oid
+LEFT JOIN pg_catalog.pg_description d
+    ON c.oid = d.objoid
+   AND d.objsubid = 0
+WHERE c.relkind IN ('r', 'v')
+  AND {schema_filter}
+ORDER BY n.nspname, c.relname"#,
+	);
+
+	let aspect_sql = format!(
+		r#"SELECT
+    '{prefix}.' || n.nspname || '.' || c.relname AS "entityId",
+    '{schema_id}' AS "schemaId",
+    '{entity_type_id}' AS "entityTypeId",
+    'aspect' AS "type",
+    'custom' AS "aspectType",
+    jsonb_build_object(
+        'name', n.nspname || '.' || c.relname,
+        'description', COALESCE(table_desc.description, ''),
+        'columns', jsonb_agg(
+            jsonb_build_object(
+                'ordinalPosition', a.attnum,
+                'name', a.attname,
+                'description', COALESCE(columns_desc.description, ''),
+                'isKey', COALESCE(pk.is_pk, false),
+                'type', pg_catalog.format_type(a.atttypid, a.atttypmod)
+            )
+            ORDER BY a.attnum
+        )
+    ) AS data,
+    0 AS version
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n
+    ON c.relnamespace = n.oid
+JOIN pg_catalog.pg_attribute a
+    ON c.oid = a.attrelid
+LEFT JOIN pg_catalog.pg_description table_desc
+    ON c.oid = table_desc.objoid
+   AND table_desc.objsubid = 0
+LEFT JOIN pg_catalog.pg_description columns_desc
+    ON columns_desc.objoid = a.attrelid
+   AND columns_desc.objsubid = a.attnum
+LEFT JOIN (
+    SELECT
+        att.attrelid,
+        att.attname,
+        true AS is_pk
+    FROM pg_catalog.pg_constraint con
+    JOIN pg_catalog.pg_attribute att
+        ON att.attrelid = con.conrelid
+       AND att.attnum = ANY(con.conkey)
+    WHERE con.contype = 'p'
+) pk
+    ON pk.attrelid = c.oid
+   AND pk.attname = a.attname
+WHERE c.relkind IN ('r', 'v')
+  AND {schema_filter}
+  AND a.attnum > 0
+  AND NOT a.attisdropped
+GROUP BY
+    n.nspname,
+    c.relname,
+    table_desc.description
+ORDER BY
+    n.nspname,
+    c.relname"#,
+	);
+
+	vec![
+		QueryDef {
+			id: "entity".into(),
+			sql: entity_sql,
+			key_column: "id".into(),
+			sinks: None,
+			transform: None,
+		},
+		QueryDef {
+			id: "aspect-table".into(),
+			sql: aspect_sql,
+			key_column: "entityId".into(),
+			sinks: None,
+			transform: None,
+		},
+	]
+}
+
+fn sql_string_literal(value: &str) -> String {
+	value.replace('\'', "''")
+}
+
+fn sql_string_list(values: &[String]) -> String {
+	values
+		.iter()
+		.map(|value| format!("'{}'", sql_string_literal(value)))
+		.collect::<Vec<_>>()
+		.join(", ")
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -539,12 +797,13 @@ mod tests {
 	#[test]
 	fn parse_minimal_config() {
 		let toml = r#"
-[surrealdb]
-url = "http://localhost:8000"
-"#;
+	[surrealdb]
+	url = "http://localhost:8000"
+	"#;
 		let config = SyncConfig::from_str(toml).unwrap();
 		assert_eq!(config.surrealdb.url, "http://localhost:8000");
-		assert_eq!(config.surrealdb.username, "root");
+		assert!(config.surrealdb.username.is_empty());
+		assert!(config.surrealdb.password.is_empty());
 		assert_eq!(config.surrealdb.namespace, "oversync");
 		assert!(config.sources.is_empty());
 	}
@@ -830,8 +1089,8 @@ url = "http://localhost:8000"
 	#[test]
 	fn parse_snapshot_config() {
 		let toml = r#"
-[surrealdb]
-url = "http://tikv-surreal:8000"
+	[surrealdb]
+	url = "http://tikv-surreal:8000"
 
 [surrealdb.snapshot]
 url = "http://mem-surreal:8000"
@@ -840,7 +1099,8 @@ url = "http://mem-surreal:8000"
 		assert_eq!(config.surrealdb.url, "http://tikv-surreal:8000");
 		let snap = config.surrealdb.snapshot.unwrap();
 		assert_eq!(snap.url, "http://mem-surreal:8000");
-		assert_eq!(snap.username, "root");
+		assert!(snap.username.is_empty());
+		assert!(snap.password.is_empty());
 		assert_eq!(snap.namespace, "oversync");
 		assert_eq!(snap.database, "sync");
 	}
@@ -1269,6 +1529,73 @@ field = "name"
 		);
 	}
 
+	#[test]
+	fn parse_pipe_with_postgres_metadata_recipe() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "catalog"
+targets = ["kafka"]
+
+[pipes.origin]
+connector = "postgres"
+dsn = "postgres://localhost/db"
+
+[pipes.recipe]
+type = "postgres_metadata"
+prefix = "zoe"
+schemas = ["showcase_stream"]
+"#;
+
+		let config = SyncConfig::from_str(toml).unwrap();
+		let pipes = config.effective_pipes();
+		assert_eq!(pipes.len(), 1);
+		assert_eq!(pipes[0].queries.len(), 2);
+		assert_eq!(pipes[0].queries[0].id, "entity");
+		assert_eq!(pipes[0].queries[1].id, "aspect-table");
+		assert!(
+			pipes[0].queries[0]
+				.sql
+				.contains("'zoe.' || n.nspname || '.' || c.relname AS id")
+		);
+		assert!(
+			pipes[0].queries[0]
+				.sql
+				.contains("n.nspname IN ('showcase_stream')")
+		);
+		assert!(pipes[0].queries[1].sql.contains("'table' AS \"schemaId\""));
+	}
+
+	#[test]
+	fn validate_postgres_metadata_recipe_requires_postgres_connector() {
+		let toml = r#"
+[surrealdb]
+url = "http://localhost:8000"
+
+[[pipes]]
+name = "catalog"
+
+[pipes.origin]
+connector = "mysql"
+dsn = "mysql://localhost/db"
+
+[pipes.recipe]
+type = "postgres_metadata"
+prefix = "zoe"
+"#;
+
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|issue| {
+			issue.severity == Severity::Error
+				&& issue
+					.message
+					.contains("recipe 'postgres_metadata' requires origin.connector = 'postgres'")
+		}));
+	}
+
 	// ── Env var expansion tests ──────────────────────────────────
 
 	#[test]
@@ -1515,6 +1842,35 @@ sinks = ["missing-sink"]
 				.iter()
 				.any(|i| i.severity == Severity::Error && i.message.contains("missing-sink"))
 		);
+	}
+
+	#[test]
+	fn validate_duplicate_pipe_names_warns() {
+		let toml = r#"
+	[surrealdb]
+	url = "http://localhost:8000"
+
+	[[pipes]]
+	name = "dup"
+
+	[pipes.origin]
+	connector = "postgres"
+	dsn = "postgres://first"
+
+	[[pipes]]
+	name = "dup"
+
+	[pipes.origin]
+	connector = "mysql"
+	dsn = "mysql://second"
+	"#;
+		let config = SyncConfig::from_str(toml).unwrap();
+		let issues = validate_config(&config);
+		assert!(issues.iter().any(|i| {
+			i.severity == Severity::Warning
+				&& i.message.contains("pipe name 'dup'")
+				&& i.message.contains("last definition wins")
+		}));
 	}
 
 	// ── Auto-routing tests ──────────────────────────────────────

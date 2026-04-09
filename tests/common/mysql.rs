@@ -1,36 +1,40 @@
+use std::time::Duration;
+
 use sqlx::MySqlPool;
 use sqlx::mysql::MySqlPoolOptions;
-use testcontainers::ImageExt;
-use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::mysql::Mysql;
 use tokio::sync::OnceCell;
 
-struct SharedMysqlContainer {
+use super::stack::{env_var, retry_async};
+
+struct SharedMysqlEndpoint {
 	url: String,
-	_container: testcontainers::ContainerAsync<Mysql>,
 }
 
-static SHARED_MYSQL: OnceCell<SharedMysqlContainer> = OnceCell::const_new();
+static SHARED_MYSQL: OnceCell<SharedMysqlEndpoint> = OnceCell::const_new();
 
-async fn shared_mysql() -> &'static SharedMysqlContainer {
+async fn shared_mysql() -> &'static SharedMysqlEndpoint {
 	SHARED_MYSQL
 		.get_or_init(|| async {
-			let container = Mysql::default()
-				.with_tag("8.0")
-				.start()
-				.await
-				.expect("failed to start mysql container");
+			let url = env_var(
+				"OVERSYNC_TEST_MYSQL_DSN",
+				"mysql://root:root@127.0.0.1:53306/test",
+			);
 
-			let host = container.get_host().await.expect("mysql host");
-			let port = container
-				.get_host_port_ipv4(3306)
-				.await
-				.expect("mysql port");
+			retry_async("mysql", 30, Duration::from_secs(1), || {
+				let url = url.clone();
+				async move {
+					let pool = MySqlPoolOptions::new()
+						.max_connections(1)
+						.connect(&url)
+						.await?;
+					sqlx::query("SELECT 1").execute(&pool).await?;
+					pool.close().await;
+					Ok::<_, sqlx::Error>(())
+				}
+			})
+			.await;
 
-			SharedMysqlContainer {
-				url: format!("mysql://root@{host}:{port}/test"),
-				_container: container,
-			}
+			SharedMysqlEndpoint { url }
 		})
 		.await
 }
@@ -56,7 +60,17 @@ impl TestMysql {
 			.expect("failed to create database");
 		bootstrap.close().await;
 
-		let dsn = format!("{}/{}", shared.url.trim_end_matches("/test"), db_name);
+		let base_dsn = shared
+			.url
+			.rsplit_once('/')
+			.map(|(base, _)| base.to_string())
+			.unwrap_or_else(|| {
+				panic!(
+					"mysql DSN must include a bootstrap database: {}",
+					shared.url
+				)
+			});
+		let dsn = format!("{base_dsn}/{db_name}");
 		let pool = MySqlPoolOptions::new()
 			.max_connections(2)
 			.connect(&dsn)

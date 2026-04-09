@@ -16,7 +16,7 @@ pub use factory::{
 	MysqlTargetFactory, PostgresTargetFactory, StdoutTargetFactory, SurrealDbTargetFactory,
 };
 pub use http_sink::HttpSink;
-pub use kafka::KafkaSink;
+pub use kafka::{KafkaKeyFormat, KafkaSink, KafkaSinkFormat, KafkaValueFormat};
 pub use mcp_sink::McpSink;
 pub use mysql_sink::MysqlSink;
 pub use oversync_core::traits::Sink;

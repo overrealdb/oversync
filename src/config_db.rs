@@ -5,8 +5,8 @@ use tracing::warn;
 use oversync_core::error::OversyncError;
 
 use crate::config::{
-	DeltaDef, DiffMode, MissedTickPolicy, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef,
-	SinkDef, SourceDef, SurrealDbDef, SyncConfig,
+	DeltaDef, DiffMode, LinkDef, MissedTickPolicy, OriginDef, PipeConfig, QueryDef, RetryDef,
+	ScheduleDef, SinkDef, SourceDef, SurrealDbDef, SyncConfig,
 };
 
 const LOAD_SOURCES_SQL: &str = oversync_queries::config::LOAD_SOURCES;
@@ -65,6 +65,9 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 		let delta = row.get("delta").cloned().unwrap_or(serde_json::Value::Null);
 
 		let retry = row.get("retry").cloned().unwrap_or(serde_json::Value::Null);
+		let filters = json_array_field(row, "filters");
+		let transforms = json_array_field(row, "transforms");
+		let links = parse_links(row, &name)?;
 
 		let targets = row
 			.get("targets")
@@ -171,9 +174,10 @@ async fn load_pipes(client: &Surreal<Any>) -> Result<Vec<PipeConfig>, OversyncEr
 					.and_then(|v| v.as_u64())
 					.unwrap_or(5),
 			},
-			filters: vec![],
-			transforms: vec![],
-			links: vec![],
+			recipe: None,
+			filters,
+			transforms,
+			links,
 			alert_webhook: None,
 			enabled,
 		});
@@ -302,4 +306,20 @@ fn str_field(row: &serde_json::Value, field: &str) -> Result<String, OversyncErr
 		.ok_or_else(|| {
 			OversyncError::SurrealDb(format!("missing or invalid field '{field}' in config row"))
 		})
+}
+
+fn json_array_field(row: &serde_json::Value, field: &str) -> Vec<serde_json::Value> {
+	row.get(field)
+		.and_then(|v| v.as_array())
+		.cloned()
+		.unwrap_or_default()
+}
+
+fn parse_links(row: &serde_json::Value, pipe_name: &str) -> Result<Vec<LinkDef>, OversyncError> {
+	match row.get("links") {
+		None | Some(serde_json::Value::Null) => Ok(vec![]),
+		Some(value) => serde_json::from_value(value.clone()).map_err(|e| {
+			OversyncError::SurrealDb(format!("invalid links for pipe '{pipe_name}': {e}"))
+		}),
+	}
 }
