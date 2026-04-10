@@ -4,14 +4,26 @@ set -euo pipefail
 COMPOSE_FILE="${OVERSYNC_TEST_STACK_COMPOSE_FILE:-tests/stack/docker-compose.yml}"
 STACK_ENV_FILE="${OVERSYNC_TEST_STACK_ENV_FILE:-${TMPDIR:-/tmp}/oversync-test-stack-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-dev}.env}"
 
-find_free_port() {
-  python3 - <<'PY'
+allocate_free_ports() {
+  local count="$1"
+  python3 - "$count" <<'PY'
 import socket
+import sys
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("127.0.0.1", 0))
-print(s.getsockname()[1])
-s.close()
+count = int(sys.argv[1])
+sockets = []
+ports = []
+
+try:
+    for _ in range(count):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 0))
+        sockets.append(s)
+        ports.append(str(s.getsockname()[1]))
+    print(" ".join(ports))
+finally:
+    for s in sockets:
+        s.close()
 PY
 }
 
@@ -33,12 +45,7 @@ if [[ -n "${GITHUB_ENV:-}" ]]; then
   project_suffix="${project_suffix//[^a-zA-Z0-9_-]/-}"
   persist_env "COMPOSE_PROJECT_NAME" "oversync-${project_suffix}"
 
-  postgres_port="$(find_free_port)"
-  mysql_port="$(find_free_port)"
-  surreal_port="$(find_free_port)"
-  kafka_port="$(find_free_port)"
-  kafka_proxy_port="$(find_free_port)"
-  trino_port="$(find_free_port)"
+  read -r postgres_port mysql_port surreal_port kafka_port kafka_proxy_port trino_port <<<"$(allocate_free_ports 6)"
 
   persist_env "OVERSYNC_TEST_POSTGRES_HOST_PORT" "$postgres_port"
   persist_env "OVERSYNC_TEST_MYSQL_HOST_PORT" "$mysql_port"
