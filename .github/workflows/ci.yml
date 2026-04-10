@@ -58,6 +58,7 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm run build
+      - run: git diff --exit-code -- dist
       - run: npm test
 
   coverage:

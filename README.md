@@ -44,10 +44,15 @@ docker pull ghcr.io/overrealdb/oversync:latest
 
 # Or run with docker compose
 docker compose up -d
-curl http://localhost:4200/health
+open http://localhost:4200/
+curl http://localhost:4200/api/health
 ```
 
-The image is distroless (no shell, nonroot uid 65534) — minimal attack surface.
+The image is distroless (no shell, nonroot uid 65534) — minimal attack surface. It now serves the embedded control-plane UI and the API from the same process:
+
+- UI: `http://localhost:4200/`
+- Same-origin API: `http://localhost:4200/api/*`
+- Direct compatibility endpoints still exist at root for scripts and CLI tooling
 
 ### Embedded (library)
 
@@ -82,6 +87,8 @@ cargo install oversync --features cli
 export OVERSYNC_CREDENTIAL_KEY='replace-with-a-strong-passphrase'
 oversync --config oversync.toml --bind 0.0.0.0:4200
 ```
+
+The standalone server exposes the embedded control-plane UI at `/` and the same-origin API at `/api`.
 
 ## Configuration
 

@@ -5,7 +5,7 @@
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OVERSYNC_CONFIG` | `oversync.toml` | Path to TOML config file |
-| `OVERSYNC_BIND` | `0.0.0.0:4200` | API server bind address |
+| `OVERSYNC_BIND` | `0.0.0.0:4200` | Control-plane server bind address for the embedded UI and API |
 | `OVERSYNC_LOG_LEVEL` | `info` | Log level (trace/debug/info/warn/error) |
 
 ## SurrealDB

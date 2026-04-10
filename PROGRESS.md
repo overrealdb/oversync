@@ -8,7 +8,7 @@ Bring `oversync` to a state where:
 
 1. the UI is connected to the real backend and can onboard runnable PostgreSQL syncs through `pipes`
 2. cluster behavior is safer for multi-instance 24/7 deployments
-3. the release-facing surface is pipe-first, documented, and scrubbed of private naming outside `secret/`
+3. the release-facing surface is pipe-first, embedded in the standalone server, and scrubbed of private naming outside `secret/`
 
 ## Facts Locked In
 
@@ -118,6 +118,7 @@ Bring `oversync` to a state where:
 - `cargo test --test config_db_tests legacy_flat_pipe_presets_export_to_toml -- --exact --nocapture`
 - `cargo test --test engine_tests engine_start_from_db -- --exact --nocapture`
 - `cargo test --features 'api cli' --test engine_tests engine_api_lists_runtime_config_when_started_from_file_style_config -- --exact --nocapture`
+- `cargo test --features 'api cli' --test engine_tests engine_api_serves_embedded_ui_and_prefixed_api -- --exact --nocapture`
 - `cargo test --features 'api cli' --test api_mutation_tests refresh_read_cache_merges_runtime_query_count_for_recipe_backed_pipe -- --exact --nocapture`
 - `cargo test --test config_db_tests -- --nocapture`
 - `cargo test --test migration_tests -- --nocapture`
@@ -145,6 +146,7 @@ Bring `oversync` to a state where:
 - `replace_config_in_db()` and API mutation handlers now call `Surreal Response::check()`, because statement-level errors can otherwise be swallowed even when `.query(...).await` itself succeeds.
 - Root `surql/schema/config/tables.surql` must stay byte-aligned with the canonical schema in `crates/oversync-queries/surql/schema/config/tables.surql`; drift there already caused real confusion once.
 - API read models can no longer depend only on DB cache. When the engine starts from a file config, `/pipes` and `/sinks` still need to reflect the live runtime shape immediately, and recipe-backed pipes must derive `query_count` from effective runtime queries instead of persisted `query_config` rows.
+- The standalone server now has to serve a real embedded UI, not only JSON routes. That makes `/api/*` the stable same-origin control-plane API surface while the browser app lives at `/`.
 
 ## Current Status
 
@@ -167,3 +169,8 @@ Bring `oversync` to a state where:
   - `/pipes`, `/sinks`, and `/pipes/{name}/resolve` now fall back to the live runtime config when the config DB cache is empty
   - recipe-backed pipes now report runtime-effective `query_count` instead of stale `0`
   - local smoke on a file-start backend now shows a runnable `postgres_metadata` pipe, sink, and pipe detail page immediately, without requiring `/config/import`
+- Embedded the production UI into the standalone server:
+  - the browser control plane is now served directly from the `oversync` binary and Docker image
+  - the same server exposes the API under `/api/*` for same-origin frontend calls
+  - root JSON compatibility endpoints still exist for scripts, while HTML navigation on `/pipes/...`, `/sinks`, `/history`, `/recipes`, and `/settings` stays in the browser app
+  - CI now verifies that checked-in `ui/dist` stays in sync with `npm run build`

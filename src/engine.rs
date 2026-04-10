@@ -298,8 +298,7 @@ impl OversyncEngine {
 				oversync_api::auth::require_api_key,
 			));
 
-		// Public route — no auth
-		Ok(base.merge(engine_protected).route(
+		let api = base.merge(engine_protected).route(
 			"/metrics",
 			axum::routing::get(move || async move {
 				match prom_handle {
@@ -313,7 +312,16 @@ impl OversyncEngine {
 						.unwrap_or_default(),
 				}
 			}),
-		))
+		);
+
+		let prefixed_api = axum::Router::new()
+			.nest("/api", api.clone())
+			.route("/api", axum::routing::any(api_not_found))
+			.route("/api/{*path}", axum::routing::any(api_not_found));
+
+		Ok(api.merge(prefixed_api).layer(axum::middleware::from_fn(
+			crate::web_ui::embedded_ui_middleware,
+		)))
 	}
 }
 
@@ -342,6 +350,11 @@ fn api_error(
 			error: error.to_string(),
 		}),
 	)
+}
+
+#[cfg(feature = "api")]
+async fn api_not_found() -> (StatusCode, axum::Json<oversync_api::types::ErrorResponse>) {
+	api_error(StatusCode::NOT_FOUND, "API route not found")
 }
 
 #[cfg(feature = "api")]

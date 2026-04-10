@@ -23,7 +23,7 @@ Part of [oversync](https://github.com/overrealdb/oversync).
 - `/credentials`
 - `/config/versions`
 
-That merged router is the recommended surface for standalone and embedded API servers.
+That merged router is the recommended surface for standalone and embedded API servers. In the standalone control plane it is also mounted under `/api/*` so the embedded UI can use a same-origin API path without a second frontend service.
 
 ## Endpoints
 

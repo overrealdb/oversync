@@ -52,7 +52,11 @@ The `OversyncEngine` encapsulates `DeltaEngine`, `LifecycleManager`, and `Plugin
 oversync --config oversync.toml --bind 0.0.0.0:4200
 ```
 
-The binary is a thin wrapper (~100 lines) that parses CLI args, initializes tracing/OTel, builds the engine, and starts the API server.
+The binary is a thin wrapper (~100 lines) that parses CLI args, initializes tracing/OTel, builds the engine, and starts the control-plane server. That server now serves:
+
+- embedded UI at `/`
+- same-origin API at `/api/*`
+- direct compatibility endpoints at root for scripts and CLI tooling
 
 ## Key Components
 

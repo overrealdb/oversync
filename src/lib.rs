@@ -35,6 +35,8 @@ pub mod recipes;
 pub mod registry;
 pub mod resilient_db;
 pub mod scheduler;
+#[cfg(feature = "api")]
+pub mod web_ui;
 
 pub use config::SyncConfig;
 pub use config_db::load_config_from_db;

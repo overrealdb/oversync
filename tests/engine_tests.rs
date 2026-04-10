@@ -682,6 +682,131 @@ async fn engine_api_lists_runtime_config_when_started_from_file_style_config() {
 
 #[cfg(feature = "api")]
 #[tokio::test]
+async fn engine_api_serves_embedded_ui_and_prefixed_api() {
+	use axum::body::{self, Body};
+	use axum::http::{Request, StatusCode, header::ACCEPT};
+	use tower::ServiceExt;
+
+	unsafe {
+		std::env::set_var(
+			"OVERSYNC_CREDENTIAL_KEY",
+			"engine-api-embedded-ui-test-key-32-bytes",
+		)
+	};
+
+	let engine = OversyncEngine::builder("mem://")
+		.skip_schema(true)
+		.build()
+		.await
+		.unwrap();
+	let config = SyncConfig {
+		surrealdb: engine.surreal_def().clone(),
+		sinks: vec![],
+		pipes: vec![],
+		pipe_presets: vec![],
+	};
+	engine.start(config).await.unwrap();
+
+	let app = engine.api_router().await.unwrap();
+
+	let index_response = app
+		.clone()
+		.oneshot(
+			Request::builder()
+				.uri("/")
+				.header(ACCEPT, "text/html")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(index_response.status(), StatusCode::OK);
+	let index_content_type = index_response
+		.headers()
+		.get("content-type")
+		.and_then(|value| value.to_str().ok())
+		.unwrap_or("");
+	assert!(index_content_type.starts_with("text/html"));
+	let index_body = body::to_bytes(index_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let index_html = String::from_utf8(index_body.to_vec()).unwrap();
+	assert!(index_html.contains("<div id=\"root\"></div>"));
+	let asset_path = index_html
+		.split('"')
+		.find(|segment| segment.starts_with("/assets/"))
+		.expect("expected embedded asset path in index.html");
+
+	let asset_response = app
+		.clone()
+		.oneshot(
+			Request::builder()
+				.uri(asset_path)
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(asset_response.status(), StatusCode::OK);
+
+	let pipes_page_response = app
+		.clone()
+		.oneshot(
+			Request::builder()
+				.uri("/pipes/catalog-sync")
+				.header(ACCEPT, "text/html")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(pipes_page_response.status(), StatusCode::OK);
+	let pipes_page_body = body::to_bytes(pipes_page_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let pipes_page_html = String::from_utf8(pipes_page_body.to_vec()).unwrap();
+	assert!(pipes_page_html.contains("OverSync Dashboard"));
+
+	let prefixed_health_response = app
+		.clone()
+		.oneshot(
+			Request::builder()
+				.uri("/api/health")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(prefixed_health_response.status(), StatusCode::OK);
+	let prefixed_health_body = body::to_bytes(prefixed_health_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let prefixed_health_json: serde_json::Value =
+		serde_json::from_slice(&prefixed_health_body).unwrap();
+	assert_eq!(prefixed_health_json["status"], "ok");
+
+	let legacy_pipes_response = app
+		.oneshot(
+			Request::builder()
+				.uri("/pipes")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(legacy_pipes_response.status(), StatusCode::OK);
+	let legacy_pipes_body = body::to_bytes(legacy_pipes_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let legacy_pipes_json: serde_json::Value = serde_json::from_slice(&legacy_pipes_body).unwrap();
+	assert!(legacy_pipes_json["pipes"].is_array());
+
+	engine.shutdown().await;
+	unsafe { std::env::remove_var("OVERSYNC_CREDENTIAL_KEY") };
+}
+
+#[cfg(feature = "api")]
+#[tokio::test]
 async fn engine_api_openapi_includes_engine_routes_and_legacy_source_deprecation() {
 	use axum::body::{self, Body};
 	use axum::http::{Request, StatusCode};

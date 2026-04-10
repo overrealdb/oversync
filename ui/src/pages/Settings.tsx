@@ -77,7 +77,7 @@ export function Settings() {
               API mode
             </div>
             <p className="mt-2 text-sm leading-6 text-slate-400">
-              Use <span className="font-mono text-slate-200">/api</span> behind Vite, or point directly at a remote OverSync server.
+              Use <span className="font-mono text-slate-200">/api</span> for the embedded control plane, the proxied Vite dev server, or any same-origin deployment. Point it at a full URL only when the UI is talking to a remote OverSync server.
             </p>
           </div>
           <div className="panel-subtle p-4">
@@ -103,7 +103,7 @@ export function Settings() {
             className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-mono text-slate-100 outline-none transition-colors focus:border-emerald-300/35"
           />
           <p className="mt-3 text-sm leading-6 text-slate-400">
-            The OverSync API endpoint. Use "/api" for proxied dev server.
+            The OverSync API endpoint. Use "/api" for same-origin API access in the embedded control plane or the proxied dev server.
           </p>
         </div>
 

@@ -49,6 +49,8 @@ surql-macros = "0.1.2"
 
 axum = "0.8"
 utoipa = { version = "5", features = ["axum_extras", "chrono"] }
+rust-embed = "8"
+mime_guess = "2"
 
 surrealdb = { version = "3", features = ["kv-mem", "protocol-http", "protocol-ws"] }
 tokio-util = "0.7"
@@ -124,7 +126,7 @@ required-features = ["api"]
 [features]
 default = []
 schema = ["dep:overshift"]
-api = ["dep:oversync-api", "dep:axum", "dep:metrics-exporter-prometheus", "dep:utoipa"]
+api = ["dep:oversync-api", "dep:axum", "dep:metrics-exporter-prometheus", "dep:utoipa", "dep:rust-embed", "dep:mime_guess"]
 cli = [
 	"api",
 	"schema",
@@ -174,6 +176,8 @@ overshift = { workspace = true, optional = true }
 oversync-api = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 utoipa = { workspace = true, optional = true }
+rust-embed = { workspace = true, optional = true }
+mime_guess = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
