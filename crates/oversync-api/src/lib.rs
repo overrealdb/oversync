@@ -69,7 +69,7 @@ use crate::state::ApiState;
 	)),
 	info(
 		title = "oversync API",
-		version = "0.1.0",
+		version = env!("CARGO_PKG_VERSION"),
 		description = "HTTP API for managing oversync pipes, sinks, recipes, and sync status."
 	)
 )]

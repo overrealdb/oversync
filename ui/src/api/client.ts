@@ -38,4 +38,33 @@ export const api = {
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
+export function generatedRequestOptions() {
+  return {
+    baseUrl: useSettingsStore.getState().apiBaseUrl,
+  };
+}
+
+type GeneratedFieldsResult = {
+  data?: unknown;
+  error?: unknown;
+  response: Response;
+};
+
+export async function unwrapGeneratedResult<T>(
+  promise: Promise<GeneratedFieldsResult>,
+): Promise<T> {
+  const result = await promise;
+  if (result.error !== undefined) {
+    const error =
+      typeof result.error === "object" &&
+      result.error !== null &&
+      "error" in result.error &&
+      typeof result.error.error === "string"
+        ? result.error.error
+        : result.response.statusText;
+    throw new ApiError(result.response.status, error);
+  }
+  return result.data as T;
+}
+
 export { ApiError };

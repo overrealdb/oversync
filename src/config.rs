@@ -110,6 +110,237 @@ fn default_true() -> bool {
 
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiFilterOpDef {
+	Eq,
+	Ne,
+	Gt,
+	Gte,
+	Lt,
+	Lte,
+	Contains,
+	Exists,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ApiTransformStepDef {
+	Rename {
+		from: String,
+		to: String,
+	},
+	Set {
+		field: String,
+		value: serde_json::Value,
+	},
+	Upper {
+		field: String,
+	},
+	Lower {
+		field: String,
+	},
+	Remove {
+		field: String,
+	},
+	Copy {
+		from: String,
+		to: String,
+	},
+	Default {
+		field: String,
+		value: serde_json::Value,
+	},
+	Filter {
+		field: String,
+		op: ApiFilterOpDef,
+		#[serde(default)]
+		value: Option<serde_json::Value>,
+	},
+	MapValue {
+		field: String,
+		mapping: std::collections::HashMap<String, serde_json::Value>,
+	},
+	Truncate {
+		field: String,
+		max_len: usize,
+	},
+	Nest {
+		fields: Vec<String>,
+		into: String,
+	},
+	Flatten {
+		field: String,
+	},
+	Hash {
+		field: String,
+	},
+	Coalesce {
+		fields: Vec<String>,
+		into: String,
+	},
+	SchemaFilter {
+		field: String,
+		#[serde(default)]
+		allow: Option<Vec<String>>,
+		#[serde(default)]
+		deny: Option<Vec<String>>,
+	},
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiEmptyOriginConfigDef {}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiTrinoExtraCredentialsDef {
+	pub username: String,
+	pub password: String,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ApiTrinoAuthDef {
+	Bearer { token: String },
+	Basic { username: String, password: String },
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiTrinoOriginConfigDef {
+	pub user: Option<String>,
+	pub catalog: Option<String>,
+	pub schema: Option<String>,
+	pub timeout_secs: Option<u64>,
+	pub auth: Option<ApiTrinoAuthDef>,
+	pub extra_credentials: Option<ApiTrinoExtraCredentialsDef>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiClickHouseOriginConfigDef {
+	pub user: Option<String>,
+	pub password: Option<String>,
+	pub database: Option<String>,
+	pub timeout_secs: Option<u64>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ApiAuthConfigDef {
+	Bearer { token: String },
+	Header { name: String, value: String },
+	Basic { username: String, password: String },
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ApiHttpPaginationConfigDef {
+	Offset {
+		page_size: usize,
+		limit_param: Option<String>,
+		offset_param: Option<String>,
+	},
+	Cursor {
+		page_size: usize,
+		cursor_param: Option<String>,
+		cursor_path: String,
+	},
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiHttpOriginConfigDef {
+	pub headers: Option<std::collections::HashMap<String, String>>,
+	pub auth: Option<ApiAuthConfigDef>,
+	pub pagination: Option<ApiHttpPaginationConfigDef>,
+	pub response_path: Option<String>,
+	pub timeout_secs: Option<u64>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiGraphqlPaginationDef {
+	pub cursor_variable: Option<String>,
+	pub has_next_path: Option<String>,
+	pub end_cursor_path: Option<String>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiGraphqlOriginConfigDef {
+	pub headers: Option<std::collections::HashMap<String, String>>,
+	pub auth: Option<ApiAuthConfigDef>,
+	pub response_path: Option<String>,
+	pub timeout_secs: Option<u64>,
+	pub pagination: Option<ApiGraphqlPaginationDef>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiMcpOriginConfigDef {
+	pub args: Option<Vec<String>>,
+	pub key_field: Option<String>,
+	pub response_path: Option<String>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKafkaAuthDef {
+	pub security_protocol: Option<String>,
+	pub sasl_mechanism: Option<String>,
+	pub sasl_username: Option<String>,
+	pub sasl_password: Option<String>,
+	pub sasl_kerberos_keytab: Option<String>,
+	pub sasl_kerberos_principal: Option<String>,
+	pub ssl_ca_location: Option<String>,
+	pub ssl_certificate_location: Option<String>,
+	pub ssl_key_location: Option<String>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKafkaOriginConfigDef {
+	pub brokers: String,
+	pub topic: String,
+	pub group_id: String,
+	pub auto_offset_reset: Option<String>,
+	pub auth: Option<ApiKafkaAuthDef>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiSurrealDbOriginConfigDef {
+	pub url: String,
+	pub namespace: String,
+	pub database: String,
+	pub username: Option<String>,
+	pub password: Option<String>,
+	pub live: Option<bool>,
+	pub table: Option<String>,
+	pub key_column: Option<String>,
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ApiOriginConfigDef {
+	Empty(ApiEmptyOriginConfigDef),
+	Trino(ApiTrinoOriginConfigDef),
+	ClickHouse(ApiClickHouseOriginConfigDef),
+	Http(ApiHttpOriginConfigDef),
+	Graphql(ApiGraphqlOriginConfigDef),
+	Mcp(ApiMcpOriginConfigDef),
+	Kafka(ApiKafkaOriginConfigDef),
+	SurrealDb(ApiSurrealDbOriginConfigDef),
+}
+
+#[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryDef {
 	pub id: String,
 	pub sql: String,
@@ -142,8 +373,10 @@ pub struct PipeConfig {
 	#[serde(default)]
 	pub recipe: Option<PipeRecipeDef>,
 	#[serde(default)]
+	#[cfg_attr(feature = "api", schema(value_type = Vec<ApiTransformStepDef>))]
 	pub filters: Vec<serde_json::Value>,
 	#[serde(default)]
+	#[cfg_attr(feature = "api", schema(value_type = Vec<ApiTransformStepDef>))]
 	pub transforms: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub links: Vec<LinkDef>,
@@ -183,8 +416,10 @@ pub struct PipePresetSpec {
 	#[serde(default)]
 	pub recipe: Option<PipeRecipeDef>,
 	#[serde(default)]
+	#[cfg_attr(feature = "api", schema(value_type = Vec<ApiTransformStepDef>))]
 	pub filters: Vec<serde_json::Value>,
 	#[serde(default)]
+	#[cfg_attr(feature = "api", schema(value_type = Vec<ApiTransformStepDef>))]
 	pub transforms: Vec<serde_json::Value>,
 	#[serde(default)]
 	pub links: Vec<LinkDef>,
@@ -284,6 +519,7 @@ pub struct OriginDef {
 	#[serde(default)]
 	pub trino_url: Option<String>,
 	#[serde(default)]
+	#[cfg_attr(feature = "api", schema(value_type = ApiOriginConfigDef))]
 	pub config: serde_json::Value,
 }
 

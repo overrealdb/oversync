@@ -30,6 +30,7 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 - **Dual mode** — embeddable library (`cargo add oversync`) or standalone binary
 - **Full REST API** — CRUD pipes, saved recipes, sinks, credentials, dry-run, lifecycle control, OpenAPI 3.1
 - **Generated OpenAPI** — `utoipa`-driven base spec merged with engine-owned routes like dry-run, resolve, credentials, and config versions
+- **Generated UI SDK** — the React control plane can generate its TypeScript SDK directly from the merged OpenAPI spec
 
 ## Quick Start
 
@@ -89,6 +90,33 @@ oversync --config oversync.toml --bind 0.0.0.0:4200
 ```
 
 The standalone server exposes the embedded control-plane UI at `/` and the same-origin API at `/api`.
+
+### OpenAPI and UI SDK
+
+The standalone control plane exposes the merged OpenAPI 3.1 spec at:
+
+- `GET /openapi.json`
+
+You can also export the same merged spec from the CLI without starting the server:
+
+```bash
+oversync openapi > openapi.json
+oversync openapi --file ui/openapi.json
+```
+
+The frontend SDK in `ui/` is generated from that spec with `@hey-api/openapi-ts`:
+
+```bash
+cd ui
+npm run generate:api
+```
+
+This refreshes:
+
+- `ui/openapi.json`
+- `ui/src/api/generated/*`
+
+The React control plane already uses those generated operations for its pipe, sink, history, sync, import/export, and saved-recipe API calls.
 
 ## Configuration
 

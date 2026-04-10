@@ -1,3 +1,12 @@
+import type {
+  ApiLinkDef,
+  ApiOriginConfig,
+  ApiOriginConfigDef,
+  ApiPipeRecipeDef,
+  ApiSinkConfig,
+  ApiTransformStep,
+} from "../api/generated/types.gen";
+
 export interface HealthResponse {
   status: string;
   version: string;
@@ -20,7 +29,7 @@ export interface CycleInfo {
 export interface SinkInfo {
   name: string;
   sink_type: string;
-  config?: Record<string, unknown>;
+  config?: ApiSinkConfig;
 }
 
 export interface ErrorResponse {
@@ -31,13 +40,11 @@ export interface SinkListResponse {
   sinks: SinkInfo[];
 }
 
-export interface PipeRecipe {
-  type: "postgres_metadata" | "postgres_snapshot";
-  prefix: string;
-  entity_type_id?: string;
-  schema_id?: string;
-  schemas?: string[];
-}
+export type PipeRecipe = ApiPipeRecipeDef;
+
+export type PipeTransformDefinition = ApiTransformStep;
+
+export type PipeLinkDefinition = ApiLinkDef;
 
 export interface PipeInfo {
   name: string;
@@ -84,7 +91,7 @@ export interface PipePresetSpec {
   origin_dsn: string;
   origin_credential?: string;
   trino_url?: string;
-  origin_config?: Record<string, unknown>;
+  origin_config?: ApiOriginConfig;
   parameters?: PipePresetParameter[];
   targets: string[];
   queries: PipeQueryDefinition[];
@@ -92,9 +99,9 @@ export interface PipePresetSpec {
   delta?: PipeDeltaDefinition;
   retry?: PipeRetryDefinition;
   recipe?: PipeRecipe | null;
-  filters: unknown[];
-  transforms: unknown[];
-  links: unknown[];
+  filters: PipeTransformDefinition[];
+  transforms: PipeTransformDefinition[];
+  links: PipeLinkDefinition[];
 }
 
 export interface PipePresetInfo {
@@ -120,7 +127,7 @@ export interface PipeOriginDefinition {
   dsn: string;
   credential?: string | null;
   trino_url?: string | null;
-  config?: Record<string, unknown> | null;
+  config?: ApiOriginConfigDef | null;
 }
 
 export interface RuntimePipeConfig {
@@ -132,9 +139,9 @@ export interface RuntimePipeConfig {
   delta?: PipeDeltaDefinition;
   retry?: PipeRetryDefinition;
   recipe?: PipeRecipe | null;
-  filters: unknown[];
-  transforms: unknown[];
-  links: unknown[];
+  filters: PipeTransformDefinition[];
+  transforms: PipeTransformDefinition[];
+  links: PipeLinkDefinition[];
   alert_webhook?: string | null;
   enabled: boolean;
 }
@@ -147,12 +154,12 @@ export interface ResolvePipeResponse {
 export interface CreateSinkRequest {
   name: string;
   sink_type: string;
-  config: Record<string, unknown>;
+  config: ApiSinkConfig;
 }
 
 export interface UpdateSinkRequest {
   sink_type?: string;
-  config?: Record<string, unknown>;
+  config?: ApiSinkConfig;
   enabled?: boolean;
 }
 
@@ -167,15 +174,15 @@ export interface CreatePipeRequest {
   origin_dsn: string;
   origin_credential?: string;
   trino_url?: string;
-  origin_config?: Record<string, unknown>;
+  origin_config?: ApiOriginConfig;
   targets?: string[];
   schedule?: PipeScheduleDefinition;
   delta?: PipeDeltaDefinition;
   retry?: PipeRetryDefinition;
   recipe?: PipeRecipe | null;
-  filters?: unknown[];
-  transforms?: unknown[];
-  links?: unknown[];
+  filters?: PipeTransformDefinition[];
+  transforms?: PipeTransformDefinition[];
+  links?: PipeLinkDefinition[];
   queries?: PipeQueryDefinition[];
 }
 
@@ -184,15 +191,15 @@ export interface UpdatePipeRequest {
   origin_dsn?: string;
   origin_credential?: string;
   trino_url?: string;
-  origin_config?: Record<string, unknown>;
+  origin_config?: ApiOriginConfig;
   targets?: string[];
   schedule?: PipeScheduleDefinition;
   delta?: PipeDeltaDefinition;
   retry?: PipeRetryDefinition;
   recipe?: PipeRecipe | null;
-  filters?: unknown[];
-  transforms?: unknown[];
-  links?: unknown[];
+  filters?: PipeTransformDefinition[];
+  transforms?: PipeTransformDefinition[];
+  links?: PipeLinkDefinition[];
   queries?: PipeQueryDefinition[];
   enabled?: boolean;
 }

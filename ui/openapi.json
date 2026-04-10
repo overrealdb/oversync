@@ -1,0 +1,4701 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "oversync API",
+    "description": "HTTP API for managing oversync pipes, sinks, recipes, and sync status.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "0.6.0"
+  },
+  "paths": {
+    "/config/export": {
+      "get": {
+        "tags": [
+          "operations"
+        ],
+        "operationId": "export_config",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Export format: toml or json",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/ExportConfigFormat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current persisted config export",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Config export unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/import": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "operationId": "import_config",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Config imported into the current control plane",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Config import failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/versions": {
+      "get": {
+        "tags": [],
+        "operationId": "list_config_versions",
+        "responses": {
+          "200": {
+            "description": "Saved config versions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConfigVersion"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Config versions could not be loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/credentials": {
+      "get": {
+        "tags": [],
+        "operationId": "list_credentials",
+        "responses": {
+          "200": {
+            "description": "Stored credential metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Credential metadata could not be loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Credential stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Credential could not be encrypted or persisted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/credentials/{name}": {
+      "delete": {
+        "tags": [],
+        "operationId": "delete_credential",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Credential name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Credential could not be deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "handlers"
+        ],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/history": {
+      "get": {
+        "tags": [
+          "operations"
+        ],
+        "operationId": "get_history",
+        "responses": {
+          "200": {
+            "description": "Cycle history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Database not configured",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipe-presets": {
+      "get": {
+        "tags": [
+          "handlers"
+        ],
+        "operationId": "list_pipe_presets",
+        "responses": {
+          "200": {
+            "description": "List reusable pipe presets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipePresetListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "create_pipe_preset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePipePresetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Pipe preset created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipe-presets/{name}": {
+      "get": {
+        "tags": [
+          "handlers"
+        ],
+        "operationId": "get_pipe_preset",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe preset name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipe preset details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipePresetInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipe preset not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "update_pipe_preset",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe preset name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePipePresetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Pipe preset updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "delete_pipe_preset",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe preset name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipe preset deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipes": {
+      "get": {
+        "tags": [
+          "handlers"
+        ],
+        "operationId": "list_pipes",
+        "responses": {
+          "200": {
+            "description": "List configured pipes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipeListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "create_pipe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePipeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Pipe created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipes/dry-run": {
+      "post": {
+        "tags": [],
+        "operationId": "dry_run_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DryRunRequestDoc"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run preview result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DryRunResultDoc"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request validation, credential resolution, or execution failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipes/{name}": {
+      "get": {
+        "tags": [
+          "handlers"
+        ],
+        "operationId": "get_pipe",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipe details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipeInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipe not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "update_pipe",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePipeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Pipe updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "delete_pipe",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipe deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pipes/{name}/resolve": {
+      "get": {
+        "tags": [],
+        "operationId": "resolve_pipe_handler",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Pipe name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipe definition with runtime-expanded effective queries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipeResolveResponseDoc"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pipe credentials or recipe expansion failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipe not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Control-plane config could not be loaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sinks": {
+      "get": {
+        "tags": [
+          "handlers"
+        ],
+        "operationId": "list_sinks",
+        "responses": {
+          "200": {
+            "description": "List configured sinks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SinkListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "create_sink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sink created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sinks/{name}": {
+      "put": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "update_sink",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Sink name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sink updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "mutations"
+        ],
+        "operationId": "delete_sink",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "description": "Sink name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sink deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync/pause": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "operationId": "pause_sync",
+        "responses": {
+          "200": {
+            "description": "Sync paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync/resume": {
+      "post": {
+        "tags": [
+          "operations"
+        ],
+        "operationId": "resume_sync",
+        "responses": {
+          "200": {
+            "description": "Sync resumed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Resume failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync/status": {
+      "get": {
+        "tags": [
+          "operations"
+        ],
+        "operationId": "sync_status",
+        "responses": {
+          "200": {
+            "description": "Sync status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiAuthConfig": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "token",
+              "type"
+            ],
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "bearer"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "value",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "header"
+                ]
+              },
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "username",
+              "password",
+              "type"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "basic"
+                ]
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ApiAuthConfigDef": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "token",
+              "type"
+            ],
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "bearer"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "name",
+              "value",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "header"
+                ]
+              },
+              "value": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "username",
+              "password",
+              "type"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "basic"
+                ]
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ApiClickHouseOriginConfig": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiClickHouseOriginConfigDef": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiClickHouseSinkConfig": {
+        "type": "object",
+        "required": [
+          "url",
+          "table"
+        ],
+        "properties": {
+          "database": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "table": {
+            "type": "string"
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "url": {
+            "type": "string"
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiDeltaDef": {
+        "type": "object",
+        "properties": {
+          "diff_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiDiffMode"
+              }
+            ]
+          },
+          "fail_safe_threshold": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "ApiDiffMode": {
+        "type": "string",
+        "enum": [
+          "db",
+          "memory"
+        ]
+      },
+      "ApiEmptyOriginConfig": {
+        "type": "object"
+      },
+      "ApiEmptyOriginConfigDef": {
+        "type": "object"
+      },
+      "ApiFilterOp": {
+        "type": "string",
+        "enum": [
+          "eq",
+          "ne",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "contains",
+          "exists"
+        ]
+      },
+      "ApiFilterOpDef": {
+        "type": "string",
+        "enum": [
+          "eq",
+          "ne",
+          "gt",
+          "gte",
+          "lt",
+          "lte",
+          "contains",
+          "exists"
+        ]
+      },
+      "ApiGraphqlOriginConfig": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiAuthConfig"
+              }
+            ]
+          },
+          "headers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiGraphqlPagination"
+              }
+            ]
+          },
+          "response_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ApiGraphqlOriginConfigDef": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiAuthConfigDef"
+              }
+            ]
+          },
+          "headers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiGraphqlPaginationDef"
+              }
+            ]
+          },
+          "response_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ApiGraphqlPagination": {
+        "type": "object",
+        "properties": {
+          "cursor_variable": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_cursor_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_next_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiGraphqlPaginationDef": {
+        "type": "object",
+        "properties": {
+          "cursor_variable": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "end_cursor_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "has_next_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiHttpOriginConfig": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiAuthConfig"
+              }
+            ]
+          },
+          "headers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiHttpPaginationConfig"
+              }
+            ]
+          },
+          "response_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ApiHttpOriginConfigDef": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiAuthConfigDef"
+              }
+            ]
+          },
+          "headers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "pagination": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiHttpPaginationConfigDef"
+              }
+            ]
+          },
+          "response_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ApiHttpPaginationConfig": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "page_size",
+              "type"
+            ],
+            "properties": {
+              "limit_param": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "offset_param": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "page_size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "offset"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "page_size",
+              "cursor_path",
+              "type"
+            ],
+            "properties": {
+              "cursor_param": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cursor_path": {
+                "type": "string"
+              },
+              "page_size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "cursor"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ApiHttpPaginationConfigDef": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "page_size",
+              "type"
+            ],
+            "properties": {
+              "limit_param": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "offset_param": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "page_size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "offset"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "page_size",
+              "cursor_path",
+              "type"
+            ],
+            "properties": {
+              "cursor_param": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "cursor_path": {
+                "type": "string"
+              },
+              "page_size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "cursor"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ApiHttpSinkConfig": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiAuthConfig"
+              }
+            ]
+          },
+          "headers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retry_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiKafkaAuth": {
+        "type": "object",
+        "properties": {
+          "sasl_kerberos_keytab": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_kerberos_principal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_mechanism": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "security_protocol": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_ca_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_certificate_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_key_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiKafkaAuthDef": {
+        "type": "object",
+        "properties": {
+          "sasl_kerberos_keytab": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_kerberos_principal": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_mechanism": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sasl_username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "security_protocol": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_ca_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_certificate_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ssl_key_location": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiKafkaKeyFormat": {
+        "type": "string",
+        "enum": [
+          "string",
+          "json_object"
+        ]
+      },
+      "ApiKafkaOriginConfig": {
+        "type": "object",
+        "required": [
+          "brokers",
+          "topic",
+          "group_id"
+        ],
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiKafkaAuth"
+              }
+            ]
+          },
+          "auto_offset_reset": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brokers": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiKafkaOriginConfigDef": {
+        "type": "object",
+        "required": [
+          "brokers",
+          "topic",
+          "group_id"
+        ],
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiKafkaAuthDef"
+              }
+            ]
+          },
+          "auto_offset_reset": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "brokers": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiKafkaSinkConfig": {
+        "type": "object",
+        "required": [
+          "brokers",
+          "topic"
+        ],
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiKafkaAuth"
+              }
+            ]
+          },
+          "brokers": {
+            "type": "string"
+          },
+          "created_change_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "key_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "key_format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiKafkaKeyFormat"
+              }
+            ]
+          },
+          "topic": {
+            "type": "string"
+          },
+          "value_format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiKafkaValueFormat"
+              }
+            ]
+          }
+        }
+      },
+      "ApiKafkaValueFormat": {
+        "type": "string",
+        "enum": [
+          "envelope",
+          "compact"
+        ]
+      },
+      "ApiLinkDef": {
+        "type": "object",
+        "required": [
+          "name",
+          "left_field",
+          "right_field",
+          "target_origin",
+          "target_query"
+        ],
+        "properties": {
+          "left_field": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "right_field": {
+            "type": "string"
+          },
+          "strategy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiLinkStrategy"
+              }
+            ]
+          },
+          "target_origin": {
+            "type": "string"
+          },
+          "target_query": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiLinkStrategy": {
+        "type": "string",
+        "enum": [
+          "exact",
+          "normalized"
+        ]
+      },
+      "ApiMcpOriginConfig": {
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "key_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "response_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiMcpOriginConfigDef": {
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "key_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "response_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiMcpSinkConfig": {
+        "type": "object",
+        "required": [
+          "dsn",
+          "tool_name"
+        ],
+        "properties": {
+          "args": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "dsn": {
+            "type": "string"
+          },
+          "tool_name": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiMissedTickPolicy": {
+        "type": "string",
+        "enum": [
+          "skip",
+          "burst"
+        ]
+      },
+      "ApiMysqlSinkConfig": {
+        "type": "object",
+        "required": [
+          "dsn",
+          "table"
+        ],
+        "properties": {
+          "dsn": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiOriginConfig": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ApiEmptyOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiTrinoOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiClickHouseOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiHttpOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiGraphqlOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiMcpOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiKafkaOriginConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiSurrealDbOriginConfig"
+          }
+        ]
+      },
+      "ApiOriginConfigDef": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ApiEmptyOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiTrinoOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiClickHouseOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiHttpOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiGraphqlOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiMcpOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiKafkaOriginConfigDef"
+          },
+          {
+            "$ref": "#/components/schemas/ApiSurrealDbOriginConfigDef"
+          }
+        ]
+      },
+      "ApiPipeRecipeDef": {
+        "type": "object",
+        "required": [
+          "type",
+          "prefix"
+        ],
+        "properties": {
+          "entity_type_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "schema_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "schemas": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "$ref": "#/components/schemas/ApiPipeRecipeType"
+          }
+        }
+      },
+      "ApiPipeRecipeType": {
+        "type": "string",
+        "enum": [
+          "postgres_metadata",
+          "postgres_snapshot"
+        ]
+      },
+      "ApiPostgresSinkConfig": {
+        "type": "object",
+        "required": [
+          "dsn",
+          "table"
+        ],
+        "properties": {
+          "dsn": {
+            "type": "string"
+          },
+          "schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "table": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiRetryDef": {
+        "type": "object",
+        "properties": {
+          "max_retries": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "retry_base_delay_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ApiScheduleDef": {
+        "type": "object",
+        "properties": {
+          "interval_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "max_requests_per_minute": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "missed_tick_policy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiMissedTickPolicy"
+              }
+            ]
+          }
+        }
+      },
+      "ApiSinkConfig": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ApiStdoutSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiKafkaSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiSurrealDbSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiMcpSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiMysqlSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiPostgresSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiClickHouseSinkConfig"
+          },
+          {
+            "$ref": "#/components/schemas/ApiHttpSinkConfig"
+          }
+        ]
+      },
+      "ApiStdoutSinkConfig": {
+        "type": "object",
+        "properties": {
+          "pretty": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiSurrealDbOriginConfig": {
+        "type": "object",
+        "required": [
+          "url",
+          "namespace",
+          "database"
+        ],
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "key_column": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "live": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "table": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiSurrealDbOriginConfigDef": {
+        "type": "object",
+        "required": [
+          "url",
+          "namespace",
+          "database"
+        ],
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "key_column": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "live": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "table": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiSurrealDbSinkConfig": {
+        "type": "object",
+        "required": [
+          "url",
+          "namespace",
+          "database",
+          "table"
+        ],
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "key_field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiSurrealDbSinkMode"
+              }
+            ]
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "password": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "table": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiSurrealDbSinkMode": {
+        "type": "string",
+        "enum": [
+          "envelope",
+          "document"
+        ]
+      },
+      "ApiTransformStep": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "type"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rename"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "value",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "set"
+                ]
+              },
+              "value": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "upper"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "lower"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "type"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "copy"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "value",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "default"
+                ]
+              },
+              "value": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "op",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/components/schemas/ApiFilterOp"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "filter"
+                ]
+              },
+              "value": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "mapping",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "mapping": {
+                "type": "object",
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "map_value"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "max_len",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "max_len": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "truncate"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "fields",
+              "into",
+              "type"
+            ],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "into": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "nest"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "flatten"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "hash"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "fields",
+              "into",
+              "type"
+            ],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "into": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "coalesce"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "allow": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "deny": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "schema_filter"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ApiTransformStepDef": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "type"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rename"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "value",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "set"
+                ]
+              },
+              "value": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "upper"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "lower"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "type"
+            ],
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "copy"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "value",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "default"
+                ]
+              },
+              "value": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "op",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/components/schemas/ApiFilterOpDef"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "filter"
+                ]
+              },
+              "value": {}
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "mapping",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "mapping": {
+                "type": "object",
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "map_value"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "max_len",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "max_len": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "truncate"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "fields",
+              "into",
+              "type"
+            ],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "into": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "nest"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "flatten"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "hash"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "fields",
+              "into",
+              "type"
+            ],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "into": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "coalesce"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "field",
+              "type"
+            ],
+            "properties": {
+              "allow": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "deny": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "field": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "schema_filter"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ApiTrinoAuth": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "token",
+              "type"
+            ],
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "bearer"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "username",
+              "password",
+              "type"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "basic"
+                ]
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ApiTrinoAuthDef": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "token",
+              "type"
+            ],
+            "properties": {
+              "token": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "bearer"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "username",
+              "password",
+              "type"
+            ],
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "basic"
+                ]
+              },
+              "username": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ApiTrinoExtraCredentials": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiTrinoExtraCredentialsDef": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "ApiTrinoOriginConfig": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiTrinoAuth"
+              }
+            ]
+          },
+          "catalog": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra_credentials": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiTrinoExtraCredentials"
+              }
+            ]
+          },
+          "schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ApiTrinoOriginConfigDef": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiTrinoAuthDef"
+              }
+            ]
+          },
+          "catalog": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "extra_credentials": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiTrinoExtraCredentialsDef"
+              }
+            ]
+          },
+          "schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeout_secs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ConfigVersion": {
+        "type": "object",
+        "description": "A saved config snapshot with version number.",
+        "required": [
+          "version",
+          "config_json",
+          "created_at",
+          "description"
+        ],
+        "properties": {
+          "config_json": {},
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateCredentialRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "credential_type",
+          "secret"
+        ],
+        "properties": {
+          "credential_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatePipePresetRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "spec"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PipePresetSpecInput"
+          }
+        }
+      },
+      "CreatePipeRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "origin_connector",
+          "origin_dsn"
+        ],
+        "properties": {
+          "delta": {
+            "$ref": "#/components/schemas/ApiDeltaDef"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStep"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiLinkDef"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin_config": {
+            "$ref": "#/components/schemas/ApiOriginConfig"
+          },
+          "origin_connector": {
+            "type": "string"
+          },
+          "origin_credential": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_dsn": {
+            "type": "string"
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipeQueryInput"
+            }
+          },
+          "recipe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiPipeRecipeDef"
+              }
+            ]
+          },
+          "retry": {
+            "$ref": "#/components/schemas/ApiRetryDef"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/ApiScheduleDef"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStep"
+            }
+          },
+          "trino_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreateSinkRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "sink_type"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ApiSinkConfig"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sink_type": {
+            "type": "string"
+          }
+        }
+      },
+      "CredentialInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "credential_type",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "credential_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CredentialListResponse": {
+        "type": "object",
+        "required": [
+          "credentials"
+        ],
+        "properties": {
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredentialInfo"
+            }
+          }
+        }
+      },
+      "CycleInfo": {
+        "type": "object",
+        "required": [
+          "cycle_id",
+          "source",
+          "query",
+          "status",
+          "started_at",
+          "rows_created",
+          "rows_updated",
+          "rows_deleted"
+        ],
+        "properties": {
+          "cycle_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "query": {
+            "type": "string"
+          },
+          "rows_created": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "rows_deleted": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "rows_updated": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "source": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "DeltaDef": {
+        "type": "object",
+        "description": "Delta detection settings for a pipe.",
+        "properties": {
+          "diff_mode": {
+            "$ref": "#/components/schemas/DiffMode"
+          },
+          "fail_safe_threshold": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "DiffMode": {
+        "type": "string",
+        "enum": [
+          "db",
+          "memory"
+        ]
+      },
+      "DryRunChangesDoc": {
+        "type": "object",
+        "required": [
+          "created",
+          "updated",
+          "deleted"
+        ],
+        "properties": {
+          "created": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deleted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "DryRunModeDoc": {
+        "type": "string",
+        "enum": [
+          "mock",
+          "live"
+        ]
+      },
+      "DryRunRequestDoc": {
+        "type": "object",
+        "required": [
+          "pipe",
+          "query_id",
+          "mode",
+          "mock_data",
+          "row_limit",
+          "transforms",
+          "use_existing_state"
+        ],
+        "properties": {
+          "credentials": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TransientCredentialsDoc"
+              }
+            ]
+          },
+          "mock_data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "mode": {
+            "$ref": "#/components/schemas/DryRunModeDoc"
+          },
+          "pipe": {
+            "$ref": "#/components/schemas/PipeConfig"
+          },
+          "query_id": {
+            "type": "string"
+          },
+          "row_limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transforms": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "use_existing_state": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DryRunResultDoc": {
+        "type": "object",
+        "required": [
+          "input_rows",
+          "input_sample",
+          "changes",
+          "after_transform",
+          "stats"
+        ],
+        "properties": {
+          "after_transform": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "changes": {
+            "$ref": "#/components/schemas/DryRunChangesDoc"
+          },
+          "input_rows": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "input_sample": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "stats": {
+            "$ref": "#/components/schemas/DryRunStatsDoc"
+          }
+        }
+      },
+      "DryRunStatsDoc": {
+        "type": "object",
+        "required": [
+          "rows_fetched",
+          "events_before_transform",
+          "events_after_transform",
+          "events_filtered_out"
+        ],
+        "properties": {
+          "events_after_transform": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "events_before_transform": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "events_filtered_out": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rows_fetched": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ExportConfigFormat": {
+        "type": "string",
+        "enum": [
+          "toml",
+          "json"
+        ]
+      },
+      "ExportConfigQuery": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExportConfigFormat"
+              }
+            ]
+          }
+        }
+      },
+      "ExportConfigResponse": {
+        "type": "object",
+        "required": [
+          "format",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ExportConfigFormat"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HistoryResponse": {
+        "type": "object",
+        "required": [
+          "cycles"
+        ],
+        "properties": {
+          "cycles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CycleInfo"
+            }
+          }
+        }
+      },
+      "ImportConfigRequest": {
+        "type": "object",
+        "required": [
+          "format",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ExportConfigFormat"
+          }
+        }
+      },
+      "ImportConfigResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "message",
+          "warnings"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "LinkDef": {
+        "type": "object",
+        "description": "Cross-source entity linking rule in TOML config.",
+        "required": [
+          "name",
+          "left_field",
+          "right_field",
+          "target_origin",
+          "target_query"
+        ],
+        "properties": {
+          "left_field": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "right_field": {
+            "type": "string"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/LinkStrategy"
+          },
+          "target_origin": {
+            "type": "string"
+          },
+          "target_query": {
+            "type": "string"
+          }
+        }
+      },
+      "LinkStrategy": {
+        "type": "string",
+        "description": "Matching strategy for entity linking rules.",
+        "enum": [
+          "exact",
+          "normalized"
+        ]
+      },
+      "MissedTickPolicy": {
+        "type": "string",
+        "description": "What to do when a cycle takes longer than the polling interval.",
+        "enum": [
+          "skip",
+          "burst"
+        ]
+      },
+      "MutationResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OriginDef": {
+        "type": "object",
+        "description": "Origin connector configuration within a pipe.",
+        "required": [
+          "connector",
+          "dsn"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ApiOriginConfigDef"
+          },
+          "connector": {
+            "type": "string"
+          },
+          "credential": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dsn": {
+            "type": "string"
+          },
+          "trino_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Trino URL for non-native connectors. When connector is e.g. \"mssql\",\nqueries are routed through this Trino instance.\nIf unset, falls back to engine-level default Trino URL."
+          }
+        }
+      },
+      "PipeConfig": {
+        "type": "object",
+        "description": "A pipe is a complete data pipeline: origin → delta → transform → targets.\n\nPipes are the only supported runtime onboarding surface. Targets are\nreferences to named sinks.",
+        "required": [
+          "name",
+          "origin"
+        ],
+        "properties": {
+          "alert_webhook": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "delta": {
+            "$ref": "#/components/schemas/DeltaDef"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStepDef"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkDef"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/OriginDef"
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueryDef"
+            }
+          },
+          "recipe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PipeRecipeDef"
+              }
+            ]
+          },
+          "retry": {
+            "$ref": "#/components/schemas/RetryDef"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/ScheduleDef"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStepDef"
+            }
+          }
+        }
+      },
+      "PipeInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "origin_connector",
+          "origin_dsn",
+          "targets",
+          "interval_secs",
+          "query_count",
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "interval_secs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin_connector": {
+            "type": "string"
+          },
+          "origin_dsn": {
+            "type": "string"
+          },
+          "query_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recipe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiPipeRecipeDef"
+              }
+            ]
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PipeListResponse": {
+        "type": "object",
+        "required": [
+          "pipes"
+        ],
+        "properties": {
+          "pipes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipeInfo"
+            }
+          }
+        }
+      },
+      "PipePresetInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "spec"
+        ],
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PipePresetSpecInput"
+          }
+        }
+      },
+      "PipePresetListResponse": {
+        "type": "object",
+        "required": [
+          "presets"
+        ],
+        "properties": {
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipePresetInfo"
+            }
+          }
+        }
+      },
+      "PipePresetParameterInput": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "default": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PipePresetSpecInput": {
+        "type": "object",
+        "required": [
+          "origin_connector",
+          "origin_dsn"
+        ],
+        "properties": {
+          "delta": {
+            "$ref": "#/components/schemas/ApiDeltaDef"
+          },
+          "filters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStep"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiLinkDef"
+            }
+          },
+          "origin_config": {
+            "$ref": "#/components/schemas/ApiOriginConfig"
+          },
+          "origin_connector": {
+            "type": "string"
+          },
+          "origin_credential": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_dsn": {
+            "type": "string"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipePresetParameterInput"
+            }
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipeQueryInput"
+            }
+          },
+          "recipe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiPipeRecipeDef"
+              }
+            ]
+          },
+          "retry": {
+            "$ref": "#/components/schemas/ApiRetryDef"
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/ApiScheduleDef"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "transforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStep"
+            }
+          },
+          "trino_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PipeQueryInput": {
+        "type": "object",
+        "required": [
+          "id",
+          "sql",
+          "key_column"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key_column": {
+            "type": "string"
+          },
+          "sinks": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "sql": {
+            "type": "string"
+          },
+          "transform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PipeRecipeDef": {
+        "type": "object",
+        "required": [
+          "type",
+          "prefix"
+        ],
+        "properties": {
+          "entity_type_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "schema_id": {
+            "type": "string"
+          },
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "$ref": "#/components/schemas/PipeRecipeType"
+          }
+        }
+      },
+      "PipeRecipeType": {
+        "type": "string",
+        "enum": [
+          "postgres_metadata",
+          "postgres_snapshot"
+        ]
+      },
+      "PipeResolveResponseDoc": {
+        "type": "object",
+        "required": [
+          "pipe",
+          "effective_queries"
+        ],
+        "properties": {
+          "effective_queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueryDef"
+            }
+          },
+          "pipe": {
+            "$ref": "#/components/schemas/PipeConfig"
+          }
+        }
+      },
+      "QueryDef": {
+        "type": "object",
+        "required": [
+          "id",
+          "sql",
+          "key_column"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key_column": {
+            "type": "string"
+          },
+          "sinks": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "sql": {
+            "type": "string"
+          },
+          "transform": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "RetryDef": {
+        "type": "object",
+        "description": "Retry policy for failed cycles.",
+        "properties": {
+          "max_retries": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "retry_base_delay_secs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ScheduleDef": {
+        "type": "object",
+        "description": "Polling schedule for a pipe.",
+        "properties": {
+          "interval_secs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "max_requests_per_minute": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "missed_tick_policy": {
+            "$ref": "#/components/schemas/MissedTickPolicy"
+          }
+        }
+      },
+      "SinkInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "sink_type"
+        ],
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiSinkConfig"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "sink_type": {
+            "type": "string"
+          }
+        }
+      },
+      "SinkListResponse": {
+        "type": "object",
+        "required": [
+          "sinks"
+        ],
+        "properties": {
+          "sinks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SinkInfo"
+            }
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "required": [
+          "running",
+          "paused"
+        ],
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TransientCredentialsDoc": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdatePipePresetRequest": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spec": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PipePresetSpecInput"
+              }
+            ]
+          }
+        }
+      },
+      "UpdatePipeRequest": {
+        "type": "object",
+        "properties": {
+          "delta": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiDeltaDef"
+              }
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "filters": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStep"
+            }
+          },
+          "links": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ApiLinkDef"
+            }
+          },
+          "origin_config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiOriginConfig"
+              }
+            ]
+          },
+          "origin_connector": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_credential": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_dsn": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "queries": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PipeQueryInput"
+            }
+          },
+          "recipe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiPipeRecipeDef"
+              }
+            ]
+          },
+          "retry": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiRetryDef"
+              }
+            ]
+          },
+          "schedule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiScheduleDef"
+              }
+            ]
+          },
+          "targets": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "transforms": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ApiTransformStep"
+            }
+          },
+          "trino_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "UpdateSinkRequest": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ApiSinkConfig"
+              }
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sink_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

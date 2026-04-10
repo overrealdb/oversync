@@ -1,5 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "./client";
+import { generatedRequestOptions, unwrapGeneratedResult } from "./client";
+import {
+  createSink as createSinkSdk,
+  deleteSink as deleteSinkSdk,
+  listSinks as listSinksSdk,
+  updateSink as updateSinkSdk,
+} from "./generated/sdk.gen";
 import { useSettingsStore } from "@/stores/settings";
 import type {
   SinkListResponse,
@@ -12,7 +18,10 @@ export function useSinks() {
   const interval = useSettingsStore((s) => s.refreshInterval);
   return useQuery({
     queryKey: ["sinks"],
-    queryFn: () => api.get<SinkListResponse>("/sinks"),
+    queryFn: () =>
+      unwrapGeneratedResult<SinkListResponse>(
+        listSinksSdk({ ...generatedRequestOptions() }),
+      ),
     refetchInterval: interval,
   });
 }
@@ -21,7 +30,9 @@ export function useCreateSink() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: CreateSinkRequest) =>
-      api.post<MutationResponse>("/sinks", data),
+      unwrapGeneratedResult<MutationResponse>(
+        createSinkSdk({ ...generatedRequestOptions(), body: data }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sinks"] }),
   });
 }
@@ -30,7 +41,9 @@ export function useUpdateSink(name: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateSinkRequest) =>
-      api.put<MutationResponse>(`/sinks/${encodeURIComponent(name)}`, data),
+      unwrapGeneratedResult<MutationResponse>(
+        updateSinkSdk({ ...generatedRequestOptions(), path: { name }, body: data }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sinks"] }),
   });
 }
@@ -39,7 +52,9 @@ export function useDeleteSink() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (name: string) =>
-      api.del<MutationResponse>(`/sinks/${encodeURIComponent(name)}`),
+      unwrapGeneratedResult<MutationResponse>(
+        deleteSinkSdk({ ...generatedRequestOptions(), path: { name } }),
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sinks"] }),
   });
 }

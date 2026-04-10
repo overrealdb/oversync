@@ -475,7 +475,7 @@ struct PipeResolveResponseDoc {
 struct EngineApiDoc;
 
 #[cfg(feature = "api")]
-fn merged_api_doc() -> utoipa::openapi::OpenApi {
+pub fn merged_api_doc() -> utoipa::openapi::OpenApi {
 	let mut openapi = oversync_api::ApiDoc::openapi();
 	openapi.merge(EngineApiDoc::openapi());
 	openapi

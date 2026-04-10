@@ -43,6 +43,8 @@ pub use config_db::load_config_from_db;
 pub use cycle::{CycleConfig, CycleRunner};
 pub use embedded::{EmbeddedSync, EmbeddedSyncBuilder};
 pub use engine::OversyncEngine;
+#[cfg(feature = "api")]
+pub use engine::merged_api_doc;
 pub use lifecycle::LifecycleManager;
 pub use oversync_core::*;
 pub use registry::PluginRegistry;

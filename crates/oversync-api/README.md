@@ -10,6 +10,7 @@ Part of [oversync](https://github.com/overrealdb/oversync).
 - **Pipe-first control plane** -- runtime onboarding, resolve, dry-run, and import/export all flow through pipes
 - **Operational controls** -- trigger sync, pause/resume, view sync status and cycle history
 - **OpenAPI spec** -- auto-generated via utoipa, served at `/openapi.json`
+- **Frontend SDK source-of-truth** -- the merged spec is consumed by the React control plane and can be exported offline with `oversync openapi`
 - **API key auth middleware** -- optional authentication on protected routes
 
 ## Engine vs crate routes
@@ -24,6 +25,15 @@ Part of [oversync](https://github.com/overrealdb/oversync).
 - `/config/versions`
 
 That merged router is the recommended surface for standalone and embedded API servers. In the standalone control plane it is also mounted under `/api/*` so the embedded UI can use a same-origin API path without a second frontend service.
+
+The `oversync` binary also exposes that same merged spec via:
+
+```bash
+oversync openapi
+oversync openapi --file ui/openapi.json
+```
+
+The frontend then generates `ui/src/api/generated/*` from that file with `@hey-api/openapi-ts`.
 
 ## Endpoints
 

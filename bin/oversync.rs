@@ -39,6 +39,13 @@ enum Command {
 	/// Start the sync engine with API server (default)
 	Serve,
 
+	/// Print merged OpenAPI schema for the control-plane API
+	#[command(name = "openapi")]
+	OpenApi {
+		#[arg(short, long)]
+		file: Option<PathBuf>,
+	},
+
 	/// Validate a config file without starting
 	Validate {
 		#[arg(short, long)]
@@ -75,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
 	let command = cli.command.take().unwrap_or(Command::Serve);
 	match command {
 		Command::Serve => cmd_serve(&cli).await,
+		Command::OpenApi { file } => cmd_openapi(file),
 		Command::Validate { file } => cmd_validate(&cli, file),
 		Command::Diff { file } => cmd_diff(&cli, file).await,
 		Command::Export => cmd_export(&cli),
@@ -85,6 +93,15 @@ async fn main() -> anyhow::Result<()> {
 			limit,
 		} => cmd_dry_run(&cli, &pipe, &query, mock, limit).await,
 	}
+}
+
+fn cmd_openapi(file: Option<PathBuf>) -> anyhow::Result<()> {
+	let json = oversync::merged_api_doc().to_pretty_json()?;
+	match file {
+		Some(path) => std::fs::write(path, json)?,
+		None => println!("{json}"),
+	}
+	Ok(())
 }
 
 async fn cmd_serve(cli: &Cli) -> anyhow::Result<()> {

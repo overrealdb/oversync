@@ -1,5 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "./client";
+import { generatedRequestOptions, unwrapGeneratedResult } from "./client";
+import {
+  exportConfig as exportConfigSdk,
+  importConfig as importConfigSdk,
+} from "./generated/sdk.gen";
 import type {
   ExportConfigFormat,
   ExportConfigResponse,
@@ -9,7 +13,9 @@ import type {
 export function useExportConfig() {
   return useMutation({
     mutationFn: (format: ExportConfigFormat) =>
-      api.get<ExportConfigResponse>(`/config/export?format=${format}`),
+      unwrapGeneratedResult<ExportConfigResponse>(
+        exportConfigSdk({ ...generatedRequestOptions(), query: { format } }),
+      ),
   });
 }
 
@@ -17,7 +23,9 @@ export function useImportConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: { format: ExportConfigFormat; content: string }) =>
-      api.post<ImportConfigResponse>("/config/import", payload),
+      unwrapGeneratedResult<ImportConfigResponse>(
+        importConfigSdk({ ...generatedRequestOptions(), body: payload }),
+      ),
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["pipes"] }),
