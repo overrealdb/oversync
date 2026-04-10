@@ -13,8 +13,8 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 ## Features
 
 - **Pipe-based architecture** — each pipeline is a first-class `PipeConfig`: origin + filters + delta + transforms + targets
-- **9 origin connectors** — PostgreSQL, MySQL, ClickHouse, Trino, HTTP REST, GraphQL, Arrow Flight SQL, MCP, + any JDBC database via Trino bridge
-- **6 target types** — Kafka, HTTP webhook, SurrealDB, MCP, stdout
+- **10 origin connectors** — PostgreSQL, MySQL, ClickHouse, Trino, HTTP REST, GraphQL, Arrow Flight SQL, MCP, Kafka, SurrealDB, plus JDBC databases via Trino bridge
+- **8 target types** — Kafka, HTTP webhook, SurrealDB, PostgreSQL, MySQL, ClickHouse, MCP, stdout
 - **15 built-in transforms** — rename, set, upper/lower, remove, copy, default, filter, map_value, truncate, nest, flatten, hash, coalesce, schema_filter
 - **WASM plugins** — extend with custom transform steps via WebAssembly (wasmtime)
 - **Dry-run** — preview pipeline results without writing to targets or state (mock and live modes)
@@ -158,6 +158,8 @@ topic = "sync-events"
 
 Use `diff_mode = "db"` when downstream consumers need full `data` on delete events. `diff_mode = "memory"` only compares keys and hashes and emits `row_data = null`.
 
+Legacy `[[sources]]` configs are no longer supported. Startup now fails fast and requires `[[pipes]]`.
+
 ### PostgreSQL metadata recipe
 
 For metadata-catalog style pipelines you can let `oversync` generate the standard PostgreSQL entity + aspect-table queries:
@@ -287,8 +289,8 @@ Oversync automatically creates a Trino catalog and routes queries through it. Su
 PipeConfig
   │
   ├── Origin (fetch)
-  │     Native: postgres, mysql, clickhouse, trino, http, graphql, flight_sql, mcp
-  │     Via Trino: mssql, oracle, hive, iceberg, snowflake, teradata, db2, ...
+  │     Native: postgres, mysql, clickhouse, trino, http, graphql, flight_sql, mcp, kafka, surrealdb
+  │     Via Trino: mssql, oracle, hive, iceberg, snowflake, teradata, db2, redshift, ...
   │
   ├── Pre-delta Filters (regex allow/deny on RawRow)
   │
@@ -317,7 +319,9 @@ PipeConfig
 | GraphQL | `graphql` | Relay cursor pagination, error detection |
 | Arrow Flight SQL | `flight-sql` | gRPC streaming, Arrow record batch conversion |
 | MCP | `mcp` | JSON-RPC over stdio, tool call → data rows |
-| **Any JDBC** | via Trino | MSSQL, Oracle, Hive, Iceberg, Snowflake, Teradata, DB2, ... |
+| Kafka | `kafka` | Consume JSON events from Kafka topics |
+| SurrealDB | `surrealdb` | Query SurrealDB records directly |
+| **Any JDBC** | via Trino | MSSQL, Oracle, Hive, Iceberg, Snowflake, Teradata, DB2, Redshift, ... |
 
 ## Target Connectors
 
@@ -326,6 +330,9 @@ PipeConfig
 | Kafka | `kafka` | Native batch produce, message key = row key |
 | HTTP Webhook | `http` | POST/PUT, retry with exponential backoff, auth |
 | SurrealDB | `surrealdb` | UPSERT with `_meta`, batch via FOR loop |
+| PostgreSQL | `postgres` | UPSERT into relational tables with JSON payload column |
+| MySQL | `mysql` | UPSERT into relational tables with JSON payload column |
+| ClickHouse | `clickhouse` | HTTP insert, JSONEachRow payload |
 | MCP | `mcp` | Deliver events via tool calls (JSON-RPC over stdio) |
 | Stdout | `stdout` | JSON output, optional pretty-print |
 
@@ -361,6 +368,8 @@ PipeConfig
 | DELETE | `/pipes/{name}` | Delete pipe |
 | GET | `/pipes/{name}/resolve` | Resolve a pipe into effective runtime queries |
 | POST | `/pipes/dry-run` | Preview pipeline (mock/live) |
+| GET | `/config/export` | Export config from control-plane DB |
+| POST | `/config/import` | Replace config from TOML/JSON |
 | GET | `/pipe-presets` | List saved recipes |
 | GET | `/pipe-presets/{name}` | Get saved recipe details |
 | POST | `/pipe-presets` | Create saved recipe |
@@ -378,7 +387,7 @@ PipeConfig
 | GET | `/history` | Last 100 cycle results |
 | GET | `/openapi.json` | Merged OpenAPI 3.1 spec for control-plane + engine routes, generated via `utoipa` |
 
-Legacy source endpoints still exist for compatibility and migration, but they are deprecated in the generated OpenAPI and intentionally no longer drive the main UI onboarding flow.
+There are no legacy `/sources` routes anymore. The control plane is pipe-first end to end.
 
 ## Crate Structure
 

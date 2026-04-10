@@ -35,10 +35,13 @@ That merged router is the recommended surface for standalone and embedded API se
 | GET/POST | `/pipe-presets` | List / create saved recipes |
 | GET/PUT/DELETE | `/pipe-presets/{name}` | Get / update / delete saved recipe |
 | GET/POST | `/sinks` | List / create sinks |
+| GET/POST | `/config/export`, `/config/import` | Export / replace control-plane config |
 | POST | `/sync/pause` | Pause sync |
 | POST | `/sync/resume` | Resume sync |
 | GET | `/sync/status` | Current sync status |
 | GET | `/history` | Cycle history |
+
+There are no legacy `/sources` routes in the control plane anymore. Pipe CRUD is the only runtime onboarding surface.
 
 ## Usage
 

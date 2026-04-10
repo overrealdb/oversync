@@ -111,12 +111,35 @@ async fn cycle_log_table_exists() {
 }
 
 #[tokio::test]
-async fn source_config_table_exists() {
+async fn pipe_config_table_exists() {
 	let t = TestSurrealContainer::new().await;
 	t.client
-		.query("CREATE source_config SET name = 'pg-prod', connector = 'postgresql', config = {}")
+		.query(
+			"CREATE pipe_config SET name = 'pg-prod', origin_connector = 'postgres', origin_dsn = 'postgres://localhost/db', origin_config = {}, targets = [], schedule = {}, delta = {}, retry = {}, enabled = true",
+		)
 		.await
-		.expect("source_config table should exist");
+		.expect("pipe_config table should exist");
+}
+
+#[tokio::test]
+async fn source_config_table_removed() {
+	let t = TestSurrealContainer::new().await;
+
+	let mut resp = t.client.query("INFO FOR DB").await.unwrap();
+
+	let info = resp
+		.take::<Option<serde_json::Value>>(0)
+		.unwrap()
+		.expect("INFO FOR DB should return metadata");
+	let tables = info
+		.get("tables")
+		.and_then(|value| value.as_object())
+		.expect("INFO FOR DB should include tables object");
+
+	assert!(
+		!tables.contains_key("source_config"),
+		"source_config should be removed by the latest migrations"
+	);
 }
 
 #[tokio::test]
@@ -207,22 +230,26 @@ async fn snapshot_unique_index_enforced() {
 }
 
 #[tokio::test]
-async fn source_config_unique_index_enforced() {
+async fn pipe_config_unique_index_enforced() {
 	let t = TestSurrealContainer::new().await;
 	t.client
-		.query("CREATE source_config SET name = 'dup', connector = 'pg', config = {}")
+		.query(
+			"CREATE pipe_config SET name = 'dup', origin_connector = 'postgres', origin_dsn = 'postgres://localhost/db', origin_config = {}, targets = [], schedule = {}, delta = {}, retry = {}, enabled = true",
+		)
 		.await
 		.unwrap();
 
 	let mut res = t
 		.client
-		.query("CREATE source_config SET name = 'dup', connector = 'rest', config = {}")
+		.query(
+			"CREATE pipe_config SET name = 'dup', origin_connector = 'http', origin_dsn = 'https://example.invalid', origin_config = {}, targets = [], schedule = {}, delta = {}, retry = {}, enabled = true",
+		)
 		.await
 		.unwrap();
 
 	let rows: Result<Vec<serde_json::Value>, _> = res.take(0);
 	assert!(
 		rows.is_err() || rows.unwrap_or_default().is_empty(),
-		"duplicate source name should be rejected by UNIQUE index"
+		"duplicate pipe name should be rejected by UNIQUE index"
 	);
 }

@@ -5,8 +5,24 @@ password = "changeme"    # OVERSYNC_SURREALDB_PASS
 namespace = "oversync"
 database = "sync"
 
+[[sinks]]
+name = "stdout"
+type = "stdout"
+
+[sinks.config]
+pretty = true
+
+[[sinks]]
+name = "kafka-main"
+type = "kafka"
+
+[sinks.config]
+brokers = "localhost:9092"
+topic = "sync-events"
+
 [[pipes]]
 name = "product_a"
+targets = ["stdout"]
 
 [pipes.origin]
 connector = "postgres"
@@ -42,3 +58,59 @@ FROM pg_attribute
 WHERE attnum > 0 AND NOT attisdropped
 """
 key_column = "id"
+
+# Recipe-based onboarding:
+#
+# [[pipes]]
+# name = "catalog-public"
+# targets = ["kafka-main"]
+#
+# [pipes.origin]
+# connector = "postgres"
+# dsn = "postgres://placeholder"
+# credential = "catalog-postgres"
+#
+# [pipes.schedule]
+# interval_secs = 900
+#
+# [pipes.delta]
+# diff_mode = "db"
+#
+# [pipes.recipe]
+# type = "postgres_metadata"
+# prefix = "catalog"
+# schemas = ["public"]
+#
+# Saved recipe template:
+#
+# [[pipe_presets]]
+# name = "postgres-snapshot-template"
+# description = "Reusable PostgreSQL onboarding template"
+#
+# [pipe_presets.spec.origin]
+# connector = "postgres"
+# dsn = "postgres://placeholder"
+# credential = "{{credential_name}}"
+#
+# [[pipe_presets.spec.parameters]]
+# name = "credential_name"
+# label = "Credential"
+# required = true
+# secret = false
+#
+# [[pipe_presets.spec.parameters]]
+# name = "source_name"
+# label = "Source name"
+# required = true
+# secret = false
+#
+# [pipe_presets.spec.schedule]
+# interval_secs = 300
+#
+# [pipe_presets.spec.delta]
+# diff_mode = "db"
+#
+# [pipe_presets.spec.recipe]
+# type = "postgres_snapshot"
+# prefix = "{{source_name}}"
+# schemas = ["public"]

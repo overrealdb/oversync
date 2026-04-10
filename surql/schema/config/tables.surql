@@ -1,16 +1,6 @@
--- config domain: source_config, query_config, sink_config
+-- config domain: pipe_config, query_config, sink_config, pipe_preset_config
 
--- source_config: registered source connectors
-DEFINE TABLE OVERWRITE source_config SCHEMAFULL;
-DEFINE FIELD OVERWRITE name       ON source_config TYPE string ASSERT $value != NONE;
-DEFINE FIELD OVERWRITE connector  ON source_config TYPE string ASSERT $value != NONE;
-DEFINE FIELD OVERWRITE config     ON source_config TYPE object FLEXIBLE;
-DEFINE FIELD OVERWRITE enabled    ON source_config TYPE bool DEFAULT true;
-DEFINE FIELD OVERWRITE created_at ON source_config TYPE datetime DEFAULT time::now();
-DEFINE FIELD OVERWRITE updated_at ON source_config TYPE datetime DEFAULT time::now();
-DEFINE INDEX OVERWRITE idx_source_name ON source_config FIELDS name UNIQUE;
-
--- query_config: queries within a source
+-- query_config: queries within a pipe
 DEFINE TABLE OVERWRITE query_config SCHEMAFULL;
 DEFINE FIELD OVERWRITE origin_id  ON query_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD OVERWRITE name       ON query_config TYPE string ASSERT $value != NONE;
@@ -18,6 +8,7 @@ DEFINE FIELD OVERWRITE query      ON query_config TYPE string;
 DEFINE FIELD OVERWRITE key_column ON query_config TYPE string;
 DEFINE FIELD OVERWRITE schedule   ON query_config TYPE option<string>;
 DEFINE FIELD OVERWRITE sinks      ON query_config TYPE option<array>;
+DEFINE FIELD OVERWRITE transform  ON query_config TYPE option<string>;
 DEFINE FIELD OVERWRITE enabled    ON query_config TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE created_at ON query_config TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_query_source ON query_config FIELDS origin_id, name UNIQUE;
@@ -27,15 +18,33 @@ DEFINE TABLE OVERWRITE pipe_config SCHEMAFULL;
 DEFINE FIELD OVERWRITE name               ON pipe_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD OVERWRITE origin_connector   ON pipe_config TYPE string ASSERT $value != NONE;
 DEFINE FIELD OVERWRITE origin_dsn         ON pipe_config TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE origin_credential  ON pipe_config TYPE option<string>;
+DEFINE FIELD OVERWRITE trino_url          ON pipe_config TYPE option<string>;
 DEFINE FIELD OVERWRITE origin_config      ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE targets            ON pipe_config TYPE array DEFAULT [];
 DEFINE FIELD OVERWRITE schedule           ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE delta              ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE retry              ON pipe_config TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE recipe             ON pipe_config TYPE option<object> FLEXIBLE;
+DEFINE FIELD OVERWRITE filters            ON pipe_config TYPE array DEFAULT [];
+DEFINE FIELD OVERWRITE filters.*          ON pipe_config TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE transforms         ON pipe_config TYPE array DEFAULT [];
+DEFINE FIELD OVERWRITE transforms.*       ON pipe_config TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE links              ON pipe_config TYPE array DEFAULT [];
+DEFINE FIELD OVERWRITE links.*            ON pipe_config TYPE object FLEXIBLE;
 DEFINE FIELD OVERWRITE enabled            ON pipe_config TYPE bool DEFAULT true;
 DEFINE FIELD OVERWRITE created_at         ON pipe_config TYPE datetime DEFAULT time::now();
 DEFINE FIELD OVERWRITE updated_at         ON pipe_config TYPE datetime DEFAULT time::now();
 DEFINE INDEX OVERWRITE idx_pipe_name ON pipe_config FIELDS name UNIQUE;
+
+-- pipe_preset_config: reusable UI/API defaults for future pipes
+DEFINE TABLE OVERWRITE pipe_preset_config SCHEMAFULL;
+DEFINE FIELD OVERWRITE name               ON pipe_preset_config TYPE string ASSERT $value != NONE;
+DEFINE FIELD OVERWRITE description        ON pipe_preset_config TYPE option<string>;
+DEFINE FIELD OVERWRITE spec               ON pipe_preset_config TYPE object FLEXIBLE;
+DEFINE FIELD OVERWRITE created_at         ON pipe_preset_config TYPE datetime DEFAULT time::now();
+DEFINE FIELD OVERWRITE updated_at         ON pipe_preset_config TYPE datetime DEFAULT time::now();
+DEFINE INDEX OVERWRITE idx_pipe_preset_name ON pipe_preset_config FIELDS name UNIQUE;
 
 -- credential: encrypted secrets referenced by origin/target
 DEFINE TABLE OVERWRITE credential SCHEMAFULL;

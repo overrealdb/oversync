@@ -62,6 +62,7 @@ pub async fn create_sink(
 	db.query(SQL_DELETE_SINK)
 		.bind(("name", req.name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	db.query(SQL_CREATE_SINK)
@@ -69,6 +70,7 @@ pub async fn create_sink(
 		.bind(("sink_type", req.sink_type))
 		.bind(("config", config_json))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	reload_config(&state).await?;
@@ -101,6 +103,7 @@ pub async fn update_sink(
 			.bind(("name", name.clone()))
 			.bind(("sink_type", sink_type))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -109,6 +112,7 @@ pub async fn update_sink(
 			.bind(("name", name.clone()))
 			.bind(("enabled", enabled))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -117,6 +121,7 @@ pub async fn update_sink(
 			.bind(("name", name.clone()))
 			.bind(("config", config))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -146,6 +151,7 @@ pub async fn delete_sink(
 	db.query(SQL_DELETE_SINK)
 		.bind(("name", name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	reload_config(&state).await?;
@@ -198,6 +204,7 @@ pub async fn create_pipe(
 	db.query(SQL_DELETE_PIPE)
 		.bind(("name", req.name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	db.query(SQL_CREATE_PIPE)
@@ -216,6 +223,7 @@ pub async fn create_pipe(
 		.bind(("transforms", req.transforms))
 		.bind(("links", req.links))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	for query in &queries {
@@ -254,6 +262,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", connector))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -262,6 +271,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", dsn))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -270,6 +280,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", credential))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -278,6 +289,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", trino_url))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -286,6 +298,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", config))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -294,6 +307,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", targets))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -302,6 +316,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", schedule))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -310,6 +325,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", delta))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -318,6 +334,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", retry))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -328,12 +345,14 @@ pub async fn update_pipe(
 					.bind(("name", name.clone()))
 					.bind(("v", recipe))
 					.await
+					.and_then(|response| response.check())
 					.map_err(db_err)?;
 			}
 			None => {
 				db.query(SQL_UPDATE_PIPE_RECIPE_NONE)
 					.bind(("name", name.clone()))
 					.await
+					.and_then(|response| response.check())
 					.map_err(db_err)?;
 			}
 		}
@@ -344,6 +363,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", filters))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -352,6 +372,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", transforms))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -360,6 +381,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", links))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -368,6 +390,7 @@ pub async fn update_pipe(
 			.bind(("name", name.clone()))
 			.bind(("v", enabled))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 	}
 
@@ -375,6 +398,7 @@ pub async fn update_pipe(
 		db.query(SQL_DELETE_PIPE_QUERIES)
 			.bind(("name", name.clone()))
 			.await
+			.and_then(|response| response.check())
 			.map_err(db_err)?;
 
 		for query in &queries {
@@ -410,11 +434,13 @@ pub async fn delete_pipe(
 	db.query(SQL_DELETE_PIPE)
 		.bind(("name", name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	db.query(SQL_DELETE_PIPE_QUERIES)
 		.bind(("name", name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	reload_config(&state).await?;
@@ -444,6 +470,7 @@ pub async fn create_pipe_preset(
 	db.query(SQL_DELETE_PIPE_PRESET)
 		.bind(("name", req.name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	db.query(SQL_CREATE_PIPE_PRESET)
@@ -451,6 +478,7 @@ pub async fn create_pipe_preset(
 		.bind(("description", req.description.clone()))
 		.bind(("spec", spec))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	refresh_read_cache(state.as_ref())
@@ -502,6 +530,7 @@ pub async fn update_pipe_preset(
 		.bind(("description", req.description))
 		.bind(("spec", spec))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	refresh_read_cache(state.as_ref())
@@ -532,6 +561,7 @@ pub async fn delete_pipe_preset(
 	db.query(SQL_DELETE_PIPE_PRESET)
 		.bind(("name", name.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(db_err)?;
 
 	refresh_read_cache(state.as_ref())
@@ -689,6 +719,7 @@ async fn create_pipe_query_record(
 		.bind(("sinks", query.sinks.clone()))
 		.bind(("transform", query.transform.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(|e| {
 			oversync_core::error::OversyncError::SurrealDb(format!(
 				"create query '{}' for pipe '{}': {e}",
@@ -874,7 +905,7 @@ mod tests {
 	#[test]
 	fn missing_table_error_detection_matches_surreal_message_shape() {
 		assert!(is_missing_table_error(
-			&"The table 'source_config' does not exist"
+			&"The table 'pipe_config' does not exist"
 		));
 		assert!(!is_missing_table_error(&"permission denied"));
 	}

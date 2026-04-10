@@ -143,20 +143,78 @@ async fn replace_and_load_pipe_presets_round_trip() {
 }
 
 #[tokio::test]
-async fn legacy_source_rows_are_ignored() {
+async fn replace_and_load_pipes_round_trip() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 
-	// Insert a source config
-	container
-		.client
-		.query(
-			"CREATE source_config SET name = 'pg-main', connector = 'postgres', config = { dsn: 'postgres://localhost/db', interval_secs: 120 }, enabled = true",
-		)
+	let config = SyncConfig {
+		surrealdb: def.clone(),
+		sinks: vec![oversync::config::SinkDef {
+			name: "stdout-main".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({}),
+		}],
+		pipes: vec![oversync::config::PipeConfig {
+			name: "catalog-pipe".into(),
+			origin: OriginDef {
+				connector: "postgres".into(),
+				dsn: "postgres://localhost/catalog".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({"sslmode": "require"}),
+			},
+			targets: vec!["stdout-main".into()],
+			queries: vec![QueryDef {
+				id: "tables".into(),
+				sql: "SELECT id, name FROM information_schema.tables".into(),
+				key_column: "id".into(),
+				sinks: None,
+				transform: None,
+			}],
+			schedule: ScheduleDef {
+				interval_secs: 600,
+				missed_tick_policy: MissedTickPolicy::Skip,
+				max_requests_per_minute: Some(5),
+			},
+			delta: DeltaDef {
+				diff_mode: DiffMode::Db,
+				fail_safe_threshold: 20.0,
+			},
+			retry: RetryDef {
+				max_retries: 4,
+				retry_base_delay_secs: 7,
+			},
+			recipe: None,
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
+		}],
+		pipe_presets: vec![],
+	};
+
+	replace_config_in_db(&container.client, &config)
 		.await
 		.unwrap();
 
-	// Insert associated query
+	let loaded = load_config_from_db(&container.client, &def).await.unwrap();
+	assert_eq!(loaded.sinks.len(), 1);
+	assert_eq!(loaded.pipes.len(), 1);
+	assert_eq!(loaded.pipes[0].name, "catalog-pipe");
+	assert_eq!(loaded.pipes[0].origin.connector, "postgres");
+	assert_eq!(loaded.pipes[0].origin.dsn, "postgres://localhost/catalog");
+	assert_eq!(loaded.pipes[0].targets, vec!["stdout-main"]);
+	assert_eq!(loaded.pipes[0].queries.len(), 1);
+	assert_eq!(loaded.pipes[0].queries[0].id, "tables");
+	assert!(loaded.pipes[0].recipe.is_none());
+}
+
+#[tokio::test]
+async fn orphan_query_rows_are_ignored_without_matching_pipe() {
+	let container = TestSurrealContainer::new().await;
+	let def = make_surreal_def(&container);
+
 	container
 		.client
 		.query(
@@ -191,26 +249,6 @@ async fn load_sinks_from_db() {
 }
 
 #[tokio::test]
-async fn disabled_legacy_sources_are_ignored() {
-	let container = TestSurrealContainer::new().await;
-	let def = make_surreal_def(&container);
-
-	container
-		.client
-		.query("CREATE source_config SET name = 'active', connector = 'postgres', config = { dsn: 'postgres://localhost/db' }, enabled = true")
-		.await
-		.unwrap();
-	container
-		.client
-		.query("CREATE source_config SET name = 'disabled', connector = 'postgres', config = { dsn: 'postgres://localhost/db2' }, enabled = false")
-		.await
-		.unwrap();
-
-	let config = load_config_from_db(&container.client, &def).await.unwrap();
-	assert!(config.pipes.is_empty());
-}
-
-#[tokio::test]
 async fn disabled_sinks_excluded() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
@@ -236,15 +274,10 @@ async fn disabled_sinks_excluded() {
 }
 
 #[tokio::test]
-async fn legacy_source_queries_do_not_create_pipe_entries() {
+async fn orphan_query_groups_do_not_create_pipe_entries() {
 	let container = TestSurrealContainer::new().await;
 	let def = make_surreal_def(&container);
 
-	container
-		.client
-		.query("CREATE source_config SET name = 'pg', connector = 'postgres', config = { dsn: 'postgres://localhost/db' }, enabled = true")
-		.await
-		.unwrap();
 	container
 		.client
 		.query("CREATE query_config SET origin_id = 'pg', name = 'q1', query = 'SELECT 1 AS id', key_column = 'id', enabled = true")

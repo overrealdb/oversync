@@ -35,7 +35,7 @@
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OVERSYNC_INSTANCE_ID` | *(hostname)* | Unique instance identifier for distributed locking. Each oversync instance must have a unique ID. |
+| `OVERSYNC_INSTANCE_ID` | *(auto-generated per process)* | Optional instance identifier for distributed locking. If unset, oversync generates a unique process-scoped ID automatically. Set it only when you need a stable explicit identifier in logs or orchestration. |
 
 ## Config Interpolation
 

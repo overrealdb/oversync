@@ -4,15 +4,12 @@ pub mod config {
 		include_str!("../surql/queries/config/load_pipe_presets.surql");
 	pub const LOAD_QUERIES: &str = include_str!("../surql/queries/config/load_queries.surql");
 	pub const LOAD_SINKS: &str = include_str!("../surql/queries/config/load_sinks.surql");
-	pub const LOAD_SOURCES: &str = include_str!("../surql/queries/config/load_sources.surql");
 	pub const READ_PIPES_CACHE: &str =
 		include_str!("../surql/queries/config/read_pipes_cache.surql");
 	pub const READ_PIPE_PRESETS_CACHE: &str =
 		include_str!("../surql/queries/config/read_pipe_presets_cache.surql");
 	pub const READ_SINKS_CACHE: &str =
 		include_str!("../surql/queries/config/read_sinks_cache.surql");
-	pub const READ_SOURCES_CACHE: &str =
-		include_str!("../surql/queries/config/read_sources_cache.surql");
 }
 
 pub mod config_version {
@@ -68,7 +65,6 @@ pub mod mutations {
 	pub const CREATE_QUERY_WITH_SINKS: &str =
 		include_str!("../surql/queries/mutations/create_query_with_sinks.surql");
 	pub const CREATE_SINK: &str = include_str!("../surql/queries/mutations/create_sink.surql");
-	pub const CREATE_SOURCE: &str = include_str!("../surql/queries/mutations/create_source.surql");
 	pub const DELETE_DLQ_ENTRY: &str =
 		include_str!("../surql/queries/mutations/delete_dlq_entry.surql");
 	pub const DELETE_PIPE: &str = include_str!("../surql/queries/mutations/delete_pipe.surql");
@@ -77,9 +73,6 @@ pub mod mutations {
 	pub const DELETE_PIPE_QUERIES: &str =
 		include_str!("../surql/queries/mutations/delete_pipe_queries.surql");
 	pub const DELETE_SINK: &str = include_str!("../surql/queries/mutations/delete_sink.surql");
-	pub const DELETE_SOURCE: &str = include_str!("../surql/queries/mutations/delete_source.surql");
-	pub const DELETE_SOURCE_QUERIES: &str =
-		include_str!("../surql/queries/mutations/delete_source_queries.surql");
 	pub const LIST_DLQ: &str = include_str!("../surql/queries/mutations/list_dlq.surql");
 	pub const LOCK_RELEASE: &str = include_str!("../surql/queries/mutations/lock_release.surql");
 	pub const LOCK_RENEW: &str = include_str!("../surql/queries/mutations/lock_renew.surql");
@@ -123,12 +116,6 @@ pub mod mutations {
 		include_str!("../surql/queries/mutations/update_sink_enabled.surql");
 	pub const UPDATE_SINK_TYPE: &str =
 		include_str!("../surql/queries/mutations/update_sink_type.surql");
-	pub const UPDATE_SOURCE_CONFIG: &str =
-		include_str!("../surql/queries/mutations/update_source_config.surql");
-	pub const UPDATE_SOURCE_CONNECTOR: &str =
-		include_str!("../surql/queries/mutations/update_source_connector.surql");
-	pub const UPDATE_SOURCE_ENABLED: &str =
-		include_str!("../surql/queries/mutations/update_source_enabled.surql");
 }
 
 pub mod query_config {

@@ -1,15 +1,15 @@
-# OverSync Architecture
+# oversync Architecture
 
 ## Overview
 
-Poll-based delta engine: fetches data from sources, compares with previous state, generates events (created/updated/deleted), sends to sinks.
+Pipe-first poll-based delta engine: fetches data from origins, compares with previous state, generates events (created/updated/deleted), and sends them to sinks.
 
 Alternative to Kafka Connect / Debezium for scenarios where WAL-based CDC is impossible or unnecessary (system catalogs, APIs, metadata).
 
 ## Data Flow
 
 ```
-PostgreSQL / MySQL / HTTP API / GraphQL / Trino / Flight SQL
+Pipe origin: PostgreSQL / MySQL / HTTP API / GraphQL / Trino / Kafka / SurrealDB / Flight SQL / ...
     |
     v fetch_all(sql, key_column)
 Vec<RawRow> { row_key, row_data }
@@ -76,7 +76,7 @@ Config changes are rare (human-initiated). Restart takes <1s. Cycle state persis
 
 ### Scheduler (src/scheduler.rs)
 
-Spawns one tokio task per (source, query) pair. Each task:
+Spawns one tokio task per `(pipe, query)` pair. Each task:
 1. Creates connector via `PluginRegistry`
 2. Runs immediate first cycle
 3. Polls on `interval_secs` timer
@@ -86,7 +86,7 @@ Shutdown via `watch::channel` — all tasks select on the channel and exit clean
 
 ### CycleRunner (src/cycle.rs)
 
-Single-cycle orchestrator. Takes `DeltaEngine` + `SourceConnector` + `Vec<Sink>`:
+Single-cycle orchestrator. Takes `DeltaEngine` + `OriginConnector` + `Vec<Sink>`:
 
 1. `deliver_pending()` — retry any queued events from outbox
 2. `next_cycle_id()` + `log_cycle_start()`
@@ -116,7 +116,7 @@ SurrealDB wrapper. All queries live in `.surql` files (`surql/queries/delta/`):
 
 | Method | File | Purpose |
 |--------|------|---------|
-| `read_snapshot_keys` | `read_snapshot_keys.surql` | All (key, hash) pairs for source+query |
+| `read_snapshot_keys` | `read_snapshot_keys.surql` | All `(key, hash)` pairs for pipe+query |
 | `upsert_batch` | `batch_upsert.surql` | UPSERT each row into snapshot |
 | `delete_stale` | `delete_stale.surql` | DELETE WHERE cycle_id < N |
 | `next_cycle_id` | `next_cycle_id.surql` | MAX(cycle_id) + 1 from cycle_log |
@@ -132,20 +132,24 @@ Factory pattern for connectors and sinks. Stores `Arc<dyn Factory>`, implements 
 
 Built-in factories:
 
-| Sources | Sinks |
+| Origins | Sinks |
 |---------|-------|
-| `PostgresSourceFactory` | `StdoutSinkFactory` |
-| `MysqlSourceFactory` | `KafkaSinkFactory` |
-| `HttpSourceFactory` | `SurrealDbSinkFactory` |
-| `GraphqlSourceFactory` | `HttpSinkFactory` |
-| `TrinoSourceFactory` | |
-| `FlightSqlSourceFactory` | |
+| `PostgresOriginFactory` | `StdoutTargetFactory` |
+| `MysqlOriginFactory` | `KafkaTargetFactory` |
+| `ClickHouseOriginFactory` | `SurrealDbTargetFactory` |
+| `HttpOriginFactory` | `HttpTargetFactory` |
+| `GraphqlOriginFactory` | `PostgresTargetFactory` |
+| `TrinoOriginFactory` | `MysqlTargetFactory` |
+| `FlightSqlOriginFactory` | `ClickHouseTargetFactory` |
+| `KafkaOriginFactory` | `McpTargetFactory` |
+| `SurrealDbOriginFactory` | |
+| `McpOriginFactory` | |
 
 Custom factories can be registered via `engine.register_source()` / `engine.register_sink()`.
 
 ### Config DB (src/config_db.rs)
 
-Loads config from SurrealDB tables (`pipe_config`, `query_config`, `sink_config`, `pipe_preset_config`) into `SyncConfig`. Used by the control-plane API for runtime CRUD operations.
+Loads config from SurrealDB tables (`pipe_config`, `query_config`, `sink_config`, `pipe_preset_config`) into `SyncConfig`. Used by the control-plane API for runtime CRUD operations and import/export.
 
 SurrealQL queries in `surql/queries/config/`:
 - `load_pipes.surql` — `SELECT * FROM pipe_config WHERE enabled = true`
@@ -188,6 +192,10 @@ REST protocol client with:
 
 gRPC streaming via Arrow Flight protocol. Converts Arrow record batches to JSON rows.
 
+### Kafka / SurrealDB origins
+
+`kafka` consumes JSON messages from Kafka topics and can derive row keys either from the Kafka message key or a JSON field. `surrealdb` queries SurrealDB records directly and maps record ids or explicit key fields into `RawRow`.
+
 ## Sinks
 
 ### HTTP Webhook (http_sink.rs)
@@ -205,6 +213,10 @@ POST/PUT `EventEnvelope` as JSON. Features:
 ### SurrealDB
 
 UPSERT with `_meta` nested object (source_id, query_id, op, hash, cycle_id, synced_at). Batch via SurrealQL FOR loop.
+
+### PostgreSQL / MySQL / ClickHouse
+
+Relational sinks upsert JSON payloads into target tables. PostgreSQL and MySQL use SQL upserts; ClickHouse writes JSONEachRow over HTTP.
 
 ### Stdout
 
@@ -225,6 +237,7 @@ Axum router with OpenAPI 3.1 (utoipa). Two layers:
 **Operation routes**:
 - `GET /pipes/{name}/resolve` — view the effective runtime pipe after recipe expansion
 - `POST /pipes/dry-run` — run diff logic without mutating scheduler state
+- `GET /config/export` / `POST /config/import` — round-trip startup configs through the control-plane DB
 - `POST /sync/pause` / `POST /sync/resume` — lifecycle control
 - `GET /sync/status` — running/paused state
 - `GET /history` — last 100 cycle_log entries
@@ -254,7 +267,7 @@ Five schema domains:
 | Domain | Tables |
 |--------|--------|
 | sync | snapshot, cycle_log, pending_event |
-| config | pipe_config, query_config, pipe_preset_config, sink_config, legacy source_config |
+| config | pipe_config, query_config, pipe_preset_config, sink_config |
 | links | link_rule, resolved_link |
 | plugin | plugin |
 | transforms | SMT functions |
@@ -279,6 +292,7 @@ src/
   config.rs          — SyncConfig, PipeConfig, SinkDef, QueryDef
   config_db.rs       — Load config from SurrealDB tables
   registry.rs        — PluginRegistry (factory pattern, Clone via Arc)
+  recipes.rs         — Runtime recipe expansion (`postgres_metadata`, `postgres_snapshot`)
   lib.rs             — Re-exports
 
 crates/
@@ -292,15 +306,21 @@ crates/
     mysql.rs         — MySQL connector
     trino.rs         — Trino REST protocol client
     flight_sql.rs    — Arrow Flight SQL connector
+    kafka_source.rs  — Kafka connector
+    surrealdb_source.rs — SurrealDB connector
+    mcp.rs           — MCP connector
   oversync-sinks/
     http_sink.rs     — HTTP webhook sink (retry, auth)
     kafka.rs         — Kafka sink
     surrealdb_sink.rs — SurrealDB sink
+    postgres_sink.rs — PostgreSQL sink
+    mysql_sink.rs    — MySQL sink
+    clickhouse_sink.rs — ClickHouse sink
     stdout.rs        — Stdout sink
   oversync-api/
     handlers.rs      — GET read routes
     mutations.rs     — CRUD write routes
-    operations.rs    — Trigger, pause, resume, history, status
+    operations.rs    — pause, resume, history, status, config import/export
     state.rs         — ApiState, LifecycleControl trait
     types.rs         — Request/response types with OpenAPI schemas
 
@@ -321,5 +341,5 @@ examples/
   http_to_webhook.rs       — REST polling -> webhook delivery
   multi_source_kafka.rs    — Multi-source with sink routing
 
-tests/                — 221 tests (101 lib + 120 integration)
+tests/                — integration, cluster, recipe, soak, and throughput coverage
 ```

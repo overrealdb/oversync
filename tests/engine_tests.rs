@@ -8,6 +8,7 @@ use oversync::OversyncEngine;
 use oversync::config::{
 	DeltaDef, DiffMode, OriginDef, PipeConfig, QueryDef, RetryDef, ScheduleDef, SinkDef, SyncConfig,
 };
+use oversync::config_db::replace_config_in_db;
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, RawRow};
 use oversync_core::traits::{OriginConnector, OriginFactory, Sink, TargetFactory};
@@ -356,38 +357,69 @@ type = "stdout"
 #[tokio::test]
 async fn engine_start_from_db() {
 	let container = TestSurrealContainer::new().await;
+	let state_url = TestSurrealContainer::url().await;
 
-	// Insert config into DB
-	container
-		.client
-		.query(
-			"CREATE source_config SET name = 'test-src', connector = 'stdout', config = {}, enabled = true",
-		)
-		.await
-		.unwrap();
-	container
-		.client
-		.query(
-			"CREATE sink_config SET name = 'test-sink', sink_type = 'stdout', config = {}, enabled = true",
-		)
-		.await
-		.unwrap();
+	let config = SyncConfig {
+		surrealdb: oversync::config::SurrealDbDef {
+			url: state_url.clone(),
+			username: "root".into(),
+			password: "root".into(),
+			namespace: container.ns.clone(),
+			database: container.db.clone(),
+			snapshot: None,
+		},
+		sinks: vec![SinkDef {
+			name: "debug".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({}),
+		}],
+		pipes: vec![make_pipe(
+			"static-source",
+			"static",
+			"memory://",
+			DiffMode::Db,
+			vec![QueryDef {
+				id: "items".into(),
+				sql: "SELECT * FROM static_source".into(),
+				key_column: "id".into(),
+				sinks: None,
+				transform: None,
+			}],
+		)],
+		pipe_presets: vec![],
+	};
 
-	let engine = OversyncEngine::builder("mem://")
+	let engine = OversyncEngine::builder(&state_url)
 		.namespace(&container.ns)
 		.database(&container.db)
+		.credentials("root", "root")
 		.skip_schema(true)
+		.register_source(Box::new(StaticOriginFactory {
+			rows: static_rows(),
+		}))
 		.build()
 		.await
 		.unwrap();
 
-	// Manually use the same client for config loading
-	// start_from_db reads from the engine's state_client
-	// Since we built with mem://, we need to use the container's client
-	// Let's just verify start works with an inline config instead
-	let config = make_config(&container);
-	engine.start(config).await.unwrap();
+	replace_config_in_db(engine.state_client().as_ref(), &config)
+		.await
+		.unwrap();
+
+	engine.start_from_db().await.unwrap();
 	assert!(engine.is_running().await);
+
+	let current = engine
+		.current_config()
+		.await
+		.expect("start_from_db should load config into lifecycle");
+	assert_eq!(current.pipes.len(), 1);
+	assert_eq!(current.pipes[0].name, "static-source");
+	assert_eq!(current.pipes[0].origin.connector, "static");
+	assert_eq!(current.pipes[0].queries.len(), 1);
+	assert_eq!(current.pipes[0].queries[0].id, "items");
+	assert_eq!(current.sinks.len(), 1);
+	assert_eq!(current.sinks[0].name, "debug");
+
 	engine.shutdown().await;
 }
 

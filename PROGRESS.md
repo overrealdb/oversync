@@ -1,6 +1,6 @@
 # Oversync Progress
 
-Updated: 2026-04-09
+Updated: 2026-04-10
 
 ## Current Goal
 
@@ -116,6 +116,10 @@ Bring `oversync` to a state where:
 - live smoke: manual pipe creation through `/pipes` persisted a runnable PostgreSQL query and dry-run returned `created=2 updated=0 deleted=0`
 - live smoke: legacy flat `pipe_preset_config.spec` exported successfully as nested TOML via `/config/export?format=toml`
 - `cargo test --test config_db_tests legacy_flat_pipe_presets_export_to_toml -- --exact --nocapture`
+- `cargo test --test engine_tests engine_start_from_db -- --exact --nocapture`
+- `cargo test --test config_db_tests -- --nocapture`
+- `cargo test --test migration_tests -- --nocapture`
+- `cargo test --test api_mutation_tests -- --nocapture`
 
 ## Notes Locked In
 
@@ -135,8 +139,24 @@ Bring `oversync` to a state where:
 - There is now a scheduler-level failover proof for the happy path: one leader can hand off to another without a duplicate create wave, and post-failover source mutations become only `updated` events.
 - There is now an ignored rolling-restart soak harness under `tests/scheduler_tests.rs` that can run many restart/mutation rounds and verify the final sink state still matches the source.
 - README now documents the measured local throughput and soak baselines explicitly, so “millions/day” is framed as an engineering envelope rather than an unqualified product promise.
+- Legacy `source_config` is now removed from the live declarative schema and config DB load path; only forward-only migrations still mention it for historical upgrade compatibility.
+- `replace_config_in_db()` and API mutation handlers now call `Surreal Response::check()`, because statement-level errors can otherwise be swallowed even when `.query(...).await` itself succeeds.
+- Root `surql/schema/config/tables.surql` must stay byte-aligned with the canonical schema in `crates/oversync-queries/surql/schema/config/tables.surql`; drift there already caused real confusion once.
 
 ## Current Status
 
 - Completed: cluster hardening, DB/API recipe persistence, DB-loaded recipe expansion coverage, config export/import, live `pipes` UI create flow, pipe detail/edit flow, manual/custom pipes, reusable presets, first-class saved-recipe UI flows, parameterized saved recipes, materialized recipe preview/export, UI dry-run flow, pipe-centric dashboard metrics, merged engine OpenAPI, private source-name sanitization, shared default snapshot state, scheduler instance identity hardening, legacy source runtime removal, and documented throughput/soak baselines
-- Next: release cleanup and final docs/examples pass around the pipe-first model
+- Next: tag / release packaging
+
+## Latest Cleanup Pass
+
+- Removed live `source_config` usage from declarative config schema and added forward-only migration `v007_remove_source_config.surql`.
+- Deleted unused legacy source/query SurrealQL assets from `oversync-queries`.
+- Added regression coverage for `replace_config_in_db()` with real `pipes`, plus migration coverage that `source_config` is absent after the latest schema.
+- Fixed silent Surreal mutation failures by checking `Response::check()` on config DB writes and API mutation handlers.
+- Synced root `surql/schema/config/tables.surql` with the canonical `crates/oversync-queries` schema so local schema assets no longer drift from runtime reality.
+- Final docs/examples pass is now aligned with the pipe-first model:
+  - README connector/sink counts match the actual runtime
+  - `/config/export` and `/config/import` are documented
+  - legacy `/sources` compatibility text is gone
+  - `oversync.example.toml` includes recipe and saved-recipe examples

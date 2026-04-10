@@ -36,9 +36,10 @@ pub async fn replace_config_in_db(
 ) -> Result<(), OversyncError> {
 	client
 		.query(
-			"DELETE query_config; DELETE pipe_preset_config; DELETE pipe_config; DELETE sink_config; DELETE source_config;",
+			"DELETE query_config; DELETE pipe_preset_config; DELETE pipe_config; DELETE sink_config;",
 		)
 		.await
+		.and_then(|response| response.check())
 		.map_err(|e| OversyncError::SurrealDb(format!("clear config tables: {e}")))?;
 
 	for sink in &config.sinks {
@@ -53,6 +54,7 @@ pub async fn replace_config_in_db(
 			.bind(("sink_type", sink.sink_type.clone()))
 			.bind(("config", sink_config))
 			.await
+			.and_then(|response| response.check())
 			.map_err(|e| OversyncError::SurrealDb(format!("create sink '{}': {e}", sink.name)))?;
 	}
 
@@ -62,6 +64,14 @@ pub async fn replace_config_in_db(
 		} else {
 			pipe.origin.config.clone()
 		};
+		let recipe = pipe
+			.recipe
+			.as_ref()
+			.map(serde_json::to_value)
+			.transpose()
+			.map_err(|e| {
+				OversyncError::Config(format!("serialize recipe for pipe '{}': {e}", pipe.name))
+			})?;
 		client
 			.query(oversync_queries::mutations::CREATE_PIPE)
 			.bind(("name", pipe.name.clone()))
@@ -83,13 +93,7 @@ pub async fn replace_config_in_db(
 				"retry",
 				serde_json::to_value(&pipe.retry).unwrap_or(serde_json::json!({})),
 			))
-			.bind((
-				"recipe",
-				pipe.recipe
-					.as_ref()
-					.map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null))
-					.unwrap_or(serde_json::Value::Null),
-			))
+			.bind(("recipe", recipe))
 			.bind(("filters", serde_json::json!(pipe.filters)))
 			.bind(("transforms", serde_json::json!(pipe.transforms)))
 			.bind((
@@ -97,6 +101,7 @@ pub async fn replace_config_in_db(
 				serde_json::to_value(&pipe.links).unwrap_or(serde_json::json!([])),
 			))
 			.await
+			.and_then(|response| response.check())
 			.map_err(|e| OversyncError::SurrealDb(format!("create pipe '{}': {e}", pipe.name)))?;
 
 		if !pipe.enabled {
@@ -105,6 +110,7 @@ pub async fn replace_config_in_db(
 				.bind(("name", pipe.name.clone()))
 				.bind(("v", false))
 				.await
+				.and_then(|response| response.check())
 				.map_err(|e| {
 					OversyncError::SurrealDb(format!("disable pipe '{}': {e}", pipe.name))
 				})?;
@@ -463,6 +469,7 @@ async fn create_query_record(
 		.bind(("sinks", query.sinks.clone()))
 		.bind(("transform", query.transform.clone()))
 		.await
+		.and_then(|response| response.check())
 		.map_err(|e| {
 			OversyncError::SurrealDb(format!(
 				"create query '{}' for origin '{}': {e}",
@@ -491,6 +498,7 @@ async fn create_pipe_preset_record(
 			})?,
 		))
 		.await
+		.and_then(|response| response.check())
 		.map_err(|e| {
 			OversyncError::SurrealDb(format!("create pipe preset '{}': {e}", preset.name))
 		})?;

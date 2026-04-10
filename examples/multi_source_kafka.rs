@@ -1,8 +1,8 @@
-//! Multiple sources → Kafka sink with query-level routing.
+//! Multiple pipes → Kafka sink with query-level routing.
 //!
 //! Run: `cargo run --example multi_source_kafka`
 //!
-//! Shows: Two postgres sources, a Kafka sink and a stdout sink.
+//! Shows: Two postgres-backed pipes, a Kafka sink and a stdout sink.
 //! One query routes to both sinks, another only to Kafka.
 
 use oversync::OversyncEngine;
