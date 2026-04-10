@@ -16,5 +16,5 @@ oversync.dev.toml
 .dev-history/
 .dev-logs/
 analysis-and-tasks.md
-scripts/
+/scripts/
 secret/
