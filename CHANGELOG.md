@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/overrealdb/oversync/compare/oversync-v0.6.0...oversync-v0.6.1) - 2026-04-10
+
+### Other
+
+- Remove local target dir from UI API generation
+- Unignore tracked UI API generation script
+- Track OpenAPI SDK generation script
+- Fix duplicate host port allocation in CI test stack
+- Generate UI SDK from OpenAPI and tighten schema types
+- Move flaky resilient DB soak tests out of blocking CI
+- Embed control plane UI into oversync server
+
 ## [0.6.0](https://github.com/overrealdb/oversync/compare/oversync-v0.5.1...oversync-v0.6.0) - 2026-04-10
 
 ### Other
