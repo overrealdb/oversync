@@ -25,8 +25,9 @@ execFileSync(
     stdio: "inherit",
     env: {
       ...process.env,
-      CARGO_TARGET_DIR:
-        process.env.OVERSYNC_CARGO_TARGET_DIR ?? "/Volumes/storage/rust-targets/oversync",
+      ...(process.env.OVERSYNC_CARGO_TARGET_DIR && !process.env.CARGO_TARGET_DIR
+        ? { CARGO_TARGET_DIR: process.env.OVERSYNC_CARGO_TARGET_DIR }
+        : {}),
     },
   },
 );
