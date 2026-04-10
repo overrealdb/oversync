@@ -34,6 +34,7 @@ fn test_config(url: &str) -> ResilientDbConfig {
 /// session. After health loop recovers (~500ms), all workers must resume.
 /// Counts successful vs failed ops — failure window must be bounded.
 #[tokio::test]
+#[ignore = "concurrent recovery load test; exercised in the stress lane"]
 async fn concurrent_workers_recover_after_session_loss() {
 	let url = common::surreal::TestSurrealContainer::url().await;
 	let cancel = CancellationToken::new();
@@ -120,75 +121,84 @@ async fn concurrent_workers_recover_after_session_loss() {
 /// Invalidate the session 5 times with workers running. Each time the health
 /// loop must recover. No worker should see permanent failures.
 #[tokio::test]
+#[ignore = "long-running recovery soak; exercised in the stress lane"]
 async fn repeated_invalidation_under_load() {
-	let url = common::surreal::TestSurrealContainer::url().await;
-	let cancel = CancellationToken::new();
+	let outcome = tokio::time::timeout(Duration::from_secs(30), async {
+		let url = common::surreal::TestSurrealContainer::url().await;
+		let cancel = CancellationToken::new();
 
-	let rdb = ResilientDb::connect(test_config(&url)).await.unwrap();
-	let _health = rdb.start_health_loop(cancel.clone());
-	let db = rdb.client();
+		let rdb = ResilientDb::connect(test_config(&url)).await.unwrap();
+		let _health = rdb.start_health_loop(cancel.clone());
+		let db = rdb.client();
 
-	let success = Arc::new(AtomicU64::new(0));
-	let failure = Arc::new(AtomicU64::new(0));
-	let worker_cancel = CancellationToken::new();
+		let success = Arc::new(AtomicU64::new(0));
+		let failure = Arc::new(AtomicU64::new(0));
+		let worker_cancel = CancellationToken::new();
 
-	// 5 workers
-	let mut handles = vec![];
-	for i in 0..5 {
-		let db = Arc::clone(&db);
-		let s = Arc::clone(&success);
-		let f = Arc::clone(&failure);
-		let wc = worker_cancel.clone();
+		// 5 workers
+		let mut handles = vec![];
+		for i in 0..5 {
+			let db = Arc::clone(&db);
+			let s = Arc::clone(&success);
+			let f = Arc::clone(&failure);
+			let wc = worker_cancel.clone();
 
-		handles.push(tokio::spawn(async move {
-			let mut local_ok = 0u64;
-			let mut local_err = 0u64;
-			loop {
-				if wc.is_cancelled() {
-					break;
+			handles.push(tokio::spawn(async move {
+				let mut local_ok = 0u64;
+				let mut local_err = 0u64;
+				loop {
+					if wc.is_cancelled() {
+						break;
+					}
+					let q = format!("UPSERT repeat_test:w{i} SET ts = time::now()");
+					match db.query(&q).await {
+						Ok(_) => local_ok += 1,
+						Err(_) => local_err += 1,
+					}
+					tokio::time::sleep(Duration::from_millis(30)).await;
 				}
-				let q = format!("UPSERT repeat_test:w{i} SET ts = time::now()");
-				match db.query(&q).await {
-					Ok(_) => local_ok += 1,
-					Err(_) => local_err += 1,
-				}
-				tokio::time::sleep(Duration::from_millis(30)).await;
-			}
-			s.fetch_add(local_ok, Ordering::Relaxed);
-			f.fetch_add(local_err, Ordering::Relaxed);
-		}));
-	}
+				s.fetch_add(local_ok, Ordering::Relaxed);
+				f.fetch_add(local_err, Ordering::Relaxed);
+			}));
+		}
 
-	for round in 0..5 {
-		tokio::time::sleep(Duration::from_secs(1)).await;
-		db.invalidate().await.unwrap();
-		eprintln!("round {round}: invalidated, waiting for recovery...");
-		tokio::time::sleep(Duration::from_secs(1)).await;
+		for round in 0..5 {
+			tokio::time::sleep(Duration::from_secs(1)).await;
+			db.invalidate().await.unwrap();
+			eprintln!("round {round}: invalidated, waiting for recovery...");
+			tokio::time::sleep(Duration::from_secs(1)).await;
 
-		// Verify recovery with a direct query
-		let probe: Result<Option<serde_json::Value>, _> =
-			db.query("RETURN 1").await.and_then(|mut r| r.take(0));
-		assert!(
-			probe.is_ok(),
-			"round {round}: should recover after health loop, got: {probe:?}"
-		);
-	}
+			// Verify recovery with a direct query
+			let probe: Result<Option<serde_json::Value>, _> =
+				db.query("RETURN 1").await.and_then(|mut r| r.take(0));
+			assert!(
+				probe.is_ok(),
+				"round {round}: should recover after health loop, got: {probe:?}"
+			);
+		}
 
-	worker_cancel.cancel();
-	for h in handles {
-		h.await.unwrap();
-	}
+		worker_cancel.cancel();
+		for h in handles {
+			h.await.unwrap();
+		}
 
-	let total_ok = success.load(Ordering::Relaxed);
-	let total_err = failure.load(Ordering::Relaxed);
+		let total_ok = success.load(Ordering::Relaxed);
+		let total_err = failure.load(Ordering::Relaxed);
 
-	eprintln!("repeated_invalidation: ok={total_ok} err={total_err}");
+		eprintln!("repeated_invalidation: ok={total_ok} err={total_err}");
 
-	// Over 10 seconds with 5 workers at 30ms ≈ 1600+ ops total
-	// 5 invalidation windows of ~500ms each ≈ ~80 failed ops
-	assert!(total_ok > total_err * 3, "ok={total_ok} err={total_err}");
+		// Over 10 seconds with 5 workers at 30ms ≈ 1600+ ops total
+		// 5 invalidation windows of ~500ms each ≈ ~80 failed ops
+		assert!(total_ok > total_err * 3, "ok={total_ok} err={total_err}");
 
-	cancel.cancel();
+		cancel.cancel();
+	})
+	.await;
+
+	assert!(
+		outcome.is_ok(),
+		"repeated_invalidation_under_load timed out after 30 seconds"
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +302,7 @@ async fn pipe_lock_survives_session_loss() {
 /// After recovery, both reads and writes must work. No reader should
 /// see partial/corrupt data.
 #[tokio::test]
+#[ignore = "concurrent read/write recovery load test; exercised in the stress lane"]
 async fn concurrent_reads_writes_during_recovery() {
 	let url = common::surreal::TestSurrealContainer::url().await;
 	let cancel = CancellationToken::new();
