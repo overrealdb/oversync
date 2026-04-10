@@ -255,6 +255,7 @@ impl OversyncEngine {
 			registry,
 			delta_engine: Arc::new(DeltaEngine::single(self.state_client.as_ref().clone())),
 			state_db: self.state_client.clone(),
+			lifecycle: self.lifecycle.clone(),
 			credential_store: dry_run_credential_store,
 			surreal_def: self.surreal_def.clone(),
 		});
@@ -348,6 +349,7 @@ struct DryRunState {
 	registry: PluginRegistry,
 	delta_engine: Arc<DeltaEngine>,
 	state_db: Arc<Surreal<Any>>,
+	lifecycle: Arc<LifecycleManager>,
 	credential_store: crate::credential::AesGcmStore,
 	surreal_def: SurrealDbDef,
 }
@@ -521,7 +523,7 @@ async fn resolve_pipe_handler(
 	axum::Json<PipeResolveResponse>,
 	(StatusCode, axum::Json<oversync_api::types::ErrorResponse>),
 > {
-	let config = crate::config_db::load_config_from_db(&state.state_db, &state.surreal_def)
+	let db_config = crate::config_db::load_config_from_db(&state.state_db, &state.surreal_def)
 		.await
 		.map_err(|e| {
 			api_error(
@@ -530,11 +532,15 @@ async fn resolve_pipe_handler(
 			)
 		})?;
 
-	let pipe = config
-		.pipes
-		.into_iter()
-		.find(|pipe| pipe.name == name)
-		.ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("pipe not found: {name}")))?;
+	let pipe = match db_config.pipes.into_iter().find(|pipe| pipe.name == name) {
+		Some(pipe) => pipe,
+		None => state
+			.lifecycle
+			.current_config()
+			.await
+			.and_then(|config| config.pipes.into_iter().find(|pipe| pipe.name == name))
+			.ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("pipe not found: {name}")))?,
+	};
 
 	let mut runtime_pipe = pipe.clone();
 	resolve_stored_pipe_credentials(&mut runtime_pipe, &state)
@@ -1181,6 +1187,71 @@ impl oversync_api::state::LifecycleControl for LifecycleAdapter {
 	async fn restart_with_config_json(&self, db: &Surreal<Any>) -> Result<(), OversyncError> {
 		let config = crate::config_db::load_config_from_db(db, &self.surreal_def).await?;
 		self.lifecycle.start(config).await
+	}
+
+	async fn runtime_cache_snapshot(
+		&self,
+	) -> Result<oversync_api::state::RuntimeCacheSnapshot, OversyncError> {
+		let Some(config) = self.lifecycle.current_config().await else {
+			return Ok(oversync_api::state::RuntimeCacheSnapshot::default());
+		};
+
+		let expanded_pipes = match crate::recipes::expand_runtime_pipes(config.pipes.clone()).await
+		{
+			Ok(pipes) => pipes,
+			Err(error) => {
+				tracing::warn!(
+					error = %error,
+					"failed to expand runtime pipes for API cache snapshot; falling back to declared pipe queries"
+				);
+				config.effective_pipes()
+			}
+		};
+		let query_counts_by_name: std::collections::HashMap<String, usize> = expanded_pipes
+			.into_iter()
+			.map(|pipe| (pipe.name, pipe.queries.len()))
+			.collect();
+
+		let sinks = config
+			.sinks
+			.iter()
+			.map(|sink| oversync_api::state::SinkConfig {
+				name: sink.name.clone(),
+				sink_type: sink.sink_type.clone(),
+				config: Some(sink.config.clone()),
+			})
+			.collect();
+
+		let mut seen = std::collections::HashSet::new();
+		let mut deduped_pipes = Vec::new();
+		for pipe in config.pipes.iter().rev() {
+			if seen.insert(pipe.name.clone()) {
+				deduped_pipes.push(pipe);
+			}
+		}
+		deduped_pipes.reverse();
+
+		let pipes = deduped_pipes
+			.into_iter()
+			.map(|pipe| oversync_api::state::PipeConfigCache {
+				name: pipe.name.clone(),
+				origin_connector: pipe.origin.connector.clone(),
+				origin_dsn: pipe.origin.dsn.clone(),
+				targets: pipe.targets.clone(),
+				interval_secs: pipe.schedule.interval_secs,
+				query_count: query_counts_by_name
+					.get(pipe.name.as_str())
+					.copied()
+					.unwrap_or(pipe.queries.len()),
+				recipe: pipe
+					.recipe
+					.as_ref()
+					.and_then(|recipe| serde_json::to_value(recipe).ok()),
+				enabled: pipe.enabled,
+			})
+			.collect();
+
+		Ok(oversync_api::state::RuntimeCacheSnapshot { sinks, pipes })
 	}
 
 	async fn export_config(

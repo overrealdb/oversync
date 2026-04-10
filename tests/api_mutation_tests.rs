@@ -69,6 +69,12 @@ impl LifecycleControl for ExportLifecycle {
 		Ok(())
 	}
 
+	async fn runtime_cache_snapshot(
+		&self,
+	) -> Result<RuntimeCacheSnapshot, oversync_core::error::OversyncError> {
+		Ok(RuntimeCacheSnapshot::default())
+	}
+
 	async fn export_config(
 		&self,
 		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
@@ -137,6 +143,62 @@ impl LifecycleControl for ExportLifecycle {
 
 	async fn is_running(&self) -> bool {
 		false
+	}
+
+	async fn is_paused(&self) -> bool {
+		false
+	}
+}
+
+struct SnapshotLifecycle {
+	snapshot: Arc<std::sync::Mutex<Option<RuntimeCacheSnapshot>>>,
+}
+
+#[async_trait]
+impl LifecycleControl for SnapshotLifecycle {
+	async fn restart_with_config_json(
+		&self,
+		_db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+	) -> Result<(), oversync_core::error::OversyncError> {
+		Ok(())
+	}
+
+	async fn runtime_cache_snapshot(
+		&self,
+	) -> Result<RuntimeCacheSnapshot, oversync_core::error::OversyncError> {
+		Ok(self
+			.snapshot
+			.lock()
+			.expect("snapshot lifecycle mutex poisoned")
+			.take()
+			.unwrap_or_default())
+	}
+
+	async fn export_config(
+		&self,
+		_db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+		_format: oversync_api::types::ExportConfigFormat,
+	) -> Result<String, oversync_core::error::OversyncError> {
+		Ok(String::new())
+	}
+
+	async fn import_config(
+		&self,
+		_db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+		_format: oversync_api::types::ExportConfigFormat,
+		_content: &str,
+	) -> Result<Vec<String>, oversync_core::error::OversyncError> {
+		Ok(vec![])
+	}
+
+	async fn pause(&self) {}
+
+	async fn resume(&self) -> Result<(), oversync_core::error::OversyncError> {
+		Ok(())
+	}
+
+	async fn is_running(&self) -> bool {
+		true
 	}
 
 	async fn is_paused(&self) -> bool {
@@ -996,6 +1058,100 @@ schemas = ["public"]
 	assert_eq!(pipes.len(), 1);
 	assert_eq!(pipes[0]["recipe"]["type"], "postgres_metadata");
 	assert_eq!(pipes[0]["recipe"]["prefix"], "some-postgresql-source");
+}
+
+#[tokio::test]
+async fn refresh_read_cache_merges_runtime_query_count_for_recipe_backed_pipe() {
+	let container = TestSurrealContainer::new().await;
+	let config = oversync::config::SyncConfig {
+		surrealdb: SurrealDbDef {
+			url: TestSurrealContainer::url().await,
+			username: "root".into(),
+			password: "root".into(),
+			namespace: container.ns.clone(),
+			database: container.db.clone(),
+			snapshot: None,
+		},
+		sinks: vec![oversync::config::SinkDef {
+			name: "stdout-main".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({}),
+		}],
+		pipes: vec![oversync::config::PipeConfig {
+			name: "catalog-sync".into(),
+			origin: oversync::config::OriginDef {
+				connector: "postgres".into(),
+				dsn: "postgres://localhost/db".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec!["stdout-main".into()],
+			queries: vec![],
+			schedule: oversync::config::ScheduleDef::default(),
+			delta: oversync::config::DeltaDef::default(),
+			retry: oversync::config::RetryDef::default(),
+			recipe: Some(
+				serde_json::from_value(serde_json::json!({
+					"type": "postgres_metadata",
+					"prefix": "some-postgresql-source",
+					"schema_id": "table",
+					"schemas": ["public"]
+				}))
+				.unwrap(),
+			),
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
+		}],
+		pipe_presets: vec![],
+	};
+	replace_config_in_db(&container.client, &config)
+		.await
+		.unwrap();
+
+	let state = Arc::new(ApiState {
+		sinks: Arc::new(RwLock::new(vec![])),
+		pipes: Arc::new(RwLock::new(vec![])),
+		pipe_presets: Arc::new(RwLock::new(vec![])),
+		db_client: Some(container.client.clone().into()),
+		lifecycle: Some(Arc::new(SnapshotLifecycle {
+			snapshot: Arc::new(std::sync::Mutex::new(Some(RuntimeCacheSnapshot {
+				sinks: vec![SinkConfig {
+					name: "stdout-main".into(),
+					sink_type: "stdout".into(),
+					config: Some(serde_json::json!({})),
+				}],
+				pipes: vec![PipeConfigCache {
+					name: "catalog-sync".into(),
+					origin_connector: "postgres".into(),
+					origin_dsn: "postgres://localhost/db".into(),
+					targets: vec!["stdout-main".into()],
+					interval_secs: 300,
+					query_count: 2,
+					recipe: Some(serde_json::json!({
+						"type": "postgres_metadata",
+						"prefix": "some-postgresql-source",
+						"schema_id": "table",
+						"schemas": ["public"]
+					})),
+					enabled: true,
+				}],
+			}))),
+		})),
+		api_key: None,
+	});
+	oversync_api::mutations::refresh_read_cache(&state)
+		.await
+		.expect("refresh cache should succeed");
+
+	let app = oversync_api::router(state);
+	let (status, json) = get_json(&app, "/pipes").await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(json["pipes"][0]["name"], "catalog-sync");
+	assert_eq!(json["pipes"][0]["query_count"], 2);
 }
 
 #[tokio::test]

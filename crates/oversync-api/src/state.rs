@@ -21,6 +21,9 @@ pub trait LifecycleControl: Send + Sync {
 		&self,
 		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
 	) -> Result<(), oversync_core::error::OversyncError>;
+	async fn runtime_cache_snapshot(
+		&self,
+	) -> Result<RuntimeCacheSnapshot, oversync_core::error::OversyncError>;
 	async fn export_config(
 		&self,
 		db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
@@ -38,12 +41,14 @@ pub trait LifecycleControl: Send + Sync {
 	async fn is_paused(&self) -> bool;
 }
 
+#[derive(Clone)]
 pub struct SinkConfig {
 	pub name: String,
 	pub sink_type: String,
 	pub config: Option<serde_json::Value>,
 }
 
+#[derive(Clone)]
 pub struct PipeConfigCache {
 	pub name: String,
 	pub origin_connector: String,
@@ -59,6 +64,12 @@ pub struct PipePresetCache {
 	pub name: String,
 	pub description: Option<String>,
 	pub spec: serde_json::Value,
+}
+
+#[derive(Default)]
+pub struct RuntimeCacheSnapshot {
+	pub sinks: Vec<SinkConfig>,
+	pub pipes: Vec<PipeConfigCache>,
 }
 
 impl ApiState {

@@ -117,6 +117,8 @@ Bring `oversync` to a state where:
 - live smoke: legacy flat `pipe_preset_config.spec` exported successfully as nested TOML via `/config/export?format=toml`
 - `cargo test --test config_db_tests legacy_flat_pipe_presets_export_to_toml -- --exact --nocapture`
 - `cargo test --test engine_tests engine_start_from_db -- --exact --nocapture`
+- `cargo test --features 'api cli' --test engine_tests engine_api_lists_runtime_config_when_started_from_file_style_config -- --exact --nocapture`
+- `cargo test --features 'api cli' --test api_mutation_tests refresh_read_cache_merges_runtime_query_count_for_recipe_backed_pipe -- --exact --nocapture`
 - `cargo test --test config_db_tests -- --nocapture`
 - `cargo test --test migration_tests -- --nocapture`
 - `cargo test --test api_mutation_tests -- --nocapture`
@@ -142,6 +144,7 @@ Bring `oversync` to a state where:
 - Legacy `source_config` is now removed from the live declarative schema and config DB load path; only forward-only migrations still mention it for historical upgrade compatibility.
 - `replace_config_in_db()` and API mutation handlers now call `Surreal Response::check()`, because statement-level errors can otherwise be swallowed even when `.query(...).await` itself succeeds.
 - Root `surql/schema/config/tables.surql` must stay byte-aligned with the canonical schema in `crates/oversync-queries/surql/schema/config/tables.surql`; drift there already caused real confusion once.
+- API read models can no longer depend only on DB cache. When the engine starts from a file config, `/pipes` and `/sinks` still need to reflect the live runtime shape immediately, and recipe-backed pipes must derive `query_count` from effective runtime queries instead of persisted `query_config` rows.
 
 ## Current Status
 
@@ -160,3 +163,7 @@ Bring `oversync` to a state where:
   - `/config/export` and `/config/import` are documented
   - legacy `/sources` compatibility text is gone
   - `oversync.example.toml` includes recipe and saved-recipe examples
+- Fixed the pipe-first API read model for file-start deployments:
+  - `/pipes`, `/sinks`, and `/pipes/{name}/resolve` now fall back to the live runtime config when the config DB cache is empty
+  - recipe-backed pipes now report runtime-effective `query_count` instead of stale `0`
+  - local smoke on a file-start backend now shows a runnable `postgres_metadata` pipe, sink, and pipe detail page immediately, without requiring `/config/import`

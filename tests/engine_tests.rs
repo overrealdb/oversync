@@ -556,6 +556,132 @@ async fn engine_api_resolve_pipe_returns_effective_queries() {
 
 #[cfg(feature = "api")]
 #[tokio::test]
+async fn engine_api_lists_runtime_config_when_started_from_file_style_config() {
+	use axum::body::{self, Body};
+	use axum::http::{Request, StatusCode};
+	use oversync::config::{PipeRecipeDef, PipeRecipeType};
+	use tower::ServiceExt;
+
+	unsafe {
+		std::env::set_var(
+			"OVERSYNC_CREDENTIAL_KEY",
+			"engine-api-runtime-cache-test-key-32-bytes",
+		)
+	};
+
+	let engine = OversyncEngine::builder("mem://")
+		.skip_schema(true)
+		.build()
+		.await
+		.unwrap();
+
+	let config = SyncConfig {
+		surrealdb: engine.surreal_def().clone(),
+		sinks: vec![SinkDef {
+			name: "stdout".into(),
+			sink_type: "stdout".into(),
+			config: serde_json::json!({}),
+		}],
+		pipes: vec![PipeConfig {
+			name: "catalog-pg".into(),
+			origin: OriginDef {
+				connector: "postgres".into(),
+				dsn: "postgres://postgres:postgres@127.0.0.1:1/postgres".into(),
+				credential: None,
+				trino_url: None,
+				config: serde_json::json!({}),
+			},
+			targets: vec!["stdout".into()],
+			queries: vec![],
+			schedule: ScheduleDef::default(),
+			delta: DeltaDef::default(),
+			retry: RetryDef::default(),
+			recipe: Some(PipeRecipeDef {
+				recipe_type: PipeRecipeType::PostgresMetadata,
+				prefix: "postgresdl".into(),
+				entity_type_id: Some("postgres".into()),
+				schema_id: "table".into(),
+				schemas: vec!["public".into()],
+			}),
+			filters: vec![],
+			transforms: vec![],
+			links: vec![],
+			alert_webhook: None,
+			enabled: true,
+		}],
+		pipe_presets: vec![],
+	};
+
+	engine.start(config).await.unwrap();
+
+	let app = engine.api_router().await.unwrap();
+	let pipes_response = app
+		.clone()
+		.oneshot(
+			Request::builder()
+				.uri("/pipes")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(pipes_response.status(), StatusCode::OK);
+	let pipes_body = body::to_bytes(pipes_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let pipes_json: serde_json::Value = serde_json::from_slice(&pipes_body).unwrap();
+	assert_eq!(pipes_json["pipes"].as_array().unwrap().len(), 1);
+	assert_eq!(pipes_json["pipes"][0]["name"], "catalog-pg");
+	assert_eq!(pipes_json["pipes"][0]["query_count"], 2);
+	assert_eq!(
+		pipes_json["pipes"][0]["recipe"]["type"],
+		"postgres_metadata"
+	);
+
+	let sinks_response = app
+		.clone()
+		.oneshot(
+			Request::builder()
+				.uri("/sinks")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(sinks_response.status(), StatusCode::OK);
+	let sinks_body = body::to_bytes(sinks_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let sinks_json: serde_json::Value = serde_json::from_slice(&sinks_body).unwrap();
+	assert_eq!(sinks_json["sinks"].as_array().unwrap().len(), 1);
+	assert_eq!(sinks_json["sinks"][0]["name"], "stdout");
+
+	let resolve_response = app
+		.oneshot(
+			Request::builder()
+				.uri("/pipes/catalog-pg/resolve")
+				.body(Body::empty())
+				.unwrap(),
+		)
+		.await
+		.unwrap();
+	assert_eq!(resolve_response.status(), StatusCode::OK);
+	let resolve_body = body::to_bytes(resolve_response.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let resolve_json: serde_json::Value = serde_json::from_slice(&resolve_body).unwrap();
+	assert_eq!(resolve_json["pipe"]["name"], "catalog-pg");
+	assert_eq!(
+		resolve_json["effective_queries"].as_array().unwrap().len(),
+		2
+	);
+
+	engine.shutdown().await;
+	unsafe { std::env::remove_var("OVERSYNC_CREDENTIAL_KEY") };
+}
+
+#[cfg(feature = "api")]
+#[tokio::test]
 async fn engine_api_openapi_includes_engine_routes_and_legacy_source_deprecation() {
 	use axum::body::{self, Body};
 	use axum::http::{Request, StatusCode};

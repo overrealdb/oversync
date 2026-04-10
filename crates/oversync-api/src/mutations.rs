@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, State};
+use tracing::warn;
 
 use crate::state::ApiState;
 use crate::types::*;
@@ -773,7 +774,7 @@ pub async fn refresh_read_cache(
 
 	let sink_rows =
 		read_cache_rows_or_empty(db, SQL_READ_SINKS_CACHE, "refresh sinks cache").await?;
-	let sink_configs: Vec<crate::state::SinkConfig> = sink_rows
+	let mut sink_configs: Vec<crate::state::SinkConfig> = sink_rows
 		.iter()
 		.filter_map(|r| {
 			Some(crate::state::SinkConfig {
@@ -783,11 +784,10 @@ pub async fn refresh_read_cache(
 			})
 		})
 		.collect();
-	*state.sinks.write().await = sink_configs;
 
 	let pipe_rows =
 		read_cache_rows_or_empty(db, SQL_READ_PIPES_CACHE, "refresh pipes cache").await?;
-	let pipe_configs: Vec<crate::state::PipeConfigCache> = pipe_rows
+	let mut pipe_configs: Vec<crate::state::PipeConfigCache> = pipe_rows
 		.iter()
 		.filter_map(|r| {
 			let name = r.get("name")?.as_str()?.to_string();
@@ -814,6 +814,17 @@ pub async fn refresh_read_cache(
 			})
 		})
 		.collect();
+
+	if let Some(lifecycle) = &state.lifecycle {
+		match lifecycle.runtime_cache_snapshot().await {
+			Ok(runtime) => merge_runtime_cache(&mut sink_configs, &mut pipe_configs, runtime),
+			Err(error) => {
+				warn!(error = %error, "failed to load runtime cache snapshot for API read model");
+			}
+		}
+	}
+
+	*state.sinks.write().await = sink_configs;
 	*state.pipes.write().await = pipe_configs;
 
 	let pipe_preset_rows = read_cache_rows_or_empty(
@@ -838,6 +849,49 @@ pub async fn refresh_read_cache(
 	*state.pipe_presets.write().await = pipe_preset_configs;
 
 	Ok(())
+}
+
+fn merge_runtime_cache(
+	sinks: &mut Vec<crate::state::SinkConfig>,
+	pipes: &mut Vec<crate::state::PipeConfigCache>,
+	runtime: crate::state::RuntimeCacheSnapshot,
+) {
+	for runtime_sink in runtime.sinks {
+		match sinks.iter_mut().find(|sink| sink.name == runtime_sink.name) {
+			Some(existing) => {
+				if existing.config.is_none() && runtime_sink.config.is_some() {
+					existing.config = runtime_sink.config;
+				}
+				if existing.sink_type.is_empty() {
+					existing.sink_type = runtime_sink.sink_type;
+				}
+			}
+			None => sinks.push(runtime_sink),
+		}
+	}
+
+	for runtime_pipe in runtime.pipes {
+		match pipes.iter_mut().find(|pipe| pipe.name == runtime_pipe.name) {
+			Some(existing) => {
+				if existing.query_count == 0 && runtime_pipe.query_count > 0 {
+					existing.query_count = runtime_pipe.query_count;
+				}
+				if existing.recipe.is_none() && runtime_pipe.recipe.is_some() {
+					existing.recipe = runtime_pipe.recipe;
+				}
+				if existing.targets.is_empty() && !runtime_pipe.targets.is_empty() {
+					existing.targets = runtime_pipe.targets;
+				}
+				if existing.origin_connector.is_empty() {
+					existing.origin_connector = runtime_pipe.origin_connector;
+				}
+				if existing.origin_dsn.is_empty() {
+					existing.origin_dsn = runtime_pipe.origin_dsn;
+				}
+			}
+			None => pipes.push(runtime_pipe),
+		}
+	}
 }
 
 fn is_missing_table_error(error: &dyn std::fmt::Display) -> bool {
