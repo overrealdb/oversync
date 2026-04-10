@@ -5,6 +5,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -14,35 +18,32 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     environment: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release-plz-') && 'ci' || '' }}
     steps:
       - uses: actions/checkout@v6
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
-      - uses: davidB/rust-cargo-make@v1
-      - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Start shared test stack
         run: docker compose -f tests/stack/docker-compose.yml up -d
       - name: Wait for shared test stack
         run: bash tests/stack/wait.sh
-      - run: cargo make ci
+      - name: Check formatting
+        run: cargo fmt --all --check
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Run test suite
+        run: cargo test --workspace --features validate-docker
       - name: CLI smoke test
         run: cargo run --features cli -- --help
-      - name: Upload coverage to Codecov
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: codecov/codecov-action@v5
-        with:
-          files: lcov.info
-          fail_ci_if_error: false
       - name: Stop shared test stack
         if: always()
         run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
 
   ui:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: ui
@@ -59,20 +60,49 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  coverage:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake libcurl4-openssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Start shared test stack
+        run: docker compose -f tests/stack/docker-compose.yml up -d
+      - name: Wait for shared test stack
+        run: bash tests/stack/wait.sh
+      - name: Generate coverage
+        run: cargo llvm-cov --workspace --features validate-docker --lcov --output-path lcov.info
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+      - name: Stop shared test stack
+        if: always()
+        run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
+
   stress:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: davidB/rust-cargo-make@v1
       - name: Start shared test stack
         run: docker compose -f tests/stack/docker-compose.yml up -d
       - name: Wait for shared test stack
         run: bash tests/stack/wait.sh
-      - run: cargo make stress
+      - name: Run ignored stress suite
+        run: cargo test --workspace --features validate-docker -- --ignored
       - name: Stop shared test stack
         if: always()
         run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
