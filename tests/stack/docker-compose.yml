@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "55432:5432"
+      - "127.0.0.1:${OVERSYNC_TEST_POSTGRES_HOST_PORT:-55432}:5432"
 
   mysql:
     image: mysql:8.0
@@ -16,13 +16,13 @@ services:
       MYSQL_ROOT_HOST: "%"
       MYSQL_DATABASE: test
     ports:
-      - "53306:3306"
+      - "127.0.0.1:${OVERSYNC_TEST_MYSQL_HOST_PORT:-53306}:3306"
 
   surrealdb:
     image: surrealdb/surrealdb:v3
     command: ["start", "--user", "root", "--pass", "root", "memory"]
     ports:
-      - "58000:8000"
+      - "127.0.0.1:${OVERSYNC_TEST_SURREAL_HOST_PORT:-58000}:8000"
 
   redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:v24.3.5
@@ -40,18 +40,18 @@ services:
       - --kafka-addr
       - internal://0.0.0.0:9092,external://0.0.0.0:19092
       - --advertise-kafka-addr
-      - internal://redpanda:9092,external://127.0.0.1:59092
+      - internal://redpanda:9092,external://127.0.0.1:${OVERSYNC_TEST_KAFKA_HOST_PORT:-59092}
       - --pandaproxy-addr
       - internal://0.0.0.0:8082,external://0.0.0.0:18082
       - --advertise-pandaproxy-addr
-      - internal://redpanda:8082,external://127.0.0.1:18082
+      - internal://redpanda:8082,external://127.0.0.1:${OVERSYNC_TEST_KAFKA_PROXY_HOST_PORT:-18082}
     ports:
-      - "59092:19092"
-      - "18082:18082"
+      - "127.0.0.1:${OVERSYNC_TEST_KAFKA_HOST_PORT:-59092}:19092"
+      - "127.0.0.1:${OVERSYNC_TEST_KAFKA_PROXY_HOST_PORT:-18082}:18082"
 
   trino:
     image: trinodb/trino:latest
     ports:
-      - "58080:8080"
+      - "127.0.0.1:${OVERSYNC_TEST_TRINO_HOST_PORT:-58080}:8080"
     volumes:
       - ./trino/catalog:/etc/trino/catalog:ro

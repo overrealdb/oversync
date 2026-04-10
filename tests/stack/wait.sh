@@ -2,6 +2,7 @@
 set -euo pipefail
 
 COMPOSE_FILE="${OVERSYNC_TEST_STACK_COMPOSE_FILE:-tests/stack/docker-compose.yml}"
+STACK_ENV_FILE="${OVERSYNC_TEST_STACK_ENV_FILE:-${TMPDIR:-/tmp}/oversync-test-stack-${GITHUB_RUN_ID:-local}-${GITHUB_JOB:-dev}.env}"
 
 wait_service() {
   local service="$1"
@@ -10,7 +11,7 @@ wait_service() {
 
   for _ in $(seq 1 "$attempts"); do
     local row
-    row="$(docker compose -f "$COMPOSE_FILE" ps --format json 2>/dev/null | grep "\"Service\":\"$service\"" || true)"
+    row="$(docker compose --env-file "$STACK_ENV_FILE" -f "$COMPOSE_FILE" ps --format json 2>/dev/null | grep "\"Service\":\"$service\"" || true)"
     if [[ -n "$row" ]]; then
       local state health status
       state="$(printf '%s\n' "$row" | sed -n 's/.*"State":"\([^"]*\)".*/\1/p')"
@@ -38,7 +39,7 @@ wait_service() {
   done
 
   echo "Timed out waiting for $service" >&2
-  docker compose -f "$COMPOSE_FILE" ps >&2 || true
+  docker compose --env-file "$STACK_ENV_FILE" -f "$COMPOSE_FILE" ps >&2 || true
   exit 1
 }
 

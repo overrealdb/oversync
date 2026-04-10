@@ -26,7 +26,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Start shared test stack
-        run: docker compose -f tests/stack/docker-compose.yml up -d
+        run: bash tests/stack/start.sh
       - name: Wait for shared test stack
         run: bash tests/stack/wait.sh
       - name: Check formatting
@@ -39,7 +39,7 @@ jobs:
         run: cargo run --features cli -- --help
       - name: Stop shared test stack
         if: always()
-        run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
+        run: bash tests/stack/down.sh
 
   ui:
     runs-on: ubuntu-latest
@@ -74,7 +74,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Start shared test stack
-        run: docker compose -f tests/stack/docker-compose.yml up -d
+        run: bash tests/stack/start.sh
       - name: Wait for shared test stack
         run: bash tests/stack/wait.sh
       - name: Generate coverage
@@ -86,7 +86,7 @@ jobs:
           fail_ci_if_error: false
       - name: Stop shared test stack
         if: always()
-        run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
+        run: bash tests/stack/down.sh
 
   stress:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -98,11 +98,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Start shared test stack
-        run: docker compose -f tests/stack/docker-compose.yml up -d
+        run: bash tests/stack/start.sh
       - name: Wait for shared test stack
         run: bash tests/stack/wait.sh
       - name: Run ignored stress suite
         run: cargo test --workspace --features validate-docker -- --ignored
       - name: Stop shared test stack
         if: always()
-        run: docker compose -f tests/stack/docker-compose.yml down -v --remove-orphans
+        run: bash tests/stack/down.sh
