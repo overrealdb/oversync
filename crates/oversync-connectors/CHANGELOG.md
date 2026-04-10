@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/overrealdb/oversync/compare/oversync-connectors-v0.4.6...oversync-connectors-v0.5.0) - 2026-04-10
+
+### Other
+
+- Stabilize connectors and shared test stack
+
 ## [0.2.1](https://github.com/overrealdb/oversync/compare/oversync-connectors-v0.2.0...oversync-connectors-v0.2.1) - 2026-04-02
 
 ### Added

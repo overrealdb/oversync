@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/overrealdb/oversync/compare/oversync-sinks-v0.4.6...oversync-sinks-v0.5.0) - 2026-04-10
+
+### Other
+
+- Stabilize connectors and shared test stack
+
 ## [0.4.0](https://github.com/overrealdb/oversync/compare/oversync-sinks-v0.3.0...oversync-sinks-v0.4.0) - 2026-04-03
 
 ### Added

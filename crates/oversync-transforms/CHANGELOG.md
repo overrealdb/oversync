@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/overrealdb/oversync/compare/oversync-transforms-v0.4.6...oversync-transforms-v0.5.0) - 2026-04-10
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.4.5](https://github.com/overrealdb/oversync/compare/oversync-transforms-v0.4.4...oversync-transforms-v0.4.5) - 2026-04-08
 
 ### Other
