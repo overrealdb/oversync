@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/overrealdb/oversync/compare/oversync-api-v0.5.1...oversync-api-v0.6.0) - 2026-04-10
+
+### Other
+
+- Fix pipe runtime read models for file-start mode
+
 ## [0.5.0](https://github.com/overrealdb/oversync/compare/oversync-api-v0.4.6...oversync-api-v0.5.0) - 2026-04-10
 
 ### Other
