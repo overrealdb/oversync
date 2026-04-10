@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/overrealdb/oversync/compare/oversync-v0.5.0...oversync-v0.5.1) - 2026-04-10
+
+### Other
+
+- Harden CI stack startup with isolated ports
+
 ## [0.5.0](https://github.com/overrealdb/oversync/compare/oversync-v0.4.6...oversync-v0.5.0) - 2026-04-10
 
 ### Other
