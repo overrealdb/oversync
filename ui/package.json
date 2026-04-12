@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "generate:api": "node ./scripts/generate-api.mjs",
+    "verify:api": "node ./scripts/verify-generated-api.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },

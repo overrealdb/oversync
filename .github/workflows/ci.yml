@@ -46,8 +46,7 @@ jobs:
         working-directory: ui
         run: |
           npm ci
-          npm run generate:api
-          git diff --exit-code -- openapi.json src/api/generated
+          npm run verify:api
       - name: Stop shared test stack
         if: always()
         run: bash tests/stack/down.sh
