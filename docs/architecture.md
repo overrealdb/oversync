@@ -226,7 +226,7 @@ Relational sinks upsert JSON payloads into target tables. PostgreSQL and MySQL u
 
 Prints JSON to stdout. Optional `"pretty": true`. Records events internally for test assertions.
 
-## REST API (oversync-api)
+## REST API (oversync-api / oversync-client)
 
 Axum router with OpenAPI 3.1 (utoipa). Two layers:
 
@@ -282,7 +282,8 @@ Five schema domains:
 |---------|-------------|---------|
 | (default) | none | Core engine, all connectors and sinks |
 | `schema` | overshift | Schema apply via overshift on engine build |
-| `api` | oversync-api, axum | REST API via `engine.api_router()` |
+| `api` | oversync-api, axum | Server-side REST API via `engine.api_router()` |
+| `client` | oversync-client, reqwest | Consumer-safe Rust SDK and shared wire DTOs |
 | `cli` | api + schema + clap + otel | Standalone binary with CLI and tracing |
 
 ## File Structure
@@ -321,12 +322,15 @@ crates/
     mysql_sink.rs    — MySQL sink
     clickhouse_sink.rs — ClickHouse sink
     stdout.rs        — Stdout sink
+  oversync-client/
+    client.rs        — typed Rust SDK for the control-plane API
+    types.rs         — consumer-safe wire DTOs with OpenAPI schemas
   oversync-api/
     handlers.rs      — GET read routes
     mutations.rs     — CRUD write routes
     operations.rs    — pause, resume, history, status, config import/export
     state.rs         — ApiState, LifecycleControl trait
-    types.rs         — Request/response types with OpenAPI schemas
+    types.rs         — compatibility re-export of oversync-client DTOs
 
 surql/
   manifest.toml

@@ -19,6 +19,7 @@ resolver = "2"
 members = [
 	"crates/oversync-core",
 	"crates/oversync-connectors",
+	"crates/oversync-client",
 	"crates/oversync-delta",
 	"crates/oversync-links",
 	"crates/oversync-sinks",
@@ -36,6 +37,7 @@ rust-version = "1.94"
 [workspace.dependencies]
 oversync-core = { version = "0.6.1", path = "crates/oversync-core" }
 oversync-connectors = { version = "0.6.1", path = "crates/oversync-connectors" }
+oversync-client = { version = "0.6.1", path = "crates/oversync-client" }
 oversync-delta = { version = "0.6.1", path = "crates/oversync-delta" }
 oversync-links = { version = "0.6.1", path = "crates/oversync-links" }
 oversync-sinks = { version = "0.6.1", path = "crates/oversync-sinks" }

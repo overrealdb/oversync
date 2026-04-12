@@ -1,0 +1,20 @@
+[package]
+name = "oversync-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Consumer-safe Rust SDK and wire DTOs for the oversync control-plane API."
+repository = "https://github.com/overrealdb/oversync"
+readme = "README.md"
+
+[dependencies]
+chrono = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+utoipa = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }

@@ -3933,6 +3933,7 @@ dependencies = [
  "axum 0.8.8",
  "chrono",
  "http-body-util",
+ "oversync-client",
  "oversync-core",
  "oversync-queries",
  "serde",
@@ -3942,6 +3943,20 @@ dependencies = [
  "tokio",
  "tower 0.5.3",
  "tracing",
+ "utoipa",
+]
+
+[[package]]
+name = "oversync-client"
+version = "0.6.0"
+dependencies = [
+ "axum 0.8.8",
+ "chrono",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
  "utoipa",
 ]
 

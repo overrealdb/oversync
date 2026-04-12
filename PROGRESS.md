@@ -150,7 +150,7 @@ Bring `oversync` to a state where:
 
 ## Current Status
 
-- Completed: cluster hardening, DB/API recipe persistence, DB-loaded recipe expansion coverage, config export/import, live `pipes` UI create flow, pipe detail/edit flow, manual/custom pipes, reusable presets, first-class saved-recipe UI flows, parameterized saved recipes, materialized recipe preview/export, UI dry-run flow, pipe-centric dashboard metrics, merged engine OpenAPI, private source-name sanitization, shared default snapshot state, scheduler instance identity hardening, legacy source runtime removal, and documented throughput/soak baselines
+- Completed: cluster hardening, DB/API recipe persistence, DB-loaded recipe expansion coverage, config export/import, live `pipes` UI create flow, pipe detail/edit flow, manual/custom pipes, reusable presets, first-class saved-recipe UI flows, parameterized saved recipes, materialized recipe preview/export, UI dry-run flow, pipe-centric dashboard metrics, merged engine OpenAPI, private source-name sanitization, shared default snapshot state, scheduler instance identity hardening, legacy source runtime removal, consumer-safe `oversync-client` extraction, and documented throughput/soak baselines
 - Next: tag / release packaging
 
 ## Latest Cleanup Pass

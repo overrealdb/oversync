@@ -17,8 +17,8 @@ use crate::types::*;
 )]
 pub async fn health() -> Json<HealthResponse> {
 	Json(HealthResponse {
-		status: "ok",
-		version: env!("CARGO_PKG_VERSION"),
+		status: "ok".into(),
+		version: env!("CARGO_PKG_VERSION").into(),
 	})
 }
 

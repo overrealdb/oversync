@@ -1,6 +1,6 @@
 # oversync-api
 
-Type-safe HTTP API for the shared oversync control-plane surface.
+Server-side Axum API crate for the shared oversync control-plane surface.
 
 Part of [oversync](https://github.com/overrealdb/oversync).
 
@@ -10,12 +10,14 @@ Part of [oversync](https://github.com/overrealdb/oversync).
 - **Pipe-first control plane** -- runtime onboarding, resolve, dry-run, and import/export all flow through pipes
 - **Operational controls** -- trigger sync, pause/resume, view sync status and cycle history
 - **OpenAPI spec** -- auto-generated via utoipa, served at `/openapi.json`
-- **Frontend SDK source-of-truth** -- the merged spec is consumed by the React control plane and can be exported offline with `oversync openapi`
+- **SDK source-of-truth** -- the merged spec drives both the React TypeScript SDK and the Rust client crate
 - **API key auth middleware** -- optional authentication on protected routes
 
 ## Engine vs crate routes
 
 `oversync-api::router(...)` serves the shared control-plane routes and its base OpenAPI document.
+
+`oversync-client` is the external Rust consumer surface. This crate is intentionally server-oriented.
 
 `OversyncEngine::api_router()` in the root `oversync` crate merges this base spec with engine-owned routes such as:
 
@@ -34,6 +36,12 @@ oversync openapi --file ui/openapi.json
 ```
 
 The frontend then generates `ui/src/api/generated/*` from that file with `@hey-api/openapi-ts`.
+
+External Rust consumers should depend on `oversync-client`, which ships:
+
+- consumer-safe wire DTOs
+- a typed `reqwest` client
+- update-request serialization semantics that preserve `omit` vs `null`
 
 ## Endpoints
 

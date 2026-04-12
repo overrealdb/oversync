@@ -30,6 +30,7 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 - **Dual mode** — embeddable library (`cargo add oversync`) or standalone binary
 - **Full REST API** — CRUD pipes, saved recipes, sinks, credentials, dry-run, lifecycle control, OpenAPI 3.1
 - **Generated OpenAPI** — `utoipa`-driven base spec merged with engine-owned routes like dry-run, resolve, credentials, and config versions
+- **Generated Rust SDK** — `oversync-client` provides consumer-safe wire DTOs and a typed `reqwest` client for the same control-plane surface
 - **Generated UI SDK** — the React control plane can generate its TypeScript SDK directly from the merged OpenAPI spec
 
 ## Quick Start
@@ -117,6 +118,31 @@ This refreshes:
 - `ui/src/api/generated/*`
 
 The React control plane already uses those generated operations for its pipe, sink, history, sync, import/export, and saved-recipe API calls.
+
+### Rust SDK
+
+For external Rust consumers, depend on `oversync-client` instead of the server crate:
+
+```toml
+[dependencies]
+oversync-client = "0.6.1"
+```
+
+```rust,no_run
+use oversync_client::OversyncClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = OversyncClient::with_api_key(
+        "http://localhost:4200/api",
+        "replace-with-api-key",
+    )?;
+
+    let health = client.health().await?;
+    println!("oversync {} {}", health.status, health.version);
+    Ok(())
+}
+```
 
 ## Configuration
 
@@ -434,7 +460,8 @@ There are no legacy `/sources` routes anymore. The control plane is pipe-first e
 | `oversync-sinks` | Target implementations (Kafka, HTTP, SurrealDB, MCP, stdout) |
 | `oversync-transforms` | Transform step library + WASM plugin support |
 | `oversync-delta` | DeltaEngine (SurrealDB state operations) |
-| `oversync-api` | Axum REST API for shared control-plane routes and base OpenAPI document |
+| `oversync-client` | Consumer-safe Rust SDK and wire DTOs for external services using the control-plane API |
+| `oversync-api` | Server-side Axum REST API for shared control-plane routes and base OpenAPI document |
 | `oversync-links` | Entity linking (stub) |
 
 ## Feature Flags
