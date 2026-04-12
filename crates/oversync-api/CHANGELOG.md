@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1](https://github.com/overrealdb/oversync/compare/oversync-api-v0.6.0...oversync-api-v0.6.1) - 2026-04-12
+
+### Other
+
+- Generate UI SDK from OpenAPI and tighten schema types
+- Embed control plane UI into oversync server
+
 ## [0.6.0](https://github.com/overrealdb/oversync/compare/oversync-api-v0.5.1...oversync-api-v0.6.0) - 2026-04-10
 
 ### Other
