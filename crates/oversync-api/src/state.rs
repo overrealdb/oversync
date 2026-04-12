@@ -35,6 +35,10 @@ pub trait LifecycleControl: Send + Sync {
 		format: crate::types::ExportConfigFormat,
 		content: &str,
 	) -> Result<Vec<String>, oversync_core::error::OversyncError>;
+	async fn run_pipe_once(
+		&self,
+		pipe_name: &str,
+	) -> Result<Vec<crate::types::PipeRunQueryResult>, oversync_core::error::OversyncError>;
 	async fn pause(&self);
 	async fn resume(&self) -> Result<(), oversync_core::error::OversyncError>;
 	async fn is_running(&self) -> bool;

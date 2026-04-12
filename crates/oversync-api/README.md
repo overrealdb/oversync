@@ -50,6 +50,7 @@ External Rust consumers should depend on `oversync-client`, which ships:
 | GET | `/health` | Health check |
 | GET/POST | `/pipes` | List / create pipes |
 | GET/PUT/DELETE | `/pipes/{name}` | Get / update / delete pipe |
+| POST | `/pipes/{name}/run` | Trigger a single manual run for one pipe |
 | GET/POST | `/pipe-presets` | List / create saved recipes |
 | GET/PUT/DELETE | `/pipe-presets/{name}` | Get / update / delete saved recipe |
 | GET/POST | `/sinks` | List / create sinks |

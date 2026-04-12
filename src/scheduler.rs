@@ -8,6 +8,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use oversync_core::error::OversyncError;
+use oversync_core::model::DeltaResult;
 use oversync_core::traits::{OriginConnector, Sink};
 use oversync_delta::DeltaEngine;
 
@@ -22,6 +23,14 @@ pub struct Scheduler {
 	instance_id: String,
 	shutdown_tx: watch::Sender<bool>,
 	shutdown_rx: watch::Receiver<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ManualRunResult {
+	pub query_id: String,
+	pub created: usize,
+	pub updated: usize,
+	pub deleted: usize,
 }
 
 impl Scheduler {
@@ -88,7 +97,7 @@ impl Scheduler {
 			return Ok(());
 		}
 
-		let named_sinks = self.create_sinks().await?;
+		let named_sinks = create_named_sinks(&self.config, self.registry.as_ref()).await?;
 		let named_sinks = Arc::new(named_sinks);
 		let mut handles = Vec::new();
 
@@ -147,23 +156,69 @@ impl Scheduler {
 		info!("scheduler stopped");
 		Ok(())
 	}
+}
 
-	async fn create_sinks(&self) -> Result<HashMap<String, Arc<dyn Sink>>, OversyncError> {
-		let mut sinks = HashMap::new();
-		for sink_def in &self.config.sinks {
-			let sink = self
-				.registry
-				.create_sink(&sink_def.sink_type, &sink_def.name, &sink_def.config)
-				.await?;
-			sinks.insert(sink_def.name.clone(), Arc::from(sink));
-		}
-		if sinks.is_empty() {
-			return Err(OversyncError::Config(
-				"no sinks configured; define at least one [[sinks]] entry instead of relying on an implicit stdout fallback".into(),
-			));
-		}
-		Ok(sinks)
+pub async fn run_pipe_once(
+	engine: Arc<DeltaEngine>,
+	config: SyncConfig,
+	registry: PluginRegistry,
+	pipe_name: &str,
+) -> Result<Vec<ManualRunResult>, OversyncError> {
+	let pipes = crate::recipes::expand_runtime_pipes(config.effective_pipes()).await?;
+	let pipe = pipes
+		.into_iter()
+		.find(|pipe| pipe.name == pipe_name)
+		.ok_or_else(|| OversyncError::Config(format!("unknown pipe '{pipe_name}'")))?;
+
+	if !pipe.enabled {
+		return Err(OversyncError::Config(format!(
+			"pipe '{pipe_name}' is disabled"
+		)));
 	}
+
+	let named_sinks = create_named_sinks(&config, &registry).await?;
+	let (effective_connector, connector_config) = build_effective_connector(&pipe)?;
+	let connector = registry
+		.create_source(&effective_connector, &pipe.name, &connector_config)
+		.await?;
+
+	let pipe_engine = Arc::new(engine.for_source(&pipe.name));
+	pipe_engine.ensure_tables().await?;
+
+	let mut results = Vec::with_capacity(pipe.queries.len());
+	for query in &pipe.queries {
+		let query_sinks = resolve_pipe_query_sinks(&named_sinks, &pipe, query)?;
+		let diff =
+			execute_query_with_retry(&pipe_engine, connector.as_ref(), &query_sinks, &pipe, query)
+				.await?;
+		results.push(ManualRunResult {
+			query_id: query.id.clone(),
+			created: diff.created.len(),
+			updated: diff.updated.len(),
+			deleted: diff.deleted.len(),
+		});
+	}
+
+	Ok(results)
+}
+
+async fn create_named_sinks(
+	config: &SyncConfig,
+	registry: &PluginRegistry,
+) -> Result<HashMap<String, Arc<dyn Sink>>, OversyncError> {
+	let mut sinks = HashMap::new();
+	for sink_def in &config.sinks {
+		let sink = registry
+			.create_sink(&sink_def.sink_type, &sink_def.name, &sink_def.config)
+			.await?;
+		sinks.insert(sink_def.name.clone(), Arc::from(sink));
+	}
+	if sinks.is_empty() {
+		return Err(OversyncError::Config(
+			"no sinks configured; define at least one [[sinks]] entry instead of relying on an implicit stdout fallback".into(),
+		));
+	}
+	Ok(sinks)
 }
 
 /// Resolve sinks for a query within a pipe.
@@ -221,42 +276,12 @@ async fn run_pipe_query(
 	instance_id: String,
 	shutdown: &mut watch::Receiver<bool>,
 ) {
-	let (effective_connector, connector_config) = if !pipe.origin.needs_trino_bridge() {
-		let mut map = match &pipe.origin.config {
-			serde_json::Value::Object(m) => m.clone(),
-			_ => serde_json::Map::new(),
-		};
-		map.insert(
-			"dsn".into(),
-			serde_json::Value::String(pipe.origin.dsn.clone()),
-		);
-		(
-			pipe.origin.connector.clone(),
-			serde_json::Value::Object(map),
-		)
-	} else {
-		let trino_url = match pipe.origin.trino_url.as_deref() {
-			Some(url) => url,
-			None => {
-				error!(
-					pipe = %pipe.name,
-					connector = %pipe.origin.connector,
-					"non-native connector requires trino_url in origin config"
-				);
-				return;
-			}
-		};
-		info!(
-			pipe = %pipe.name,
-			connector = %pipe.origin.connector,
-			trino_url = %trino_url,
-			"non-native connector, routing through Trino"
-		);
-		let config = serde_json::json!({
-			"dsn": trino_url,
-			"catalog": pipe.origin.connector,
-		});
-		("trino".to_string(), config)
+	let (effective_connector, connector_config) = match build_effective_connector(&pipe) {
+		Ok(result) => result,
+		Err(e) => {
+			error!(pipe = %pipe.name, error = %e, "failed to build connector config");
+			return;
+		}
 	};
 	let connector = match registry
 		.create_source(&effective_connector, &pipe.name, &connector_config)
@@ -486,6 +511,79 @@ async fn run_with_retry(
 	pipe: &PipeConfig,
 	query: &QueryDef,
 ) {
+	match execute_query_with_retry(engine, connector, sinks, pipe, query).await {
+		Ok(diff) => {
+			if !diff.is_empty() {
+				info!(
+					pipe = %pipe.name,
+					query = %query.id,
+					created = diff.created.len(),
+					updated = diff.updated.len(),
+					deleted = diff.deleted.len(),
+					"cycle produced events"
+				);
+			}
+		}
+		Err(e) => {
+			error!(
+				pipe = %pipe.name,
+				query = %query.id,
+				attempts = pipe.retry.max_retries + 1,
+				error = %e,
+				"cycle failed after all retries"
+			);
+		}
+	}
+}
+
+fn build_effective_connector(
+	pipe: &PipeConfig,
+) -> Result<(String, serde_json::Value), OversyncError> {
+	if !pipe.origin.needs_trino_bridge() {
+		let mut map = match &pipe.origin.config {
+			serde_json::Value::Object(m) => m.clone(),
+			_ => serde_json::Map::new(),
+		};
+		map.insert(
+			"dsn".into(),
+			serde_json::Value::String(pipe.origin.dsn.clone()),
+		);
+		return Ok((
+			pipe.origin.connector.clone(),
+			serde_json::Value::Object(map),
+		));
+	}
+
+	let trino_url = pipe.origin.trino_url.as_deref().ok_or_else(|| {
+		OversyncError::Config(format!(
+			"pipe '{}': connector '{}' requires trino_url",
+			pipe.name, pipe.origin.connector
+		))
+	})?;
+
+	info!(
+		pipe = %pipe.name,
+		connector = %pipe.origin.connector,
+		trino_url = %trino_url,
+		"non-native connector, routing through Trino"
+	);
+
+	Ok((
+		"trino".to_string(),
+		serde_json::json!({
+			"dsn": trino_url,
+			"catalog": pipe.origin.connector,
+		}),
+	))
+}
+
+async fn execute_query_with_retry(
+	engine: &DeltaEngine,
+	connector: &dyn OriginConnector,
+	sinks: &[Arc<dyn Sink>],
+	pipe: &PipeConfig,
+	query: &QueryDef,
+) -> Result<DeltaResult, OversyncError> {
 	let cycle_config = CycleConfig {
 		origin_id: pipe.name.clone(),
 		query_id: query.id.clone(),
@@ -505,8 +603,7 @@ async fn run_with_retry(
 				runner = runner.with_pre_filter(Arc::new(chain));
 			}
 			Err(e) => {
-				error!(pipe = %pipe.name, error = %e, "failed to parse filters");
-				return;
+				return Err(e);
 			}
 		}
 	}
@@ -517,27 +614,14 @@ async fn run_with_retry(
 				runner = runner.with_transform(Arc::new(chain));
 			}
 			Err(e) => {
-				error!(pipe = %pipe.name, error = %e, "failed to parse transforms");
-				return;
+				return Err(e);
 			}
 		}
 	}
 
 	for attempt in 0..=pipe.retry.max_retries {
 		match runner.run(&cycle_config).await {
-			Ok(diff) => {
-				if !diff.is_empty() {
-					info!(
-						pipe = %pipe.name,
-						query = %query.id,
-						created = diff.created.len(),
-						updated = diff.updated.len(),
-						deleted = diff.deleted.len(),
-						"cycle produced events"
-					);
-				}
-				return;
-			}
+			Ok(diff) => return Ok(diff),
 			Err(e) => {
 				if attempt < pipe.retry.max_retries {
 					let delay = Duration::from_secs(
@@ -556,17 +640,16 @@ async fn run_with_retry(
 					);
 					tokio::time::sleep(delay).await;
 				} else {
-					error!(
-						pipe = %pipe.name,
-						query = %query.id,
-						attempts = pipe.retry.max_retries + 1,
-						error = %e,
-						"cycle failed after all retries"
-					);
+					return Err(e);
 				}
 			}
 		}
 	}
+
+	Err(OversyncError::Internal(format!(
+		"pipe '{}' query '{}' failed without a concrete error",
+		pipe.name, query.id
+	)))
 }
 
 #[cfg(test)]

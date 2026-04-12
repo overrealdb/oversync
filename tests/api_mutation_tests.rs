@@ -135,6 +135,14 @@ impl LifecycleControl for ExportLifecycle {
 		Ok(warnings)
 	}
 
+	async fn run_pipe_once(
+		&self,
+		_pipe_name: &str,
+	) -> Result<Vec<oversync_api::types::PipeRunQueryResult>, oversync_core::error::OversyncError>
+	{
+		Ok(vec![])
+	}
+
 	async fn pause(&self) {}
 
 	async fn resume(&self) -> Result<(), oversync_core::error::OversyncError> {
@@ -188,6 +196,14 @@ impl LifecycleControl for SnapshotLifecycle {
 		_format: oversync_api::types::ExportConfigFormat,
 		_content: &str,
 	) -> Result<Vec<String>, oversync_core::error::OversyncError> {
+		Ok(vec![])
+	}
+
+	async fn run_pipe_once(
+		&self,
+		_pipe_name: &str,
+	) -> Result<Vec<oversync_api::types::PipeRunQueryResult>, oversync_core::error::OversyncError>
+	{
 		Ok(vec![])
 	}
 

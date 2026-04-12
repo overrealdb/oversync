@@ -242,6 +242,7 @@ Axum router with OpenAPI 3.1 (utoipa). Two layers:
 - `GET /pipes/{name}/resolve` — view the effective runtime pipe after recipe expansion
 - `POST /pipes/dry-run` — run diff logic without mutating scheduler state
 - `GET /config/export` / `POST /config/import` — round-trip startup configs through the control-plane DB
+- `POST /pipes/{name}/run` — manual single-pipe execution
 - `POST /sync/pause` / `POST /sync/resume` — lifecycle control
 - `GET /sync/status` — running/paused state
 - `GET /history` — last 100 cycle_log entries

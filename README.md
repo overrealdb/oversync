@@ -28,7 +28,7 @@ Alternative to Kafka Connect / Debezium when WAL-based CDC is impossible (system
 - **Rate limiting** — token bucket per pipe to respect source API limits
 - **Fail-safe** — aborts cycle if deletion exceeds threshold
 - **Dual mode** — embeddable library (`cargo add oversync`) or standalone binary
-- **Full REST API** — CRUD pipes, saved recipes, sinks, credentials, dry-run, lifecycle control, OpenAPI 3.1
+- **Full REST API** — CRUD pipes, saved recipes, sinks, credentials, dry-run, manual pipe runs, lifecycle control, OpenAPI 3.1
 - **Generated OpenAPI** — `utoipa`-driven base spec merged with engine-owned routes like dry-run, resolve, credentials, and config versions
 - **Generated Rust SDK** — `oversync-client` provides consumer-safe wire DTOs and a typed `reqwest` client for the same control-plane surface
 - **Generated UI SDK** — the React control plane can generate its TypeScript SDK directly from the merged OpenAPI spec

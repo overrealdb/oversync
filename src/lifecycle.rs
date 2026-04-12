@@ -9,7 +9,7 @@ use oversync_delta::DeltaEngine;
 
 use crate::config::SyncConfig;
 use crate::registry::PluginRegistry;
-use crate::scheduler::Scheduler;
+use crate::scheduler::{ManualRunResult, Scheduler};
 
 pub struct LifecycleManager {
 	engine: Arc<DeltaEngine>,
@@ -110,6 +110,24 @@ impl LifecycleManager {
 	pub async fn current_config(&self) -> Option<SyncConfig> {
 		let inner = self.inner.lock().await;
 		inner.config.clone()
+	}
+
+	pub async fn run_pipe_once(
+		&self,
+		pipe_name: &str,
+	) -> Result<Vec<ManualRunResult>, OversyncError> {
+		let config = self
+			.current_config()
+			.await
+			.ok_or_else(|| OversyncError::Config("no runtime config loaded".into()))?;
+
+		crate::scheduler::run_pipe_once(
+			Arc::clone(&self.engine),
+			config,
+			self.registry.clone(),
+			pipe_name,
+		)
+		.await
 	}
 
 	async fn stop_inner(&self, inner: &mut Inner) {

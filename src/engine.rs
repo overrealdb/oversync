@@ -1316,6 +1316,22 @@ impl oversync_api::state::LifecycleControl for LifecycleAdapter {
 		Ok(warnings)
 	}
 
+	async fn run_pipe_once(
+		&self,
+		pipe_name: &str,
+	) -> Result<Vec<oversync_api::types::PipeRunQueryResult>, OversyncError> {
+		let results = self.lifecycle.run_pipe_once(pipe_name).await?;
+		Ok(results
+			.into_iter()
+			.map(|result| oversync_api::types::PipeRunQueryResult {
+				query_id: result.query_id,
+				created: result.created,
+				updated: result.updated,
+				deleted: result.deleted,
+			})
+			.collect())
+	}
+
 	async fn pause(&self) {
 		self.lifecycle.pause().await;
 	}

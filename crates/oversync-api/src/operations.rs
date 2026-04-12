@@ -1,13 +1,51 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use chrono::{DateTime, Utc};
 use tracing::warn;
 
 use crate::state::ApiState;
 use crate::types::*;
+
+#[utoipa::path(
+	post,
+	path = "/pipes/{name}/run",
+	params(("name" = String, Path, description = "Pipe name")),
+	responses(
+		(status = 200, description = "Pipe run completed", body = PipeRunResponse),
+		(status = 400, description = "Pipe run failed", body = ErrorResponse)
+	)
+)]
+pub async fn run_pipe(
+	State(state): State<Arc<ApiState>>,
+	Path(name): Path<String>,
+) -> Result<Json<PipeRunResponse>, (StatusCode, Json<ErrorResponse>)> {
+	let lifecycle = state.lifecycle.as_ref().ok_or_else(|| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: "manual pipe run unavailable".into(),
+			}),
+		)
+	})?;
+
+	let results = lifecycle.run_pipe_once(&name).await.map_err(|e| {
+		(
+			StatusCode::BAD_REQUEST,
+			Json(ErrorResponse {
+				error: format!("run pipe: {e}"),
+			}),
+		)
+	})?;
+
+	Ok(Json(PipeRunResponse {
+		ok: true,
+		message: format!("pipe '{name}' run completed"),
+		results,
+	}))
+}
 
 #[utoipa::path(
 	post,

@@ -32,6 +32,7 @@ use crate::state::ApiState;
 		mutations::create_pipe_preset,
 		mutations::update_pipe_preset,
 		mutations::delete_pipe_preset,
+		operations::run_pipe,
 		operations::pause_sync,
 		operations::resume_sync,
 		operations::export_config,
@@ -59,6 +60,8 @@ use crate::state::ApiState;
 		types::CreatePipePresetRequest,
 		types::UpdatePipePresetRequest,
 		types::MutationResponse,
+		types::PipeRunQueryResult,
+		types::PipeRunResponse,
 		types::HistoryResponse,
 		types::StatusResponse,
 		types::ExportConfigFormat,
@@ -105,6 +108,7 @@ pub fn router_with_openapi(state: Arc<ApiState>, openapi: utoipa::openapi::OpenA
 				.put(mutations::update_pipe)
 				.delete(mutations::delete_pipe),
 		)
+		.route("/pipes/{name}/run", post(operations::run_pipe))
 		.route(
 			"/pipe-presets/{name}",
 			get(handlers::get_pipe_preset)
@@ -147,6 +151,68 @@ mod tests {
 	use state::*;
 	use tower::ServiceExt;
 
+	struct TestLifecycle {
+		run_results: Vec<types::PipeRunQueryResult>,
+		run_error: Option<String>,
+	}
+
+	#[async_trait::async_trait]
+	impl LifecycleControl for TestLifecycle {
+		async fn restart_with_config_json(
+			&self,
+			_db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+		) -> Result<(), oversync_core::error::OversyncError> {
+			Ok(())
+		}
+
+		async fn runtime_cache_snapshot(
+			&self,
+		) -> Result<RuntimeCacheSnapshot, oversync_core::error::OversyncError> {
+			Ok(RuntimeCacheSnapshot::default())
+		}
+
+		async fn export_config(
+			&self,
+			_db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+			_format: types::ExportConfigFormat,
+		) -> Result<String, oversync_core::error::OversyncError> {
+			Ok(String::new())
+		}
+
+		async fn import_config(
+			&self,
+			_db: &surrealdb::Surreal<surrealdb::engine::any::Any>,
+			_format: types::ExportConfigFormat,
+			_content: &str,
+		) -> Result<Vec<String>, oversync_core::error::OversyncError> {
+			Ok(vec![])
+		}
+
+		async fn run_pipe_once(
+			&self,
+			_pipe_name: &str,
+		) -> Result<Vec<types::PipeRunQueryResult>, oversync_core::error::OversyncError> {
+			match &self.run_error {
+				Some(message) => Err(oversync_core::error::OversyncError::Config(message.clone())),
+				None => Ok(self.run_results.clone()),
+			}
+		}
+
+		async fn pause(&self) {}
+
+		async fn resume(&self) -> Result<(), oversync_core::error::OversyncError> {
+			Ok(())
+		}
+
+		async fn is_running(&self) -> bool {
+			false
+		}
+
+		async fn is_paused(&self) -> bool {
+			false
+		}
+	}
+
 	fn test_state() -> Arc<ApiState> {
 		Arc::new(ApiState {
 			sinks: Arc::new(tokio::sync::RwLock::new(vec![SinkConfig {
@@ -167,6 +233,30 @@ mod tests {
 			pipe_presets: Arc::new(tokio::sync::RwLock::new(vec![])),
 			db_client: None,
 			lifecycle: None,
+			api_key: None,
+		})
+	}
+
+	fn test_state_with_lifecycle(lifecycle: Arc<dyn LifecycleControl>) -> Arc<ApiState> {
+		Arc::new(ApiState {
+			sinks: Arc::new(tokio::sync::RwLock::new(vec![SinkConfig {
+				name: "stdout".into(),
+				sink_type: "stdout".into(),
+				config: None,
+			}])),
+			pipes: Arc::new(tokio::sync::RwLock::new(vec![state::PipeConfigCache {
+				name: "catalog-sync".into(),
+				origin_connector: "postgres".into(),
+				origin_dsn: "postgres://ro@pg1:5432/meta".into(),
+				targets: vec!["kafka-main".into()],
+				interval_secs: 60,
+				query_count: 2,
+				recipe: None,
+				enabled: true,
+			}])),
+			pipe_presets: Arc::new(tokio::sync::RwLock::new(vec![])),
+			db_client: None,
+			lifecycle: Some(lifecycle),
 			api_key: None,
 		})
 	}
@@ -225,6 +315,48 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn run_pipe_returns_manual_run_results() {
+		let app = router(test_state_with_lifecycle(Arc::new(TestLifecycle {
+			run_results: vec![types::PipeRunQueryResult {
+				query_id: "tables".into(),
+				created: 2,
+				updated: 1,
+				deleted: 0,
+			}],
+			run_error: None,
+		})));
+		let req = Request::post("/pipes/catalog-sync/run")
+			.body(Body::empty())
+			.unwrap();
+		let resp = app.clone().oneshot(req).await.unwrap();
+		assert_eq!(resp.status(), StatusCode::OK);
+		let body = resp.into_body().collect().await.unwrap().to_bytes();
+		let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+		assert_eq!(json["ok"], true);
+		assert_eq!(json["results"][0]["query_id"], "tables");
+		assert_eq!(json["results"][0]["created"], 2);
+	}
+
+	#[tokio::test]
+	async fn run_pipe_surfaces_manual_run_errors() {
+		let app = router(test_state_with_lifecycle(Arc::new(TestLifecycle {
+			run_results: vec![],
+			run_error: Some("pipe is disabled".into()),
+		})));
+		let req = Request::post("/pipes/catalog-sync/run")
+			.body(Body::empty())
+			.unwrap();
+		let resp = app.clone().oneshot(req).await.unwrap();
+		assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+		let body = resp.into_body().collect().await.unwrap().to_bytes();
+		let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+		assert!(json["error"]
+			.as_str()
+			.unwrap()
+			.contains("pipe is disabled"));
+	}
+
+	#[tokio::test]
 	async fn get_pipe_not_found() {
 		let app = router(test_state());
 		let (status, json) = get_json(&app, "/pipes/nonexistent").await;
@@ -242,6 +374,7 @@ mod tests {
 		assert!(json["paths"]["/health"].is_object());
 		assert!(json["paths"]["/sinks"].is_object());
 		assert!(json["paths"]["/pipes"].is_object());
+		assert!(json["paths"]["/pipes/{name}/run"].is_object());
 		assert!(json["paths"]["/pipe-presets"].is_object());
 		assert!(json["paths"]["/config/import"].is_object());
 		assert!(json["paths"]["/config/export"].is_object());
