@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `oversync-client` now exposes two Rust surfaces from the same OpenAPI contract:
 
-- `OversyncClient` — the stable handwritten facade
+- `OversyncClient` — the stable ergonomic wrapper, now implemented on top of the generated client
 - `GeneratedClient` — raw code generated from the merged OpenAPI snapshot
 
 That snapshot is kept in `crates/oversync-client/openapi.json` and is refreshed together with `ui/openapi.json` by `npm run generate:api`.
