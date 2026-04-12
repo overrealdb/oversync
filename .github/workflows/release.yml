@@ -29,10 +29,21 @@ jobs:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
+      - id: existing-release-pr
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          release_pr_number="$(gh pr list --state open --json number,headRefName --jq 'map(select(.headRefName | startswith("release-plz-")) | .number) | .[0] // empty')"
+          if [[ -n "$release_pr_number" ]]; then
+            echo "existing_release_pr=$release_pr_number" >> "$GITHUB_OUTPUT"
+            echo "Open release PR #$release_pr_number already exists; skipping refresh due upstream release-plz PR commit parsing bug."
+          fi
       - uses: taiki-e/install-action@v2
+        if: steps.existing-release-pr.outputs.existing_release_pr == ''
         with:
           tool: release-plz@0.3.157
-      - run: release-plz release-pr --git-token "${GITHUB_TOKEN}" --repo-url "https://github.com/${GITHUB_REPOSITORY}" --config release-plz.toml
+      - if: steps.existing-release-pr.outputs.existing_release_pr == ''
+        run: release-plz release-pr --git-token "${GITHUB_TOKEN}" --repo-url "https://github.com/${GITHUB_REPOSITORY}" --config release-plz.toml
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
