@@ -29,9 +29,10 @@ jobs:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5
+      - uses: taiki-e/install-action@v2
         with:
-          command: release-pr
+          tool: release-plz@0.3.157
+      - run: release-plz release-pr --git-token "${GITHUB_TOKEN}" --repo-url "https://github.com/${GITHUB_REPOSITORY}" --config release-plz.toml
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -49,9 +50,10 @@ jobs:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake libcurl4-openssl-dev
       - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5
+      - uses: taiki-e/install-action@v2
         with:
-          command: release
+          tool: release-plz@0.3.157
+      - run: release-plz release --git-token "${GITHUB_TOKEN}" --repo-url "https://github.com/${GITHUB_REPOSITORY}" --config release-plz.toml
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
