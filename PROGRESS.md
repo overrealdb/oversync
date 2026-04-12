@@ -1,6 +1,6 @@
 # Oversync Progress
 
-Updated: 2026-04-10
+Updated: 2026-04-12
 
 ## Current Goal
 
@@ -94,6 +94,10 @@ Bring `oversync` to a state where:
 - `cargo test --test config_db_tests replace_and_load_pipe_presets_round_trip -- --exact --nocapture`
 - `cargo test --test config_db_tests loaded_pipe_presets_export_to_toml -- --exact --nocapture`
 - `cargo test --workspace --features validate-docker`
+- `cargo test -p oversync-client --lib`
+- `cargo test -p oversync-api --lib`
+- `cargo package -p oversync-client --allow-dirty`
+- `cargo check --workspace --all-targets`
 - `cargo test --test api_mutation_tests import_config_replaces_db_from_toml -- --exact --nocapture`
 - `cargo test --test api_mutation_tests list_pipes_includes_disabled_entries -- --exact --nocapture`
 - `cargo test --test api_mutation_tests update_pipe_can_clear_recipe_for_manual_mode -- --exact --nocapture`
@@ -108,6 +112,7 @@ Bring `oversync` to a state where:
 - `npm run lint`
 - `npm test`
 - `npm run build`
+- `cd ui && npm run generate:api`
 - `rg -n -i "private|secret|internal-only" . --glob '!target' --glob '!storage' --glob '!secret'`
 - live smoke: `/pipes` page opened against the real API and successfully created a `postgres_snapshot` pipe with persisted `recipe`
 - live smoke: `/pipes/{name}/resolve` returned real runtime queries for a recipe-backed pipe
@@ -147,10 +152,12 @@ Bring `oversync` to a state where:
 - Root `surql/schema/config/tables.surql` must stay byte-aligned with the canonical schema in `crates/oversync-queries/surql/schema/config/tables.surql`; drift there already caused real confusion once.
 - API read models can no longer depend only on DB cache. When the engine starts from a file config, `/pipes` and `/sinks` still need to reflect the live runtime shape immediately, and recipe-backed pipes must derive `query_count` from effective runtime queries instead of persisted `query_config` rows.
 - The standalone server now has to serve a real embedded UI, not only JSON routes. That makes `/api/*` the stable same-origin control-plane API surface while the browser app lives at `/`.
+- `oversync-api` is now intentionally server-only. External Rust consumers should move to `oversync-client`, which now carries both consumer-safe DTOs and a generated Rust client module from the same OpenAPI snapshot that drives the UI SDK.
+- `crates/oversync-client/openapi.json` is now a packaged snapshot, so `oversync-client` can be built from crates.io without needing the repository checkout or the `ui/` tree nearby.
 
 ## Current Status
 
-- Completed: cluster hardening, DB/API recipe persistence, DB-loaded recipe expansion coverage, config export/import, live `pipes` UI create flow, pipe detail/edit flow, manual/custom pipes, reusable presets, first-class saved-recipe UI flows, parameterized saved recipes, materialized recipe preview/export, UI dry-run flow, pipe-centric dashboard metrics, merged engine OpenAPI, private source-name sanitization, shared default snapshot state, scheduler instance identity hardening, legacy source runtime removal, consumer-safe `oversync-client` extraction, and documented throughput/soak baselines
+- Completed: cluster hardening, DB/API recipe persistence, DB-loaded recipe expansion coverage, config export/import, live `pipes` UI create flow, pipe detail/edit flow, manual/custom pipes, reusable presets, first-class saved-recipe UI flows, parameterized saved recipes, materialized recipe preview/export, UI dry-run flow, pipe-centric dashboard metrics, merged engine OpenAPI, private source-name sanitization, shared default snapshot state, scheduler instance identity hardening, legacy source runtime removal, consumer-safe `oversync-client` extraction, generated Rust client code from the same OpenAPI snapshot as the UI SDK, and documented throughput/soak baselines
 - Next: tag / release packaging
 
 ## Latest Cleanup Pass

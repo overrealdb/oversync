@@ -115,6 +115,7 @@ npm run generate:api
 This refreshes:
 
 - `ui/openapi.json`
+- `crates/oversync-client/openapi.json`
 - `ui/src/api/generated/*`
 
 The React control plane already uses those generated operations for its pipe, sink, history, sync, import/export, and saved-recipe API calls.
@@ -143,6 +144,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+`oversync-client` now exposes two Rust surfaces from the same OpenAPI contract:
+
+- `OversyncClient` — the stable handwritten facade
+- `GeneratedClient` — raw code generated from the merged OpenAPI snapshot
+
+That snapshot is kept in `crates/oversync-client/openapi.json` and is refreshed together with `ui/openapi.json` by `npm run generate:api`.
 
 ## Configuration
 

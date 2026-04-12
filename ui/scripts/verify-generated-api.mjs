@@ -8,6 +8,12 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(uiDir, "..");
 const openapiPath = path.join(uiDir, "openapi.json");
+const rustClientOpenapiPath = path.join(
+  repoRoot,
+  "crates",
+  "oversync-client",
+  "openapi.json",
+);
 
 const normalizeOpenApi = (raw) => {
   const spec = JSON.parse(raw);
@@ -42,6 +48,16 @@ const trackedSpec = normalizeOpenApi(
     env: process.env,
   }),
 );
+const currentRustClientSpec = normalizeOpenApi(
+  readFileSync(rustClientOpenapiPath, "utf8"),
+);
+
+if (currentRustClientSpec !== currentSpec) {
+  console.error(
+    "Rust client OpenAPI snapshot is out of sync. Regenerate and commit crates/oversync-client/openapi.json.",
+  );
+  process.exit(1);
+}
 
 if (currentSpec !== trackedSpec) {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), "oversync-openapi-"));

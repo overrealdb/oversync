@@ -786,6 +786,19 @@ export type PipeResolveResponseDoc = {
     pipe: PipeConfig;
 };
 
+export type PipeRunQueryResult = {
+    created: number;
+    deleted: number;
+    query_id: string;
+    updated: number;
+};
+
+export type PipeRunResponse = {
+    message: string;
+    ok: boolean;
+    results: Array<PipeRunQueryResult>;
+};
+
 export type QueryDef = {
     id: string;
     key_column: string;
@@ -1385,6 +1398,36 @@ export type ResolvePipeHandlerResponses = {
 };
 
 export type ResolvePipeHandlerResponse = ResolvePipeHandlerResponses[keyof ResolvePipeHandlerResponses];
+
+export type RunPipeData = {
+    body?: never;
+    path: {
+        /**
+         * Pipe name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/pipes/{name}/run';
+};
+
+export type RunPipeErrors = {
+    /**
+     * Pipe run failed
+     */
+    400: ErrorResponse;
+};
+
+export type RunPipeError = RunPipeErrors[keyof RunPipeErrors];
+
+export type RunPipeResponses = {
+    /**
+     * Pipe run completed
+     */
+    200: PipeRunResponse;
+};
+
+export type RunPipeResponse = RunPipeResponses[keyof RunPipeResponses];
 
 export type ListSinksData = {
     body?: never;

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { copyFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -6,6 +7,12 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(uiDir, "..");
 const openapiPath = path.join(uiDir, "openapi.json");
+const rustClientOpenapiPath = path.join(
+  repoRoot,
+  "crates",
+  "oversync-client",
+  "openapi.json",
+);
 
 execFileSync(
   "cargo",
@@ -31,6 +38,8 @@ execFileSync(
     },
   },
 );
+
+copyFileSync(openapiPath, rustClientOpenapiPath);
 
 execFileSync("npx", ["openapi-ts"], {
   cwd: uiDir,

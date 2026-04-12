@@ -6,14 +6,25 @@ license.workspace = true
 description = "Consumer-safe Rust SDK and wire DTOs for the oversync control-plane API."
 repository = "https://github.com/overrealdb/oversync"
 readme = "README.md"
+build = "build.rs"
 
 [dependencies]
 chrono = { workspace = true }
+futures-core = "0.3"
+progenitor-client = "0.13"
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_urlencoded = "0.7"
 thiserror = { workspace = true }
 utoipa = { workspace = true }
+
+[build-dependencies]
+openapiv3 = "2"
+prettyplease = "0.2"
+progenitor = "0.13"
+serde_json = { workspace = true }
+syn = "2"
 
 [dev-dependencies]
 axum = { workspace = true }

@@ -350,10 +350,7 @@ mod tests {
 		assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 		let body = resp.into_body().collect().await.unwrap().to_bytes();
 		let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-		assert!(json["error"]
-			.as_str()
-			.unwrap()
-			.contains("pipe is disabled"));
+		assert!(json["error"].as_str().unwrap().contains("pipe is disabled"));
 	}
 
 	#[tokio::test]

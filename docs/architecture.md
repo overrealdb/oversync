@@ -249,6 +249,12 @@ Axum router with OpenAPI 3.1 (utoipa). Two layers:
 
 Mutation flow: API → write to DB → `reload_config()` → `load_config_from_db()` → `lifecycle.start(new_config)` → refresh read cache.
 
+The merged OpenAPI document is the SDK source of truth:
+
+- `ui/openapi.json` feeds the generated TypeScript SDK in `ui/src/api/generated/*`
+- `crates/oversync-client/openapi.json` feeds the generated Rust module in `oversync-client`
+- `oversync-client::OversyncClient` stays as the stable handwritten facade above that contract
+
 ## Fail-Safe
 
 If more than threshold% of previous rows are deleted, the cycle aborts. Snapshot is untouched, no events are sent.

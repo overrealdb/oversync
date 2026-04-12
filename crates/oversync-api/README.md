@@ -41,6 +41,7 @@ External Rust consumers should depend on `oversync-client`, which ships:
 
 - consumer-safe wire DTOs
 - a typed `reqwest` client
+- a generated Rust client module from the same merged OpenAPI snapshot
 - update-request serialization semantics that preserve `omit` vs `null`
 
 ## Endpoints
