@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3](https://github.com/overrealdb/oversync/compare/oversync-v0.6.1...oversync-v0.6.3) - 2026-04-13
+
+### Other
+
+- Stabilize Surreal transport tests in CI
+- Relax heavy HTTP snapshot repro assertion
+- Prefer WebSocket transport for SurrealDB clients
+- Prefer WebSocket transport for SurrealDB clients
+- Add snapshot payload reproduction harness
+- Wrap OversyncClient around generated SDK
+- Generate Rust SDK from OpenAPI snapshot
+- Add manual pipe run control-plane endpoint
+- Extract oversync-client from server API
+
 ## [0.6.2](https://github.com/overrealdb/oversync/compare/oversync-v0.6.1...oversync-v0.6.2) - 2026-04-13
 
 ### Other

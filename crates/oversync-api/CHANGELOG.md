@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3](https://github.com/overrealdb/oversync/compare/oversync-api-v0.6.1...oversync-api-v0.6.3) - 2026-04-13
+
+### Other
+
+- release v0.6.2
+- Generate Rust SDK from OpenAPI snapshot
+- Add manual pipe run control-plane endpoint
+- Extract oversync-client from server API
+
 ## [0.6.2](https://github.com/overrealdb/oversync/compare/oversync-api-v0.6.1...oversync-api-v0.6.2) - 2026-04-13
 
 ### Other
