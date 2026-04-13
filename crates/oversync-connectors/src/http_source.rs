@@ -61,6 +61,23 @@ fn default_cursor_param() -> String {
 	"cursor".into()
 }
 
+fn build_request_url(
+	base_url: &str,
+	path: &str,
+	extra_params: &[(String, String)],
+) -> Result<reqwest::Url, OversyncError> {
+	let mut url = reqwest::Url::parse(&format!("{}{}", base_url.trim_end_matches('/'), path))
+		.map_err(|e| OversyncError::Connector(format!("invalid http url: {e}")))?;
+	if !extra_params.is_empty() {
+		let mut pairs = url.query_pairs_mut();
+		for (key, value) in extra_params {
+			pairs.append_pair(key, value);
+		}
+		drop(pairs);
+	}
+	Ok(url)
+}
+
 pub struct HttpSource {
 	client: reqwest::Client,
 	config: HttpSourceConfig,
@@ -101,13 +118,10 @@ impl HttpSource {
 		path: &str,
 		extra_params: &[(String, String)],
 	) -> Result<serde_json::Value, OversyncError> {
-		let url = self.build_url(path);
-		let mut req = self.client.get(&url);
+		let url = build_request_url(&self.config.base_url, path, extra_params)?;
+		let mut req = self.client.get(url.clone());
 		req = self.apply_headers(req);
 		req = self.apply_auth(req);
-		if !extra_params.is_empty() {
-			req = req.query(extra_params);
-		}
 
 		let resp = req
 			.send()
@@ -122,6 +136,29 @@ impl HttpSource {
 		resp.json()
 			.await
 			.map_err(|e| OversyncError::Connector(format!("json decode: {e}")))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::build_request_url;
+
+	#[test]
+	fn build_request_url_appends_query_pairs() {
+		let url = build_request_url(
+			"http://example.test/api",
+			"/items",
+			&[
+				("limit".to_string(), "50".to_string()),
+				("offset".to_string(), "100".to_string()),
+			],
+		)
+		.expect("url should build");
+
+		assert_eq!(
+			url.as_str(),
+			"http://example.test/api/items?limit=50&offset=100"
+		);
 	}
 }
 
