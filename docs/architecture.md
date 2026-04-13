@@ -35,7 +35,7 @@ DeltaResult { created, updated, deleted }
 ### Embedded (library)
 
 ```rust
-let engine = OversyncEngine::builder("http://localhost:8000")
+let engine = OversyncEngine::builder("ws://localhost:8000")
     .namespace("myapp")
     .credentials("root", "root")
     .build().await?;
@@ -45,6 +45,7 @@ let router = engine.api_router(); // optional: mount in your axum app
 ```
 
 The `OversyncEngine` encapsulates `DeltaEngine`, `LifecycleManager`, and `PluginRegistry`. It handles SurrealDB connection, schema application, and scheduler lifecycle.
+For new deployments prefer `ws://` / `wss://` SurrealDB URLs; oversync upgrades legacy `http://` / `https://` SurrealDB URLs internally so existing configs keep working.
 
 ### Standalone (binary)
 

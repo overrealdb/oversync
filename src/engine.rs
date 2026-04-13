@@ -17,6 +17,7 @@ use oversync_connectors::{
 	SurrealDbOriginFactory, TrinoOriginFactory,
 };
 use oversync_core::error::OversyncError;
+use oversync_core::runtime_surreal_url;
 use oversync_core::traits::{OriginFactory, TargetFactory};
 use oversync_delta::DeltaEngine;
 use oversync_sinks::{
@@ -61,7 +62,7 @@ pub struct OversyncEngineBuilder {
 /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 /// use oversync::OversyncEngine;
 ///
-/// let engine = OversyncEngine::builder("http://localhost:8000")
+/// let engine = OversyncEngine::builder("ws://localhost:8000")
 ///     .namespace("myapp")
 ///     .credentials("root", "root")
 ///     .build()
@@ -86,7 +87,7 @@ pub struct OversyncEngine {
 
 impl OversyncEngine {
 	/// Create a new engine builder. The `surrealdb_url` is the connection URL
-	/// for the state store (e.g. `"http://localhost:8000"` or `"mem://"`).
+	/// for the state store (e.g. `"ws://localhost:8000"` or `"mem://"`).
 	pub fn builder(surrealdb_url: &str) -> OversyncEngineBuilder {
 		OversyncEngineBuilder {
 			url: surrealdb_url.to_string(),
@@ -947,7 +948,8 @@ impl OversyncEngineBuilder {
 					None
 				};
 
-				let snap = surrealdb::engine::any::connect(url)
+				let runtime_url = runtime_surreal_url(url);
+				let snap = surrealdb::engine::any::connect(runtime_url.as_ref())
 					.await
 					.map_err(|e| OversyncError::SurrealDb(format!("snapshot connect: {e}")))?;
 
@@ -974,7 +976,7 @@ impl OversyncEngineBuilder {
 					.await
 					.map_err(|e| OversyncError::SurrealDb(format!("snapshot use ns/db: {e}")))?;
 
-				info!(url = %url, "snapshot DB connected (separate)");
+				info!(url = %url, runtime_url = %runtime_url, "snapshot DB connected (separate)");
 				DeltaEngine::new(Arc::clone(&state_client), snap)
 			}
 			None => {

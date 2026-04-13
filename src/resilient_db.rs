@@ -20,6 +20,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use oversync_core::runtime_surreal_url;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
@@ -212,7 +213,8 @@ impl ResilientDb {
 	}
 
 	async fn open_connection(config: &ResilientDbConfig) -> anyhow::Result<Surreal<Any>> {
-		let conn = surrealdb::engine::any::connect(&config.url).await?;
+		let runtime_url = runtime_surreal_url(&config.url);
+		let conn = surrealdb::engine::any::connect(runtime_url.as_ref()).await?;
 		conn.signin(Root {
 			username: config.username.clone(),
 			password: config.password.clone(),
@@ -242,7 +244,8 @@ impl ResilientDb {
 		namespace: &str,
 		database: &str,
 	) -> anyhow::Result<()> {
-		let fresh = surrealdb::engine::any::connect(url).await?;
+		let runtime_url = runtime_surreal_url(url);
+		let fresh = surrealdb::engine::any::connect(runtime_url.as_ref()).await?;
 		let jwt = fresh
 			.signin(Root {
 				username: username.to_string(),

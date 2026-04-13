@@ -36,7 +36,7 @@ pub struct SurrealDbConfig {
 		arg(
 			long,
 			env = "OVERSYNC_SURREALDB_URL",
-			default_value = "http://127.0.0.1:8000"
+			default_value = "ws://127.0.0.1:8000"
 		)
 	)]
 	pub url: String,
@@ -76,7 +76,7 @@ mod tests {
 			bind: "0.0.0.0:4200".into(),
 			log_level: "info".into(),
 			surrealdb: SurrealDbConfig {
-				url: "http://127.0.0.1:8000".into(),
+				url: "ws://127.0.0.1:8000".into(),
 				user: "root".into(),
 				pass: "root".into(),
 				ns: "oversync".into(),
@@ -93,7 +93,7 @@ mod tests {
 			bind: "127.0.0.1:9999".into(),
 			log_level: "debug".into(),
 			surrealdb: SurrealDbConfig {
-				url: "http://localhost:8000".into(),
+				url: "ws://localhost:8000".into(),
 				user: "admin".into(),
 				pass: "secret".into(),
 				ns: "test".into(),

@@ -5,6 +5,7 @@ use tracing::{debug, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::{EventEnvelope, EventMeta};
+use oversync_core::runtime_surreal_url;
 use oversync_core::traits::Sink;
 
 fn build_document(data: &serde_json::Value, meta: &EventMeta) -> serde_json::Value {
@@ -85,7 +86,8 @@ impl SurrealDbSink {
 	}
 
 	pub async fn connect(cfg: SurrealDbSinkConfig<'_>) -> Result<Self, OversyncError> {
-		let client = surrealdb::engine::any::connect(cfg.url)
+		let runtime_url = runtime_surreal_url(cfg.url);
+		let client = surrealdb::engine::any::connect(runtime_url.as_ref())
 			.await
 			.map_err(|e| OversyncError::Sink(format!("surrealdb connect: {e}")))?;
 

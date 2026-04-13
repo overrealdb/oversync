@@ -9,6 +9,7 @@ use tracing::{debug, warn};
 
 use oversync_core::error::OversyncError;
 use oversync_core::model::RawRow;
+use oversync_core::runtime_surreal_url;
 use oversync_core::traits::OriginConnector;
 
 fn lock_or_recover<'a, T>(
@@ -50,7 +51,8 @@ impl SurrealDbConnector {
 		username: &str,
 		password: &str,
 	) -> Result<Self, OversyncError> {
-		let client = surrealdb::engine::any::connect(url)
+		let runtime_url = runtime_surreal_url(url);
+		let client = surrealdb::engine::any::connect(runtime_url.as_ref())
 			.await
 			.map_err(|e| OversyncError::Connector(format!("surrealdb connect: {e}")))?;
 
@@ -94,7 +96,8 @@ impl SurrealDbLiveConnector {
 		table: &str,
 		key_column: &str,
 	) -> Result<Self, OversyncError> {
-		let client = surrealdb::engine::any::connect(url)
+		let runtime_url = runtime_surreal_url(url);
+		let client = surrealdb::engine::any::connect(runtime_url.as_ref())
 			.await
 			.map_err(|e| OversyncError::Connector(format!("surrealdb live connect: {e}")))?;
 

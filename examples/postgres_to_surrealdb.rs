@@ -4,7 +4,7 @@
 //!
 //! Requires:
 //!   - PostgreSQL at localhost:5432 with a "demo" database
-//!   - SurrealDB at localhost:8000
+//!   - SurrealDB at ws://localhost:8000
 //!
 //! This shows a realistic setup: poll a postgres table every 60 seconds,
 //! detect changes via hash diff, and upsert deltas into SurrealDB.
@@ -16,7 +16,7 @@ use oversync::config::*;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
 	tracing_subscriber::fmt::init();
 
-	let engine = OversyncEngine::builder("http://localhost:8000")
+	let engine = OversyncEngine::builder("ws://localhost:8000")
 		.namespace("catalog")
 		.database("sync_state")
 		.credentials("root", "root")
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let config = SyncConfig {
 		surrealdb: SurrealDbDef {
-			url: "http://localhost:8000".into(),
+			url: "ws://localhost:8000".into(),
 			username: "root".into(),
 			password: "root".into(),
 			namespace: "catalog".into(),
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 			name: "sdb-events".into(),
 			sink_type: "surrealdb".into(),
 			config: serde_json::json!({
-				"url": "http://localhost:8000",
+				"url": "ws://localhost:8000",
 				"namespace": "catalog",
 				"database": "events",
 				"table": "synced_data",

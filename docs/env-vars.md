@@ -12,7 +12,7 @@
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OVERSYNC_SURREALDB_URL` | `http://127.0.0.1:8000` | SurrealDB connection URL |
+| `OVERSYNC_SURREALDB_URL` | `ws://127.0.0.1:8000` | SurrealDB connection URL for the state store. `http(s)://` is still accepted and upgraded to `ws(s)://` internally for long-lived client sessions. |
 | `OVERSYNC_SURREALDB_USER` | `root` | SurrealDB username |
 | `OVERSYNC_SURREALDB_PASS` | `root` | SurrealDB password |
 | `OVERSYNC_SURREALDB_NS` | `oversync` | SurrealDB namespace |

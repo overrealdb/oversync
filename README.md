@@ -68,7 +68,7 @@ use oversync::OversyncEngine;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let engine = OversyncEngine::builder("http://localhost:8000")
+    let engine = OversyncEngine::builder("ws://localhost:8000")
         .namespace("myapp")
         .credentials("root", "root")
         .build()
@@ -158,7 +158,7 @@ That snapshot is kept in `crates/oversync-client/openapi.json` and is refreshed 
 
 ```toml
 [surrealdb]
-url = "${SURREALDB_URL:-http://localhost:8000}"
+url = "${SURREALDB_URL:-ws://localhost:8000}"
 username = "${SURREALDB_USER:-root}"
 password = "${SURREALDB_PASS:-root}"
 
@@ -349,6 +349,7 @@ Oversync automatically creates a Trino catalog and routes queries through it. Su
 
 - By default, snapshot state is stored in the same SurrealDB as cycle logs and pending events. This makes restarts and failover reuse the existing diff baseline instead of re-emitting a full create wave.
 - If you want a separate snapshot store, configure `[surrealdb.snapshot]` or `OversyncEngine::builder(...).snapshot_url(...)`.
+- Prefer `ws://` / `wss://` for SurrealDB URLs in new configs. Legacy `http://` / `https://` URLs are still accepted and are upgraded to WebSocket transport internally for long-lived client sessions.
 - `OVERSYNC_INSTANCE_ID` is optional. If unset, each scheduler instance generates a unique process-scoped identity automatically. Set it only when you need an explicit stable identifier in logs or orchestration.
 - Horizontal scale is currently per query, not within one query. Adding replicas helps many independent queries; it does not split one large table scan across workers.
 

@@ -6,6 +6,7 @@
 pub mod config;
 pub mod error;
 pub mod model;
+pub mod surreal_url;
 pub mod table_names;
 pub mod traits;
 
@@ -15,6 +16,7 @@ pub use model::{
 	AuthConfig, CycleStatus, DeltaEvent, DeltaResult, EventEnvelope, EventMeta, KafkaAuth, OpType,
 	RawRow, compute_diff, hash_rows,
 };
+pub use surreal_url::runtime_surreal_url;
 pub use table_names::TableNames;
 pub use traits::{
 	OriginConnector, OriginFactory, Sink, TargetFactory, TransformHook, TransformPipeline,

@@ -7,7 +7,7 @@ use oversync::config::SyncConfig;
 fn main() {
 	let toml = r#"
 [surrealdb]
-url = "http://localhost:8000"
+url = "ws://localhost:8000"
 
 [[sinks]]
 name = "kafka"
