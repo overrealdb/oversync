@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2](https://github.com/overrealdb/oversync/compare/oversync-core-v0.6.1...oversync-core-v0.6.2) - 2026-04-13
+
+### Other
+
+- Prefer WebSocket transport for SurrealDB clients
+
 ## [0.5.0](https://github.com/overrealdb/oversync/compare/oversync-core-v0.4.6...oversync-core-v0.5.0) - 2026-04-10
 
 ### Other
