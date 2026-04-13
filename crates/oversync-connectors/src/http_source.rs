@@ -98,10 +98,6 @@ impl HttpSource {
 		})
 	}
 
-	fn build_url(&self, path: &str) -> String {
-		format!("{}{}", self.config.base_url.trim_end_matches('/'), path)
-	}
-
 	fn apply_auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
 		crate::http_common::apply_auth(req, &self.config.auth)
 	}
@@ -136,29 +132,6 @@ impl HttpSource {
 		resp.json()
 			.await
 			.map_err(|e| OversyncError::Connector(format!("json decode: {e}")))
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::build_request_url;
-
-	#[test]
-	fn build_request_url_appends_query_pairs() {
-		let url = build_request_url(
-			"http://example.test/api",
-			"/items",
-			&[
-				("limit".to_string(), "50".to_string()),
-				("offset".to_string(), "100".to_string()),
-			],
-		)
-		.expect("url should build");
-
-		assert_eq!(
-			url.as_str(),
-			"http://example.test/api/items?limit=50&offset=100"
-		);
 	}
 }
 
@@ -435,22 +408,34 @@ mod tests {
 
 	#[test]
 	fn build_url_joins_path() {
-		let config = make_config("https://api.example.com");
-		let source = HttpSource::new("test", config).unwrap();
+		let url = build_request_url("https://api.example.com", "/v1/items", &[])
+			.expect("url should build");
+		assert_eq!(url.as_str(), "https://api.example.com/v1/items");
+	}
+
+	#[test]
+	fn build_url_appends_query_pairs() {
+		let url = build_request_url(
+			"http://example.test/api",
+			"/items",
+			&[
+				("limit".to_string(), "50".to_string()),
+				("offset".to_string(), "100".to_string()),
+			],
+		)
+		.expect("url should build");
+
 		assert_eq!(
-			source.build_url("/v1/items"),
-			"https://api.example.com/v1/items"
+			url.as_str(),
+			"http://example.test/api/items?limit=50&offset=100"
 		);
 	}
 
 	#[test]
 	fn build_url_strips_trailing_slash() {
-		let config = make_config("https://api.example.com/");
-		let source = HttpSource::new("test", config).unwrap();
-		assert_eq!(
-			source.build_url("/v1/items"),
-			"https://api.example.com/v1/items"
-		);
+		let url = build_request_url("https://api.example.com/", "/v1/items", &[])
+			.expect("url should build");
+		assert_eq!(url.as_str(), "https://api.example.com/v1/items");
 	}
 
 	#[test]
@@ -559,9 +544,5 @@ mod tests {
 	fn extract_cursor_missing_returns_none() {
 		let body = serde_json::json!({"data": []});
 		assert_eq!(extract_cursor(&body, "meta.next"), None);
-	}
-
-	fn make_config(base_url: &str) -> HttpSourceConfig {
-		serde_json::from_value(serde_json::json!({"dsn": base_url})).unwrap()
 	}
 }
