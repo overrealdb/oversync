@@ -65,6 +65,16 @@ impl ClickHouseSink {
 		format!("INSERT INTO {qualified_table} FORMAT JSONEachRow")
 	}
 
+	fn build_url(&self, sql: &str) -> Result<reqwest::Url, OversyncError> {
+		let mut url = reqwest::Url::parse(&self.base_url)
+			.map_err(|e| OversyncError::Sink(format!("clickhouse url: {e}")))?;
+		{
+			let mut pairs = url.query_pairs_mut();
+			pairs.append_pair("query", sql);
+		}
+		Ok(url)
+	}
+
 	fn apply_auth(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
 		match &self.password {
 			Some(pass) => req.basic_auth(&self.user, Some(pass)),
@@ -73,10 +83,10 @@ impl ClickHouseSink {
 	}
 
 	async fn post_rows(&self, body: String) -> Result<(), OversyncError> {
+		let url = self.build_url(&self.insert_query())?;
 		let req = self
 			.client
-			.post(&self.base_url)
-			.query(&[("query", self.insert_query())])
+			.post(url.clone())
 			.header("Content-Type", "application/json")
 			.body(body);
 		let req = self.apply_auth(req);
@@ -159,10 +169,8 @@ impl Sink for ClickHouseSink {
 	}
 
 	async fn test_connection(&self) -> Result<(), OversyncError> {
-		let req = self
-			.client
-			.get(&self.base_url)
-			.query(&[("query", "SELECT 1")]);
+		let url = self.build_url("SELECT 1")?;
+		let req = self.client.get(url);
 		let req = self.apply_auth(req);
 
 		let resp = req
