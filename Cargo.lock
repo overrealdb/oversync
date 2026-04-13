@@ -3879,7 +3879,7 @@ dependencies = [
 
 [[package]]
 name = "oversync-client"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "axum 0.8.8",
  "chrono",
