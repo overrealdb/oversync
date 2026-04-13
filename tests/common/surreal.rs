@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use oversync_core::runtime_surreal_url;
 use surrealdb::Surreal;
 use surrealdb::engine::any::Any;
 use surrealdb::opt::auth::Root;
@@ -19,7 +18,7 @@ static SHARED: OnceCell<SharedContainer> = OnceCell::const_new();
 async fn shared_container() -> &'static SharedContainer {
 	SHARED
 		.get_or_init(|| async {
-			let url = env_var("OVERSYNC_TEST_SURREAL_URL", "ws://127.0.0.1:58000");
+			let url = env_var("OVERSYNC_TEST_SURREAL_URL", "http://127.0.0.1:58000");
 			let username = env_var("OVERSYNC_TEST_SURREAL_USERNAME", "root");
 			let password = env_var("OVERSYNC_TEST_SURREAL_PASSWORD", "root");
 
@@ -28,8 +27,7 @@ async fn shared_container() -> &'static SharedContainer {
 				let username = username.clone();
 				let password = password.clone();
 				async move {
-					let runtime_url = runtime_surreal_url(&url);
-					let client = surrealdb::engine::any::connect(runtime_url.as_ref())
+					let client = surrealdb::engine::any::connect(url.as_str())
 						.await
 						.map_err(|e| e.to_string())?;
 					client
@@ -82,8 +80,7 @@ impl TestSurrealContainer {
 		let ns = format!("test_{test_id}");
 		let db = format!("sync_{test_id}");
 
-		let runtime_url = runtime_surreal_url(&shared.url);
-		let client = surrealdb::engine::any::connect(runtime_url.as_ref())
+		let client = surrealdb::engine::any::connect(shared.url.as_str())
 			.await
 			.unwrap_or_else(|e| panic!("failed to connect to SurrealDB at {}: {e}", shared.url));
 
