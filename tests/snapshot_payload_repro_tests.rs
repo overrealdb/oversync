@@ -187,10 +187,14 @@ async fn connect_with_url(url: &str, ns: &str, db: &str) -> Surreal<Any> {
 
 #[tokio::test]
 async fn snapshot_heavy_payload_repro_logs_50_vs_500() {
-	let state_db = TestSurrealContainer::new().await;
+	let state_db = TestSurrealContainer::new_raw().await;
 	let source = "store_pg";
+	let base_url = TestSurrealContainer::url().await;
+	let secure = base_url.starts_with("wss://") || base_url.starts_with("https://");
+	let ws_url = rewrite_scheme(&base_url, secure, true);
+	let client = connect_with_url(&ws_url, &state_db.ns, &state_db.db).await;
 
-	let engine = DeltaEngine::single(state_db.client.clone()).for_source(source);
+	let engine = DeltaEngine::single(client.clone()).for_source(source);
 	engine.ensure_tables().await.expect("ensure tables");
 
 	let aspects_per_entity = env_usize("OVERSYNC_REPRO_ASPECTS_PER_ENTITY", 12);
@@ -229,7 +233,7 @@ async fn snapshot_heavy_payload_repro_logs_50_vs_500() {
 	let large_elapsed = large_start.elapsed();
 
 	let tables = TableNames::for_source(source);
-	let small_snapshot_rows = count_snapshot_rows(&state_db.client, &tables.snapshot).await;
+	let small_snapshot_rows = count_snapshot_rows(&client, &tables.snapshot).await;
 
 	eprintln!(
 		"snapshot repro result: small_elapsed_ms={} large_elapsed_ms={} snapshot_rows={}",
