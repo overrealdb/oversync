@@ -5,4 +5,11 @@ LET $updated = (
     SET expires_at = $expiry
     WHERE pipe = $pipe AND instance = $instance
 );
-RETURN { renewed: array::len($updated) > 0 };
+LET $updated_rows = IF $updated = NONE {
+    []
+} ELSE IF type::is_array($updated) {
+    $updated
+} ELSE {
+    [$updated]
+};
+RETURN { renewed: array::len($updated_rows) > 0 };
