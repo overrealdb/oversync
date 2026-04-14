@@ -20,6 +20,9 @@ impl PostgresConnector {
 	pub async fn new(name: &str, dsn: &str) -> Result<Self, OversyncError> {
 		let pool = PgPoolOptions::new()
 			.max_connections(5)
+			.min_connections(0)
+			.idle_timeout(std::time::Duration::from_secs(60))
+			.max_lifetime(std::time::Duration::from_secs(30 * 60))
 			.connect(dsn)
 			.await
 			.map_err(|e| OversyncError::Connector(format!("postgres connect: {e}")))?;
