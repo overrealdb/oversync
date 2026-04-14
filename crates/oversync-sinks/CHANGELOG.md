@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4](https://github.com/overrealdb/oversync/compare/oversync-sinks-v0.6.3...oversync-sinks-v0.6.4) - 2026-04-14
+
+### Other
+
+- *(pools)* release idle SQL connections between cycles
+
 ## [0.6.3](https://github.com/overrealdb/oversync/compare/oversync-sinks-v0.6.1...oversync-sinks-v0.6.3) - 2026-04-13
 
 ### Other
