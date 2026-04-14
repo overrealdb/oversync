@@ -238,7 +238,9 @@ impl OversyncEngine {
 		});
 
 		// Load initial cache from DB so history, sinks, pipes, and recipes are populated.
+		tracing::info!("refreshing oversync API read cache from SurrealDB");
 		oversync_api::mutations::refresh_read_cache(&api_state).await?;
+		tracing::info!("oversync API read cache ready");
 
 		// Install prometheus metrics exporter
 		let prom_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
@@ -1074,14 +1076,32 @@ pub(crate) async fn apply_schema(
 	ns: &str,
 	db_name: &str,
 ) -> Result<(), OversyncError> {
+	info!(
+		namespace = ns,
+		database = db_name,
+		"loading embedded oversync schema manifest"
+	);
 	let surql_dir = resolve_surql_dir()?;
 	let mut manifest = overshift::Manifest::load(surql_dir.path())
 		.map_err(|e| OversyncError::Migration(format!("load manifest: {e}")))?;
 	manifest.meta.ns = ns.to_string();
 	manifest.meta.db = db_name.to_string();
+	info!(
+		namespace = ns,
+		database = db_name,
+		path = %surql_dir.path().display(),
+		"planning oversync schema migrations"
+	);
 	let plan = overshift::plan(db, &manifest)
 		.await
 		.map_err(|e| OversyncError::Migration(format!("plan: {e}")))?;
+	info!(
+		namespace = ns,
+		database = db_name,
+		migration_count = plan.pending_migrations.len(),
+		module_count = plan.schema_modules.len(),
+		"applying oversync schema migrations"
+	);
 	let result = plan
 		.apply(db)
 		.await

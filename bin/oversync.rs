@@ -131,7 +131,10 @@ async fn cmd_serve(cli: &Cli) -> anyhow::Result<()> {
 	}
 
 	let engine = builder.build().await?;
+	tracing::info!("oversync engine built");
+	tracing::info!("starting oversync lifecycle");
 	engine.start(config).await?;
+	tracing::info!("oversync lifecycle started");
 
 	let engine_shutdown = engine.clone();
 	tokio::spawn(async move {
@@ -140,7 +143,9 @@ async fn cmd_serve(cli: &Cli) -> anyhow::Result<()> {
 		engine_shutdown.shutdown().await;
 	});
 
+	tracing::info!("building oversync API router");
 	let app = engine.api_router().await?;
+	tracing::info!("oversync API router ready");
 	let listener = tokio::net::TcpListener::bind(&cli.bind).await?;
 	tracing::info!(bind = %cli.bind, "API server started");
 	axum::serve(listener, app).await?;
