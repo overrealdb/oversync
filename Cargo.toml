@@ -82,7 +82,7 @@ hostname = "0.4"
 subtle = "2"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
-wasmtime = "43.0.1"
+wasmtime = "44.0.0"
 rquickjs = { version = "0.11", features = ["parallel"] }
 rquickjs-serde = "0.5"
 arrow = { version = "58", default-features = false, features = ["json"] }
